@@ -33,10 +33,18 @@ yarn-error.*
 # local env files
 .env
 .env*.local
+google-services.json
 
 # typescript
 *.tsbuildinfo
 
+# local tooling and caches
+.android-user-home/
+.gradle-user-home/
+.codex-start-metro.cmd
+.codex-start-metro.ps1
+metro-*.log
+metro-*.err
+
 # generated native folders
 /ios
-/android

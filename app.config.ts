@@ -4,12 +4,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Klir Mobile',
   slug: 'klir-mobile',
+  scheme: 'klirmobile',
   orientation: 'portrait',
   userInterfaceStyle: 'light',
   platforms: ['android'],
-  plugins: ['expo-notifications'],
+  plugins: ['expo-dev-client', 'expo-font', 'expo-notifications'],
   android: {
     ...config.android,
+    package: 'com.jamescarl04.klirmobile',
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#eaf7f4',
