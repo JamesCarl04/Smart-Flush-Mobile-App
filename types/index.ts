@@ -2,16 +2,23 @@ import type { NavigatorScreenParams } from '@react-navigation/native';
 
 export type TaskStatus = 'pending' | 'acknowledged' | 'completed';
 
+export type TaskTriggerType =
+  | 'manual'
+  | 'uv_complete'
+  | 'flush_count'
+  | 'maintenance';
+
 export interface Task {
   id: string;
-  toiletId: string;
-  triggeredBy: 'admin';
-  triggeredAt: Date;
-  assignedTo: string;
+  deviceId: string;
+  triggerType: TaskTriggerType;
+  message: string;
+  assignedTo: string | null;
   status: TaskStatus;
-  note?: string;
+  createdAt: Date;
   acknowledgedAt?: Date | null;
   completedAt?: Date | null;
+  createdBy: string;
 }
 
 export interface AuthUser {
@@ -33,6 +40,8 @@ export interface TasksContextValue {
   historyTasks: Task[];
   pendingCount: number;
   loading: boolean;
+  errorMessage: string | null;
+  clearError: () => void;
 }
 
 export type AuthStackParamList = {

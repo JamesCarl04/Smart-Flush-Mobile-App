@@ -8,7 +8,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'portrait',
   userInterfaceStyle: 'light',
   platforms: ['android'],
-  plugins: ['expo-dev-client', 'expo-font', 'expo-notifications'],
+  plugins: [
+    'expo-dev-client',
+    'expo-font',
+    'expo-notifications',
+    '@react-native-firebase/app',
+    '@react-native-firebase/messaging',
+  ],
   android: {
     ...config.android,
     package: 'com.jamescarl04.klirmobile',
@@ -27,6 +33,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   extra: {
     ...(config.extra ?? {}),
+    backendApiBaseUrl: process.env.EXPO_PUBLIC_BACKEND_API_BASE_URL,
     expoProjectId: process.env.EXPO_PUBLIC_EXPO_PROJECT_ID,
     firebase: {
       apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,

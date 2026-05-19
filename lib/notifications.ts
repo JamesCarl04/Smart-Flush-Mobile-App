@@ -1,191 +1,192 @@
-import * as Notifications from 'expo-notifications';
-import { Alert, Platform } from 'react-native';
-import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import messaging, {
+  AuthorizationStatus,
+  type FirebaseMessagingTypes,
+} from '@react-native-firebase/messaging';
+import { PermissionsAndroid, Platform } from 'react-native';
 
-import { runtimeConfig } from './config';
-import { db } from './firebase';
+import { apiFetch } from './api';
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+const FCM_TOKEN_STORAGE_KEY = 'fcmToken';
+const NOTIF_PERMISSION_REQUESTED_KEY = 'notifPermissionRequested';
 
-interface PushRegistrationResult {
-  expoPushToken: string | null;
+export interface FcmRegistrationResult {
   fcmToken: string | null;
   permissionsGranted: boolean;
+  permissionRequestedNow: boolean;
 }
 
-function resolveTaskId(data: unknown): string | null {
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
+export interface ForegroundTaskNotification {
+  title: string;
+  body: string;
+  taskId: string | null;
+}
 
-  const record = data as Record<string, unknown>;
-  const taskId = record.taskId;
+function resolveTaskId(data: FirebaseMessagingTypes.RemoteMessage['data']): string | null {
+  const taskId = data?.taskId;
 
   if (typeof taskId === 'string' && taskId.trim().length > 0) {
     return taskId;
   }
 
-  if (typeof taskId === 'number') {
-    return String(taskId);
-  }
-
   return null;
 }
 
-async function ensureNotificationChannelAsync(): Promise<void> {
-  if (Platform.OS !== 'android') {
-    return;
-  }
-
-  await Notifications.setNotificationChannelAsync('maintenance-tasks', {
-    name: 'Maintenance Tasks',
-    importance: Notifications.AndroidImportance.MAX,
-    vibrationPattern: [0, 200, 200, 200],
-    lightColor: '#127369',
-    sound: 'default',
-  });
-}
-
-async function ensurePermissionAsync(): Promise<boolean> {
-  const existingPermissions = await Notifications.getPermissionsAsync();
-  let currentStatus = existingPermissions.status;
-
-  if (currentStatus !== 'granted') {
-    const requestedPermissions = await Notifications.requestPermissionsAsync();
-    currentStatus = requestedPermissions.status;
-  }
-
-  return currentStatus === 'granted';
-}
-
-async function updatePushTokenDocument(
-  uid: string,
-  payload: {
-    expoPushToken?: string | null;
-    fcmToken?: string | null;
-  },
-): Promise<void> {
-  await setDoc(
-    doc(db, 'users', uid),
-    {
-      ...payload,
-      pushTokenUpdatedAt: serverTimestamp(),
-    },
-    { merge: true },
+function isMessagingPermissionGranted(status: FirebaseMessagingTypes.AuthorizationStatus): boolean {
+  return (
+    status === AuthorizationStatus.AUTHORIZED ||
+    status === AuthorizationStatus.PROVISIONAL
   );
 }
 
-export async function prepareNotificationsAsync(): Promise<boolean> {
-  await ensureNotificationChannelAsync();
-  return ensurePermissionAsync();
+async function requestAndroidPostNotificationsAsync(): Promise<boolean> {
+  if (Platform.OS !== 'android') {
+    return true;
+  }
+
+  const version =
+    typeof Platform.Version === 'number'
+      ? Platform.Version
+      : Number.parseInt(Platform.Version, 10);
+
+  if (!Number.isFinite(version) || version < 33) {
+    return true;
+  }
+
+  const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+  const alreadyGranted = await PermissionsAndroid.check(permission);
+  if (alreadyGranted) {
+    return true;
+  }
+
+  const result = await PermissionsAndroid.request(permission);
+  return result === PermissionsAndroid.RESULTS.GRANTED;
 }
 
-export async function registerForPushNotificationsAsync(
-  uid: string,
-): Promise<PushRegistrationResult> {
-  const permissionsGranted = await prepareNotificationsAsync();
+async function requestNotificationPermissionOnceAsync(): Promise<{
+  granted: boolean;
+  requestedNow: boolean;
+}> {
+  const requested = await AsyncStorage.getItem(NOTIF_PERMISSION_REQUESTED_KEY);
 
-  if (!permissionsGranted) {
+  if (requested === 'true') {
+    const status = await messaging().hasPermission();
+    const androidGranted = await requestAndroidPostNotificationsAsync();
+
     return {
-      expoPushToken: null,
-      fcmToken: null,
-      permissionsGranted: false,
+      granted: isMessagingPermissionGranted(status) && androidGranted,
+      requestedNow: false,
     };
   }
 
-  const devicePushToken = await Notifications.getDevicePushTokenAsync();
-  const fcmToken =
-    typeof devicePushToken.data === 'string' ? devicePushToken.data : null;
-
-  let expoPushToken: string | null = null;
-
-  if (runtimeConfig.expoProjectId) {
-    try {
-      const expoToken = await Notifications.getExpoPushTokenAsync({
-        projectId: runtimeConfig.expoProjectId,
-        devicePushToken,
-      });
-      expoPushToken = expoToken.data;
-    } catch (error) {
-      console.warn('Failed to fetch Expo push token', error);
-    }
-  }
-
-  await updatePushTokenDocument(uid, {
-    expoPushToken,
-    fcmToken,
-  });
+  const status = await messaging().requestPermission();
+  const androidGranted = await requestAndroidPostNotificationsAsync();
+  await AsyncStorage.setItem(NOTIF_PERMISSION_REQUESTED_KEY, 'true');
 
   return {
-    expoPushToken,
-    fcmToken,
-    permissionsGranted: true,
+    granted: isMessagingPermissionGranted(status) && androidGranted,
+    requestedNow: true,
   };
 }
 
-export function subscribeToPushTokenRefresh(uid: string): () => void {
-  const subscription = Notifications.addPushTokenListener((nextToken) => {
-    const fcmToken =
-      typeof nextToken.data === 'string' ? nextToken.data : null;
+async function registerFcmTokenValueAsync(fcmToken: string): Promise<void> {
+  await AsyncStorage.setItem(FCM_TOKEN_STORAGE_KEY, fcmToken);
 
-    void updatePushTokenDocument(uid, { fcmToken });
+  const response = await apiFetch<never>('/api/tasks/register-token', {
+    method: 'POST',
+    body: JSON.stringify({ fcmToken }),
+  });
+
+  if (!response.success) {
+    throw new Error(response.error ?? 'Failed to register notification token.');
+  }
+}
+
+export function configureBackgroundMessageHandler(): void {
+  messaging().setBackgroundMessageHandler(async () => {
+    // Notification taps are routed through onNotificationOpenedApp/getInitialNotification.
+  });
+}
+
+export async function registerForPushNotificationsAsync(): Promise<FcmRegistrationResult> {
+  const permission = await requestNotificationPermissionOnceAsync();
+
+  if (!permission.granted) {
+    return {
+      fcmToken: null,
+      permissionsGranted: false,
+      permissionRequestedNow: permission.requestedNow,
+    };
+  }
+
+  await messaging().registerDeviceForRemoteMessages();
+  const fcmToken = await messaging().getToken();
+
+  if (!fcmToken) {
+    throw new Error('Firebase did not return an FCM registration token.');
+  }
+
+  await registerFcmTokenValueAsync(fcmToken);
+
+  return {
+    fcmToken,
+    permissionsGranted: true,
+    permissionRequestedNow: permission.requestedNow,
+  };
+}
+
+export function subscribeToPushTokenRefresh(
+  onError: (message: string) => void,
+): () => void {
+  return messaging().onTokenRefresh((fcmToken) => {
+    void registerFcmTokenValueAsync(fcmToken).catch((error: unknown) => {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Failed to refresh notification token.';
+      onError(message);
+    });
+  });
+}
+
+export function subscribeToNotificationEvents({
+  onForegroundMessage,
+  onTaskSelected,
+}: {
+  onForegroundMessage: (notification: ForegroundTaskNotification) => void;
+  onTaskSelected: (taskId: string) => void;
+}): () => void {
+  const unsubscribeForeground = messaging().onMessage((remoteMessage) => {
+    onForegroundMessage({
+      title: remoteMessage.notification?.title ?? 'Cleaning Task Assigned',
+      body:
+        remoteMessage.notification?.body ??
+        'A new task has been assigned to your maintenance queue.',
+      taskId: resolveTaskId(remoteMessage.data),
+    });
+  });
+
+  const unsubscribeOpened = messaging().onNotificationOpenedApp((remoteMessage) => {
+    const taskId = resolveTaskId(remoteMessage.data);
+
+    if (taskId) {
+      onTaskSelected(taskId);
+    }
   });
 
   return () => {
-    subscription.remove();
-  };
-}
-
-export function subscribeToNotificationEvents(
-  onTaskSelected: (taskId: string) => void,
-): () => void {
-  const foregroundSubscription = Notifications.addNotificationReceivedListener(
-    (notification) => {
-      const title = notification.request.content.title ?? 'New maintenance task';
-      const body =
-        notification.request.content.body ??
-        'A new task has been assigned to your maintenance queue.';
-
-      Alert.alert(title, body);
-    },
-  );
-
-  const responseSubscription =
-    Notifications.addNotificationResponseReceivedListener((response) => {
-      const taskId = resolveTaskId(response.notification.request.content.data);
-
-      if (taskId) {
-        onTaskSelected(taskId);
-      }
-    });
-
-  return () => {
-    foregroundSubscription.remove();
-    responseSubscription.remove();
+    unsubscribeForeground();
+    unsubscribeOpened();
   };
 }
 
 export async function consumeInitialNotificationResponse(
   onTaskSelected: (taskId: string) => void,
 ): Promise<void> {
-  const response = await Notifications.getLastNotificationResponseAsync();
-
-  if (!response) {
-    return;
-  }
-
-  const taskId = resolveTaskId(response.notification.request.content.data);
+  const remoteMessage = await messaging().getInitialNotification();
+  const taskId = resolveTaskId(remoteMessage?.data);
 
   if (taskId) {
     onTaskSelected(taskId);
   }
-
-  Notifications.clearLastNotificationResponse();
 }

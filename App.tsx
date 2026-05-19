@@ -1,16 +1,17 @@
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { MD3LightTheme, PaperProvider } from 'react-native-paper';
+import { MD3LightTheme, PaperProvider, Snackbar } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './contexts/AuthContext';
 import { TasksProvider } from './contexts/TasksContext';
 import { useAuth } from './hooks/useAuth';
 import {
+  configureBackgroundMessageHandler,
   consumeInitialNotificationResponse,
-  prepareNotificationsAsync,
+  type ForegroundTaskNotification,
   registerForPushNotificationsAsync,
   subscribeToNotificationEvents,
   subscribeToPushTokenRefresh,
@@ -20,6 +21,8 @@ import {
   flushPendingTaskNavigation,
   queueTaskNavigation,
 } from './navigation/navigationRef';
+
+configureBackgroundMessageHandler();
 
 const theme = {
   ...MD3LightTheme,
@@ -51,10 +54,7 @@ const theme = {
 
 function NotificationLifecycle(): React.JSX.Element | null {
   const { user } = useAuth();
-
-  useEffect(() => {
-    void prepareNotificationsAsync();
-  }, []);
+  const [banner, setBanner] = useState<ForegroundTaskNotification | null>(null);
 
   useEffect(() => {
     const handleTaskSelection = (taskId: string): void => {
@@ -65,7 +65,10 @@ function NotificationLifecycle(): React.JSX.Element | null {
       }
     };
 
-    const unsubscribe = subscribeToNotificationEvents(handleTaskSelection);
+    const unsubscribe = subscribeToNotificationEvents({
+      onForegroundMessage: setBanner,
+      onTaskSelected: handleTaskSelection,
+    });
     void consumeInitialNotificationResponse(handleTaskSelection);
 
     return unsubscribe;
@@ -79,16 +82,46 @@ function NotificationLifecycle(): React.JSX.Element | null {
     let isMounted = true;
     let unsubscribeTokenRefresh = (): void => undefined;
 
+    const showErrorBanner = (message: string): void => {
+      if (!isMounted) {
+        return;
+      }
+
+      setBanner({
+        title: 'Notification setup failed',
+        body: message,
+        taskId: null,
+      });
+    };
+
+    unsubscribeTokenRefresh = subscribeToPushTokenRefresh(showErrorBanner);
+
     void (async () => {
       try {
-        const registration = await registerForPushNotificationsAsync(user.uid);
+        const registration = await registerForPushNotificationsAsync();
 
-        if (isMounted && registration.permissionsGranted) {
-          unsubscribeTokenRefresh = subscribeToPushTokenRefresh(user.uid);
+        if (!isMounted) {
+          return;
+        }
+
+        if (registration.permissionsGranted) {
           flushPendingTaskNavigation();
+          return;
+        }
+
+        if (registration.permissionRequestedNow) {
+          setBanner({
+            title: 'Notifications disabled',
+            body: 'Notifications are required to receive cleaning task alerts.',
+            taskId: null,
+          });
         }
       } catch (error) {
-        console.warn('Failed to register push notifications', error);
+        showErrorBanner(
+          error instanceof Error
+            ? error.message
+            : 'Failed to register push notifications.',
+        );
       }
     })();
 
@@ -104,7 +137,33 @@ function NotificationLifecycle(): React.JSX.Element | null {
     }
   }, [user]);
 
-  return null;
+  const openBannerTask = (): void => {
+    const taskId = banner?.taskId;
+    setBanner(null);
+
+    if (taskId) {
+      queueTaskNavigation(taskId);
+      flushPendingTaskNavigation();
+    }
+  };
+
+  return (
+    <Snackbar
+      visible={banner !== null}
+      onDismiss={() => setBanner(null)}
+      duration={7000}
+      action={
+        banner?.taskId
+          ? {
+              label: 'View',
+              onPress: openBannerTask,
+            }
+          : undefined
+      }
+    >
+      {banner ? `${banner.title}\n${banner.body}` : ''}
+    </Snackbar>
+  );
 }
 
 function Providers(): React.JSX.Element {

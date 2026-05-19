@@ -10,18 +10,21 @@ interface FirebaseRuntimeConfig {
 }
 
 interface AppRuntimeConfig {
+  backendApiBaseUrl?: string;
   expoProjectId?: string;
   firebase: FirebaseRuntimeConfig;
 }
 
 const appExtra = Constants.expoConfig?.extra as
   | {
+      backendApiBaseUrl?: string;
       expoProjectId?: string;
       firebase?: FirebaseRuntimeConfig;
     }
   | undefined;
 
 export const runtimeConfig: AppRuntimeConfig = {
+  backendApiBaseUrl: appExtra?.backendApiBaseUrl,
   expoProjectId:
     appExtra?.expoProjectId ?? Constants.easConfig?.projectId ?? undefined,
   firebase: {

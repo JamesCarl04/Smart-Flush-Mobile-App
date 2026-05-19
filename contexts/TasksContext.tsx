@@ -1,5 +1,12 @@
 import { createContext, useEffect, useState, type PropsWithChildren } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import {
+  collection,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  type QuerySnapshot,
+} from 'firebase/firestore';
 
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
@@ -12,45 +19,93 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
       setTasks([]);
       setLoading(false);
+      setErrorMessage(null);
       return undefined;
     }
 
     setLoading(true);
+    setErrorMessage(null);
+    let assignedTasks: Task[] = [];
+    let unassignedPendingTasks: Task[] = [];
+    let assignedReady = false;
+    let pendingReady = false;
 
-    const tasksQuery = query(
+    const mapSnapshot = (snapshot: QuerySnapshot): Task[] =>
+      snapshot.docs
+        .map((documentSnapshot) =>
+          parseTaskDocument(documentSnapshot.id, documentSnapshot.data()),
+        )
+        .filter((task): task is Task => task !== null);
+
+    const publishTasks = (): void => {
+      const taskMap = new Map<string, Task>();
+
+      for (const task of assignedTasks) {
+        taskMap.set(task.id, task);
+      }
+
+      for (const task of unassignedPendingTasks) {
+        if (task.assignedTo === null && task.status === 'pending') {
+          taskMap.set(task.id, task);
+        }
+      }
+
+      const nextTasks = Array.from(taskMap.values()).sort(
+        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
+      );
+
+      setTasks(nextTasks);
+      setLoading(!(assignedReady && pendingReady));
+    };
+
+    const handleSnapshotError = (error: Error): void => {
+      console.warn('Failed to subscribe to maintenance tasks', error);
+      setErrorMessage(
+        'Unable to refresh maintenance tasks. Check your connection and try again.',
+      );
+      setLoading(false);
+    };
+
+    const assignedTasksQuery = query(
       collection(db, 'tasks'),
       where('assignedTo', '==', user.uid),
+      orderBy('createdAt', 'desc'),
+    );
+    const unassignedPendingTasksQuery = query(
+      collection(db, 'tasks'),
+      where('status', '==', 'pending'),
+      orderBy('createdAt', 'desc'),
     );
 
-    const unsubscribe = onSnapshot(
-      tasksQuery,
+    const unsubscribeAssignedTasks = onSnapshot(
+      assignedTasksQuery,
       (snapshot) => {
-        const nextTasks = snapshot.docs
-          .map((documentSnapshot) =>
-            parseTaskDocument(documentSnapshot.id, documentSnapshot.data()),
-          )
-          .filter((task): task is Task => task !== null)
-          .sort(
-            (left, right) =>
-              right.triggeredAt.getTime() - left.triggeredAt.getTime(),
-          );
-
-        setTasks(nextTasks);
-        setLoading(false);
+        assignedTasks = mapSnapshot(snapshot);
+        assignedReady = true;
+        publishTasks();
       },
-      (error) => {
-        console.warn('Failed to subscribe to maintenance tasks', error);
-        setTasks([]);
-        setLoading(false);
+      handleSnapshotError,
+    );
+    const unsubscribeUnassignedPendingTasks = onSnapshot(
+      unassignedPendingTasksQuery,
+      (snapshot) => {
+        unassignedPendingTasks = mapSnapshot(snapshot);
+        pendingReady = true;
+        publishTasks();
       },
+      handleSnapshotError,
     );
 
-    return unsubscribe;
+    return () => {
+      unsubscribeAssignedTasks();
+      unsubscribeUnassignedPendingTasks();
+    };
   }, [user]);
 
   const inboxTasks = tasks.filter((task) => task.status !== 'completed');
@@ -65,6 +120,8 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         historyTasks,
         pendingCount,
         loading,
+        errorMessage,
+        clearError: () => setErrorMessage(null),
       }}
     >
       {children}

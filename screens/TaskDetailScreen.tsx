@@ -8,11 +8,17 @@ import {
   Card,
   Chip,
   Divider,
+  Snackbar,
   Text,
 } from 'react-native-paper';
 
-import { db } from '../lib/firebase';
-import { formatTaskStatus, parseTaskDocument } from '../lib/tasks';
+import { auth, db } from '../lib/firebase';
+import {
+  formatTaskStatus,
+  formatTaskTrigger,
+  parseTaskDocument,
+} from '../lib/tasks';
+import { acknowledgeTask, completeTask } from '../lib/task-api';
 import type {
   HistoryStackParamList,
   InboxStackParamList,
@@ -71,6 +77,10 @@ function DetailRow({
 export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Element {
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [actionInFlight, setActionInFlight] = useState<
+    'acknowledge' | 'complete' | null
+  >(null);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(
@@ -89,11 +99,75 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
         console.warn('Failed to load task details', error);
         setTask(null);
         setLoading(false);
+        setSnackbarMessage(
+          'Unable to refresh task details. Check your connection and try again.',
+        );
       },
     );
 
     return unsubscribe;
   }, [route.params.taskId]);
+
+  const handleAcknowledge = async (): Promise<void> => {
+    if (!task || actionInFlight) {
+      return;
+    }
+
+    setActionInFlight('acknowledge');
+
+    try {
+      await acknowledgeTask(task.id);
+      setTask((currentTask) =>
+        currentTask
+          ? {
+              ...currentTask,
+              status: 'acknowledged',
+              assignedTo: auth.currentUser?.uid ?? currentTask.assignedTo,
+              acknowledgedAt: new Date(),
+            }
+          : currentTask,
+      );
+      setSnackbarMessage('Task acknowledged.');
+    } catch (error) {
+      setSnackbarMessage(
+        error instanceof Error
+          ? error.message
+          : 'Failed to acknowledge task. Please try again.',
+      );
+    } finally {
+      setActionInFlight(null);
+    }
+  };
+
+  const handleComplete = async (): Promise<void> => {
+    if (!task || actionInFlight) {
+      return;
+    }
+
+    setActionInFlight('complete');
+
+    try {
+      await completeTask(task.id);
+      setTask((currentTask) =>
+        currentTask
+          ? {
+              ...currentTask,
+              status: 'completed',
+              completedAt: new Date(),
+            }
+          : currentTask,
+      );
+      setSnackbarMessage('Task marked complete.');
+    } catch (error) {
+      setSnackbarMessage(
+        error instanceof Error
+          ? error.message
+          : 'Failed to complete task. Please try again.',
+      );
+    } finally {
+      setActionInFlight(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -120,55 +194,95 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.contentContainer}>
-      <Card mode="contained" style={styles.headerCard}>
-        <Card.Content style={styles.headerContent}>
-          <Text variant="titleLarge">Toilet {task.toiletId}</Text>
-          <Text variant="bodyMedium" style={styles.headerCopy}>
-            Review the alert timeline and assignment details before starting the
-            maintenance job.
-          </Text>
-          <Chip compact style={getStatusChipStyle(task.status)}>
-            {formatTaskStatus(task.status)}
-          </Chip>
-        </Card.Content>
-      </Card>
+    <View style={styles.screen}>
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <Card mode="contained" style={styles.headerCard}>
+          <Card.Content style={styles.headerContent}>
+            <Text variant="titleLarge">Device {task.deviceId}</Text>
+            <Text variant="bodyMedium" style={styles.headerCopy}>
+              Review the alert timeline and assignment details before starting
+              the maintenance job.
+            </Text>
+            <Chip compact style={getStatusChipStyle(task.status)}>
+              {formatTaskStatus(task.status)}
+            </Chip>
+          </Card.Content>
+        </Card>
 
-      <Card mode="elevated" style={styles.detailCard}>
-        <Card.Content style={styles.sectionContent}>
-          <DetailRow label="Task ID" value={task.id} />
-          <Divider />
-          <DetailRow label="Assigned to" value={task.assignedTo} />
-          <Divider />
-          <DetailRow label="Triggered by" value={task.triggeredBy} />
-          <Divider />
-          <DetailRow label="Triggered at" value={formatDate(task.triggeredAt)} />
-          <Divider />
-          <DetailRow
-            label="Acknowledged at"
-            value={formatDate(task.acknowledgedAt)}
-          />
-          <Divider />
-          <DetailRow
-            label="Completed at"
-            value={formatDate(task.completedAt)}
-          />
-        </Card.Content>
-      </Card>
+        <Card mode="elevated" style={styles.detailCard}>
+          <Card.Content style={styles.sectionContent}>
+            <DetailRow label="Task ID" value={task.id} />
+            <Divider />
+            <DetailRow label="Assigned to" value={task.assignedTo ?? 'Unassigned'} />
+            <Divider />
+            <DetailRow
+              label="Trigger"
+              value={formatTaskTrigger(task.triggerType)}
+            />
+            <Divider />
+            <DetailRow label="Created at" value={formatDate(task.createdAt)} />
+            <Divider />
+            <DetailRow
+              label="Acknowledged at"
+              value={formatDate(task.acknowledgedAt)}
+            />
+            <Divider />
+            <DetailRow
+              label="Completed at"
+              value={formatDate(task.completedAt)}
+            />
+          </Card.Content>
+        </Card>
 
-      <Card mode="elevated" style={styles.detailCard}>
-        <Card.Content style={styles.sectionContent}>
-          <Text variant="titleMedium">Maintenance note</Text>
-          <Text variant="bodyLarge" style={styles.noteText}>
-            {task.note ?? 'No note was attached to this task.'}
-          </Text>
-        </Card.Content>
-      </Card>
-    </ScrollView>
+        <Card mode="elevated" style={styles.detailCard}>
+          <Card.Content style={styles.sectionContent}>
+            <Text variant="titleMedium">Maintenance message</Text>
+            <Text variant="bodyLarge" style={styles.noteText}>
+              {task.message}
+            </Text>
+          </Card.Content>
+        </Card>
+
+        <View style={styles.actionRow}>
+          <Button
+            mode="outlined"
+            loading={actionInFlight === 'acknowledge'}
+            disabled={actionInFlight !== null || task.status !== 'pending'}
+            onPress={() => {
+              void handleAcknowledge();
+            }}
+            style={styles.actionButton}
+          >
+            Acknowledge
+          </Button>
+          <Button
+            mode="contained"
+            loading={actionInFlight === 'complete'}
+            disabled={actionInFlight !== null || task.status === 'completed'}
+            onPress={() => {
+              void handleComplete();
+            }}
+            style={styles.actionButton}
+          >
+            Mark Complete
+          </Button>
+        </View>
+      </ScrollView>
+      <Snackbar
+        visible={snackbarMessage !== null}
+        onDismiss={() => setSnackbarMessage(null)}
+      >
+        {snackbarMessage ?? ''}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f3faf8',
+  },
   contentContainer: {
     padding: 16,
     paddingBottom: 32,
@@ -214,6 +328,13 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: '#31403c',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  actionButton: {
+    flex: 1,
   },
   pendingChip: {
     alignSelf: 'flex-start',

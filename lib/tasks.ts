@@ -1,18 +1,19 @@
 import { Timestamp } from 'firebase/firestore';
 
-import type { Task, TaskStatus } from '../types';
+import type { Task, TaskStatus, TaskTriggerType } from '../types';
 
 type FirestoreDateValue = Date | Timestamp | null | undefined;
 
 type TaskDocumentShape = {
-  toiletId?: unknown;
-  triggeredBy?: unknown;
-  triggeredAt?: FirestoreDateValue;
-  assignedTo?: unknown;
+  deviceId?: unknown;
+  triggerType?: unknown;
+  message?: unknown;
   status?: unknown;
-  note?: unknown;
+  assignedTo?: unknown;
+  createdAt?: FirestoreDateValue;
   acknowledgedAt?: FirestoreDateValue;
   completedAt?: FirestoreDateValue;
+  createdBy?: unknown;
 };
 
 function toDate(value: FirestoreDateValue): Date | null {
@@ -39,6 +40,15 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
   );
 }
 
+export function isTaskTriggerType(value: unknown): value is TaskTriggerType {
+  return (
+    value === 'manual' ||
+    value === 'uv_complete' ||
+    value === 'flush_count' ||
+    value === 'maintenance'
+  );
+}
+
 export function formatTaskStatus(status: TaskStatus): string {
   if (status === 'pending') {
     return 'Pending';
@@ -51,19 +61,35 @@ export function formatTaskStatus(status: TaskStatus): string {
   return 'Completed';
 }
 
+export function formatTaskTrigger(triggerType: TaskTriggerType): string {
+  if (triggerType === 'uv_complete') {
+    return 'UV cycle complete';
+  }
+
+  if (triggerType === 'flush_count') {
+    return 'Flush count';
+  }
+
+  if (triggerType === 'maintenance') {
+    return 'Maintenance';
+  }
+
+  return 'Manual';
+}
+
 export function parseTaskDocument(
   id: string,
   data: TaskDocumentShape,
 ): Task | null {
-  if (typeof data.toiletId !== 'string') {
+  if (typeof data.deviceId !== 'string' || !data.deviceId.trim()) {
     return null;
   }
 
-  if (data.triggeredBy !== 'admin') {
+  if (!isTaskTriggerType(data.triggerType)) {
     return null;
   }
 
-  if (typeof data.assignedTo !== 'string') {
+  if (typeof data.message !== 'string') {
     return null;
   }
 
@@ -71,21 +97,22 @@ export function parseTaskDocument(
     return null;
   }
 
-  const triggeredAt = toDate(data.triggeredAt);
+  const createdAt = toDate(data.createdAt);
 
-  if (!triggeredAt) {
+  if (!createdAt) {
     return null;
   }
 
   return {
     id,
-    toiletId: data.toiletId,
-    triggeredBy: 'admin',
-    triggeredAt,
-    assignedTo: data.assignedTo,
+    deviceId: data.deviceId,
+    triggerType: data.triggerType,
+    message: data.message,
+    assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
     status: data.status,
-    note: typeof data.note === 'string' ? data.note : undefined,
+    createdAt,
     acknowledgedAt: toDate(data.acknowledgedAt),
     completedAt: toDate(data.completedAt),
+    createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',
   };
 }

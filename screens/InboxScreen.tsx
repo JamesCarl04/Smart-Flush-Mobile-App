@@ -1,9 +1,9 @@
 import { FlatList, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Card, Chip, Text } from 'react-native-paper';
+import { Card, Chip, Snackbar, Text } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
-import { formatTaskStatus } from '../lib/tasks';
+import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
 import type { InboxStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
@@ -40,77 +40,97 @@ function EmptyState(): React.JSX.Element {
 }
 
 export function InboxScreen({ navigation }: Props): React.JSX.Element {
-  const { inboxTasks, pendingCount, loading } = useTasks();
+  const {
+    inboxTasks,
+    pendingCount,
+    loading,
+    errorMessage,
+    clearError,
+  } = useTasks();
   const acknowledgedCount = inboxTasks.filter(
     (task) => task.status === 'acknowledged',
   ).length;
 
   return (
-    <FlatList
-      data={inboxTasks}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.contentContainer}
-      ListHeaderComponent={
-        <View style={styles.headerBlock}>
-          <Text variant="headlineSmall" style={styles.headerTitle}>
-            Live maintenance queue
-          </Text>
-          <Text variant="bodyMedium" style={styles.headerDescription}>
-            Monitor new toilet alerts, review assignment details, and jump into
-            the task that needs attention first.
-          </Text>
-          <View style={styles.summaryRow}>
-            <Card
-              mode="contained"
-              style={[styles.summaryCard, styles.summaryTeal]}
-            >
-              <Card.Content>
-                <Text variant="labelLarge">Pending</Text>
-                <Text variant="displaySmall">{pendingCount}</Text>
-              </Card.Content>
-            </Card>
-            <Card
-              mode="contained"
-              style={[styles.summaryCard, styles.summaryBlue]}
-            >
-              <Card.Content>
-                <Text variant="labelLarge">Acknowledged</Text>
-                <Text variant="displaySmall">{acknowledgedCount}</Text>
-              </Card.Content>
-            </Card>
-          </View>
-        </View>
-      }
-      ListEmptyComponent={!loading ? <EmptyState /> : null}
-      renderItem={({ item }) => (
-        <Card
-          mode="elevated"
-          style={styles.taskCard}
-          onPress={() => navigation.navigate('TaskDetail', { taskId: item.id })}
-        >
-          <Card.Content style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <View style={styles.titleBlock}>
-                <Text variant="titleMedium">Toilet {item.toiletId}</Text>
-                <Text variant="bodySmall" style={styles.timeLabel}>
-                  Triggered {formatDate(item.triggeredAt)}
-                </Text>
-              </View>
-              <Chip compact style={getStatusChipStyle(item.status)}>
-                {formatTaskStatus(item.status)}
-              </Chip>
-            </View>
-            <Text variant="bodyMedium" style={styles.noteText}>
-              {item.note ?? 'No maintenance note was attached to this task.'}
+    <View style={styles.screen}>
+      <FlatList
+        data={inboxTasks}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.contentContainer}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <Text variant="headlineSmall" style={styles.headerTitle}>
+              Live maintenance queue
             </Text>
-          </Card.Content>
-        </Card>
-      )}
-    />
+            <Text variant="bodyMedium" style={styles.headerDescription}>
+              Monitor new toilet alerts, review assignment details, and jump
+              into the task that needs attention first.
+            </Text>
+            <View style={styles.summaryRow}>
+              <Card
+                mode="contained"
+                style={[styles.summaryCard, styles.summaryTeal]}
+              >
+                <Card.Content>
+                  <Text variant="labelLarge">Pending</Text>
+                  <Text variant="displaySmall">{pendingCount}</Text>
+                </Card.Content>
+              </Card>
+              <Card
+                mode="contained"
+                style={[styles.summaryCard, styles.summaryBlue]}
+              >
+                <Card.Content>
+                  <Text variant="labelLarge">Acknowledged</Text>
+                  <Text variant="displaySmall">{acknowledgedCount}</Text>
+                </Card.Content>
+              </Card>
+            </View>
+          </View>
+        }
+        ListEmptyComponent={!loading ? <EmptyState /> : null}
+        renderItem={({ item }) => (
+          <Card
+            mode="elevated"
+            style={styles.taskCard}
+            onPress={() =>
+              navigation.navigate('TaskDetail', { taskId: item.id })
+            }
+          >
+            <Card.Content style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <View style={styles.titleBlock}>
+                  <Text variant="titleMedium">Device {item.deviceId}</Text>
+                  <Text variant="bodySmall" style={styles.timeLabel}>
+                    Created {formatDate(item.createdAt)}
+                  </Text>
+                </View>
+                <Chip compact style={getStatusChipStyle(item.status)}>
+                  {formatTaskStatus(item.status)}
+                </Chip>
+              </View>
+              <Text variant="labelMedium" style={styles.triggerLabel}>
+                {formatTaskTrigger(item.triggerType)}
+              </Text>
+              <Text variant="bodyMedium" style={styles.noteText}>
+                {item.message}
+              </Text>
+            </Card.Content>
+          </Card>
+        )}
+      />
+      <Snackbar visible={errorMessage !== null} onDismiss={clearError}>
+        {errorMessage ?? ''}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f3faf8',
+  },
   contentContainer: {
     padding: 16,
     paddingBottom: 32,
@@ -162,6 +182,10 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: '#31403c',
+  },
+  triggerLabel: {
+    color: '#127369',
+    fontWeight: '700',
   },
   emptyCard: {
     marginTop: 12,

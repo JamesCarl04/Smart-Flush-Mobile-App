@@ -1,9 +1,9 @@
 import { FlatList, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Card, Chip, Text } from 'react-native-paper';
+import { Card, Chip, Snackbar, Text } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
-import { formatTaskStatus } from '../lib/tasks';
+import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
 import type { HistoryStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryHome'>;
@@ -43,61 +43,75 @@ function EmptyState(): React.JSX.Element {
 }
 
 export function HistoryScreen({ navigation }: Props): React.JSX.Element {
-  const { historyTasks, loading } = useTasks();
+  const { historyTasks, loading, errorMessage, clearError } = useTasks();
   const completedCount = historyTasks.length;
 
   return (
-    <FlatList
-      data={historyTasks}
-      keyExtractor={(item) => item.id}
-      contentContainerStyle={styles.contentContainer}
-      ListHeaderComponent={
-        <View style={styles.headerBlock}>
-          <Text variant="headlineSmall" style={styles.headerTitle}>
-            Completed maintenance
-          </Text>
-          <Text variant="bodyMedium" style={styles.headerDescription}>
-            Review the work your team has already resolved across the Smart
-            Toilet network.
-          </Text>
-          <Card mode="contained" style={styles.summaryCard}>
-            <Card.Content>
-              <Text variant="labelLarge">Tasks completed</Text>
-              <Text variant="displaySmall">{completedCount}</Text>
+    <View style={styles.screen}>
+      <FlatList
+        data={historyTasks}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.contentContainer}
+        ListHeaderComponent={
+          <View style={styles.headerBlock}>
+            <Text variant="headlineSmall" style={styles.headerTitle}>
+              Completed maintenance
+            </Text>
+            <Text variant="bodyMedium" style={styles.headerDescription}>
+              Review the work your team has already resolved across the Smart
+              Toilet network.
+            </Text>
+            <Card mode="contained" style={styles.summaryCard}>
+              <Card.Content>
+                <Text variant="labelLarge">Tasks completed</Text>
+                <Text variant="displaySmall">{completedCount}</Text>
+              </Card.Content>
+            </Card>
+          </View>
+        }
+        ListEmptyComponent={!loading ? <EmptyState /> : null}
+        renderItem={({ item }) => (
+          <Card
+            mode="elevated"
+            style={styles.taskCard}
+            onPress={() =>
+              navigation.navigate('TaskDetail', { taskId: item.id })
+            }
+          >
+            <Card.Content style={styles.cardContent}>
+              <View style={styles.cardHeader}>
+                <View style={styles.titleBlock}>
+                  <Text variant="titleMedium">Device {item.deviceId}</Text>
+                  <Text variant="bodySmall" style={styles.timeLabel}>
+                    Completed {formatDate(item.completedAt ?? item.createdAt)}
+                  </Text>
+                </View>
+                <Chip compact style={getStatusChipStyle(item.status)}>
+                  {formatTaskStatus(item.status)}
+                </Chip>
+              </View>
+              <Text variant="labelMedium" style={styles.triggerLabel}>
+                {formatTaskTrigger(item.triggerType)}
+              </Text>
+              <Text variant="bodyMedium" style={styles.noteText}>
+                {item.message}
+              </Text>
             </Card.Content>
           </Card>
-        </View>
-      }
-      ListEmptyComponent={!loading ? <EmptyState /> : null}
-      renderItem={({ item }) => (
-        <Card
-          mode="elevated"
-          style={styles.taskCard}
-          onPress={() => navigation.navigate('TaskDetail', { taskId: item.id })}
-        >
-          <Card.Content style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <View style={styles.titleBlock}>
-                <Text variant="titleMedium">Toilet {item.toiletId}</Text>
-                <Text variant="bodySmall" style={styles.timeLabel}>
-                  Completed {formatDate(item.completedAt ?? item.triggeredAt)}
-                </Text>
-              </View>
-              <Chip compact style={getStatusChipStyle(item.status)}>
-                {formatTaskStatus(item.status)}
-              </Chip>
-            </View>
-            <Text variant="bodyMedium" style={styles.noteText}>
-              {item.note ?? 'No maintenance note was attached to this task.'}
-            </Text>
-          </Card.Content>
-        </Card>
-      )}
-    />
+        )}
+      />
+      <Snackbar visible={errorMessage !== null} onDismiss={clearError}>
+        {errorMessage ?? ''}
+      </Snackbar>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#f3faf8',
+  },
   contentContainer: {
     padding: 16,
     paddingBottom: 32,
@@ -139,6 +153,10 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: '#31403c',
+  },
+  triggerLabel: {
+    color: '#127369',
+    fontWeight: '700',
   },
   emptyCard: {
     marginTop: 12,
