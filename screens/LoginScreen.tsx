@@ -6,13 +6,10 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FirebaseError } from 'firebase/app';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import {
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-} from 'firebase/auth';
-import {
-  ActivityIndicator,
   Avatar,
   Button,
   Card,
@@ -24,6 +21,9 @@ import {
 
 import { useAuth } from '../hooks/useAuth';
 import { auth } from '../lib/firebase';
+import type { AuthStackParamList } from '../types';
+
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 function getLoginErrorMessage(error: unknown): string {
   if (error instanceof FirebaseError) {
@@ -47,22 +47,14 @@ function getLoginErrorMessage(error: unknown): string {
   return 'Unable to sign in right now. Please try again.';
 }
 
-function getResetErrorMessage(error: unknown): string {
-  if (error instanceof FirebaseError && error.code === 'auth/invalid-email') {
-    return 'Enter a valid email address before requesting a password reset.';
-  }
-
-  return 'We could not send the reset email right now. Please try again.';
-}
-
-export function LoginScreen(): React.JSX.Element {
+export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const { loading, role, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [resettingPassword, setResettingPassword] = useState(false);
   const [awaitingRoleValidation, setAwaitingRoleValidation] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!awaitingRoleValidation || loading) {
@@ -100,26 +92,6 @@ export function LoginScreen(): React.JSX.Element {
       setSubmitting(false);
       setAwaitingRoleValidation(false);
       setErrorMessage(getLoginErrorMessage(error));
-    }
-  };
-
-  const handleForgotPassword = async (): Promise<void> => {
-    if (!email.trim()) {
-      setErrorMessage(
-        'Enter your email address first so we know where to send the reset link.',
-      );
-      return;
-    }
-
-    try {
-      setErrorMessage(null);
-      setResettingPassword(true);
-      await sendPasswordResetEmail(auth, email.trim());
-      setErrorMessage('Password reset email sent. Please check your inbox.');
-    } catch (error) {
-      setErrorMessage(getResetErrorMessage(error));
-    } finally {
-      setResettingPassword(false);
     }
   };
 
@@ -173,9 +145,15 @@ export function LoginScreen(): React.JSX.Element {
               label="Password"
               value={password}
               mode="outlined"
-              secureTextEntry
+              secureTextEntry={!showPassword}
               disabled={isBusy}
               onChangeText={setPassword}
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? 'eye-off' : 'eye'}
+                  onPress={() => setShowPassword((current) => !current)}
+                />
+              }
             />
 
             <HelperText type={errorMessage ? 'error' : 'info'} visible>
@@ -197,20 +175,11 @@ export function LoginScreen(): React.JSX.Element {
 
             <Button
               mode="text"
-              disabled={resettingPassword}
-              onPress={() => {
-                void handleForgotPassword();
-              }}
+              disabled={isBusy}
+              onPress={() => navigation.navigate('ForgotPassword')}
             >
               Forgot password
             </Button>
-
-            {resettingPassword ? (
-              <View style={styles.resetIndicator}>
-                <ActivityIndicator size="small" />
-                <Text variant="bodySmall">Sending reset email...</Text>
-              </View>
-            ) : null}
           </Card.Content>
         </Card>
       </ScrollView>
@@ -264,11 +233,5 @@ const styles = StyleSheet.create({
   },
   buttonContent: {
     paddingVertical: 6,
-  },
-  resetIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    justifyContent: 'center',
   },
 });

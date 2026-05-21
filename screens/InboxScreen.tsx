@@ -1,12 +1,14 @@
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Card, Chip, Snackbar, Text } from 'react-native-paper';
+import { useMemo, useState } from 'react';
+import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
 import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
 import type { InboxStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
+type InboxFilter = 'all' | 'pending' | 'acknowledged';
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-PH', {
@@ -32,7 +34,7 @@ function EmptyState(): React.JSX.Element {
         <Text variant="titleMedium">Inbox is clear</Text>
         <Text variant="bodyMedium" style={styles.emptyText}>
           New maintenance alerts will show up here as soon as the IoT system
-          assigns them to you.
+          assigns them to you. The Task Detail screen opens from any inbox task.
         </Text>
       </Card.Content>
     </Card>
@@ -50,21 +52,37 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   const acknowledgedCount = inboxTasks.filter(
     (task) => task.status === 'acknowledged',
   ).length;
+  const [activeFilter, setActiveFilter] = useState<InboxFilter>('all');
+  const [refreshing, setRefreshing] = useState(false);
+  const visibleTasks = useMemo(
+    () =>
+      activeFilter === 'all'
+        ? inboxTasks
+        : inboxTasks.filter((task) => task.status === activeFilter),
+    [activeFilter, inboxTasks],
+  );
+
+  const handleRefresh = (): void => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 600);
+  };
 
   return (
     <View style={styles.screen}>
       <FlatList
-        data={inboxTasks}
+        data={visibleTasks}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             <Text variant="headlineSmall" style={styles.headerTitle}>
-              Live maintenance queue
+              Notification inbox
             </Text>
             <Text variant="bodyMedium" style={styles.headerDescription}>
-              Monitor new toilet alerts, review assignment details, and jump
-              into the task that needs attention first.
+              Dashboard notes and cleaning tasks arrive here in real time.
             </Text>
             <View style={styles.summaryRow}>
               <Card
@@ -86,21 +104,35 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 </Card.Content>
               </Card>
             </View>
+            <View style={styles.filterRow}>
+              <Chip
+                selected={activeFilter === 'all'}
+                onPress={() => setActiveFilter('all')}
+              >
+                All
+              </Chip>
+              <Chip
+                selected={activeFilter === 'pending'}
+                onPress={() => setActiveFilter('pending')}
+              >
+                Pending
+              </Chip>
+              <Chip
+                selected={activeFilter === 'acknowledged'}
+                onPress={() => setActiveFilter('acknowledged')}
+              >
+                Acknowledged
+              </Chip>
+            </View>
           </View>
         }
         ListEmptyComponent={!loading ? <EmptyState /> : null}
         renderItem={({ item }) => (
-          <Card
-            mode="elevated"
-            style={styles.taskCard}
-            onPress={() =>
-              navigation.navigate('TaskDetail', { taskId: item.id })
-            }
-          >
+          <Card mode="elevated" style={styles.taskCard}>
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text variant="titleMedium">Device {item.deviceId}</Text>
+                  <Text variant="titleMedium">Restroom {item.deviceId}</Text>
                   <Text variant="bodySmall" style={styles.timeLabel}>
                     Created {formatDate(item.createdAt)}
                   </Text>
@@ -115,7 +147,20 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
               <Text variant="bodyMedium" style={styles.noteText}>
                 {item.message}
               </Text>
+              <Text variant="labelSmall" style={styles.openHint}>
+                Tap to view instructions and update status
+              </Text>
             </Card.Content>
+            <Card.Actions>
+              <Button
+                mode="contained-tonal"
+                onPress={() =>
+                  navigation.navigate('TaskDetail', { taskId: item.id })
+                }
+              >
+                Open Task Detail
+              </Button>
+            </Card.Actions>
           </Card>
         )}
       />
@@ -152,6 +197,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   summaryCard: {
     flex: 1,
     borderRadius: 24,
@@ -182,6 +232,11 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: '#31403c',
+    fontSize: 16,
+    lineHeight: 23,
+  },
+  openHint: {
+    color: '#5f6c68',
   },
   triggerLabel: {
     color: '#127369',

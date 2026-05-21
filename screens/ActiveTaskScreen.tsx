@@ -1,7 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { doc, onSnapshot } from 'firebase/firestore';
 import {
   ActivityIndicator,
   Button,
@@ -12,22 +10,10 @@ import {
   Text,
 } from 'react-native-paper';
 
-import { auth, db } from '../lib/firebase';
-import {
-  formatTaskStatus,
-  formatTaskTrigger,
-  parseTaskDocument,
-} from '../lib/tasks';
+import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask, completeTask } from '../lib/task-api';
-import type {
-  HistoryStackParamList,
-  InboxStackParamList,
-  Task,
-} from '../types';
-
-type Props =
-  | NativeStackScreenProps<InboxStackParamList, 'TaskDetail'>
-  | NativeStackScreenProps<HistoryStackParamList, 'TaskDetail'>;
+import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
+import type { Task } from '../types';
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) {
@@ -74,59 +60,45 @@ function DetailRow({
   );
 }
 
-export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Element {
-  const [task, setTask] = useState<Task | null>(null);
-  const [loading, setLoading] = useState(true);
+function EmptyTaskPanel(): React.JSX.Element {
+  return (
+    <View style={styles.centerState}>
+      <Card mode="contained" style={styles.emptyCard}>
+        <Card.Content style={styles.emptyContent}>
+          <Text variant="titleLarge">No active task</Text>
+          <Text variant="bodyMedium" style={styles.emptyText}>
+            New dashboard notes will appear here after they arrive in your
+            notification inbox.
+          </Text>
+        </Card.Content>
+      </Card>
+    </View>
+  );
+}
+
+export function ActiveTaskScreen(): React.JSX.Element {
+  const { inboxTasks, loading } = useTasks();
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
   >(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(
-      doc(db, 'tasks', route.params.taskId),
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          setTask(null);
-          setLoading(false);
-          return;
-        }
-
-        setTask(parseTaskDocument(snapshot.id, snapshot.data()));
-        setLoading(false);
-      },
-      (error) => {
-        console.warn('Failed to load task details', error);
-        setTask(null);
-        setLoading(false);
-        setSnackbarMessage(
-          'Unable to refresh task details. Check your connection and try again.',
-        );
-      },
-    );
-
-    return unsubscribe;
-  }, [route.params.taskId]);
+  const activeTask = useMemo(
+    () =>
+      inboxTasks.find((task) => task.status === 'pending') ??
+      inboxTasks.find((task) => task.status === 'acknowledged') ??
+      null,
+    [inboxTasks],
+  );
 
   const handleAcknowledge = async (): Promise<void> => {
-    if (!task || actionInFlight) {
+    if (!activeTask || actionInFlight) {
       return;
     }
 
     setActionInFlight('acknowledge');
 
     try {
-      await acknowledgeTask(task.id);
-      setTask((currentTask) =>
-        currentTask
-          ? {
-              ...currentTask,
-              status: 'acknowledged',
-              assignedTo: auth.currentUser?.uid ?? currentTask.assignedTo,
-              acknowledgedAt: new Date(),
-            }
-          : currentTask,
-      );
+      await acknowledgeTask(activeTask.id);
       setSnackbarMessage('Task acknowledged.');
     } catch (error) {
       setSnackbarMessage(
@@ -140,23 +112,14 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
   };
 
   const handleComplete = async (): Promise<void> => {
-    if (!task || actionInFlight) {
+    if (!activeTask || actionInFlight) {
       return;
     }
 
     setActionInFlight('complete');
 
     try {
-      await completeTask(task.id);
-      setTask((currentTask) =>
-        currentTask
-          ? {
-              ...currentTask,
-              status: 'completed',
-              completedAt: new Date(),
-            }
-          : currentTask,
-      );
+      await completeTask(activeTask.id);
       setSnackbarMessage('Task marked complete.');
     } catch (error) {
       setSnackbarMessage(
@@ -187,26 +150,15 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
 
   if (loading) {
     return (
-      <View style={styles.loadingState}>
+      <View style={styles.centerState}>
         <ActivityIndicator size="large" />
-        <Text variant="bodyLarge">Loading task details...</Text>
+        <Text variant="bodyLarge">Loading active task...</Text>
       </View>
     );
   }
 
-  if (!task) {
-    return (
-      <View style={styles.loadingState}>
-        <Text variant="titleMedium">Task not found</Text>
-        <Text variant="bodyMedium" style={styles.missingCopy}>
-          This task may have been removed or is no longer assigned to your
-          account.
-        </Text>
-        <Button mode="contained" onPress={() => navigation.goBack()}>
-          Back
-        </Button>
-      </View>
-    );
+  if (!activeTask) {
+    return <EmptyTaskPanel />;
   }
 
   return (
@@ -214,39 +166,14 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <Card mode="contained" style={styles.headerCard}>
           <Card.Content style={styles.headerContent}>
-            <Text variant="titleLarge">Restroom {task.deviceId}</Text>
+            <Text variant="headlineSmall">Task Detail</Text>
+            <Text variant="titleLarge">Restroom {activeTask.deviceId}</Text>
             <Text variant="bodyMedium" style={styles.headerCopy}>
-              Read the instruction, acknowledge when you are on the way, then
-              mark it complete after cleaning.
+              This page shows the current task that needs your attention.
             </Text>
-            <Chip compact style={getStatusChipStyle(task.status)}>
-              {formatTaskStatus(task.status)}
+            <Chip compact style={getStatusChipStyle(activeTask.status)}>
+              {formatTaskStatus(activeTask.status)}
             </Chip>
-          </Card.Content>
-        </Card>
-
-        <Card mode="elevated" style={styles.detailCard}>
-          <Card.Content style={styles.sectionContent}>
-            <DetailRow label="Task ID" value={task.id} />
-            <Divider />
-            <DetailRow label="Assigned to" value={task.assignedTo ?? 'Unassigned'} />
-            <Divider />
-            <DetailRow
-              label="Trigger"
-              value={formatTaskTrigger(task.triggerType)}
-            />
-            <Divider />
-            <DetailRow label="Created at" value={formatDate(task.createdAt)} />
-            <Divider />
-            <DetailRow
-              label="Acknowledged at"
-              value={formatDate(task.acknowledgedAt)}
-            />
-            <Divider />
-            <DetailRow
-              label="Completed at"
-              value={formatDate(task.completedAt)}
-            />
           </Card.Content>
         </Card>
 
@@ -254,12 +181,43 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
           <Card.Content style={styles.sectionContent}>
             <Text variant="titleMedium">Cleaning instruction</Text>
             <Text variant="bodyLarge" style={styles.noteText}>
-              {task.message}
+              {activeTask.message}
             </Text>
           </Card.Content>
         </Card>
 
-        {task.status === 'pending' ? (
+        <Card mode="elevated" style={styles.detailCard}>
+          <Card.Content style={styles.sectionContent}>
+            <DetailRow label="Task ID" value={activeTask.id} />
+            <Divider />
+            <DetailRow
+              label="Assigned to"
+              value={activeTask.assignedTo ?? 'All maintenance staff'}
+            />
+            <Divider />
+            <DetailRow
+              label="Trigger"
+              value={formatTaskTrigger(activeTask.triggerType)}
+            />
+            <Divider />
+            <DetailRow
+              label="Created at"
+              value={formatDate(activeTask.createdAt)}
+            />
+            <Divider />
+            <DetailRow
+              label="Acknowledged at"
+              value={formatDate(activeTask.acknowledgedAt)}
+            />
+            <Divider />
+            <DetailRow
+              label="Completed at"
+              value={formatDate(activeTask.completedAt)}
+            />
+          </Card.Content>
+        </Card>
+
+        {activeTask.status === 'pending' ? (
           <Button
             mode="contained"
             loading={actionInFlight === 'acknowledge'}
@@ -273,7 +231,7 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
           </Button>
         ) : null}
 
-        {task.status === 'acknowledged' ? (
+        {activeTask.status === 'acknowledged' ? (
           <Button
             mode="contained"
             loading={actionInFlight === 'complete'}
@@ -283,17 +241,6 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
           >
             Mark as Completed
           </Button>
-        ) : null}
-
-        {task.status === 'completed' ? (
-          <Card mode="contained" style={styles.completedNotice}>
-            <Card.Content>
-              <Text variant="titleMedium">Completed</Text>
-              <Text variant="bodyMedium" style={styles.completedNoticeText}>
-                This job is saved in Cleaning History.
-              </Text>
-            </Card.Content>
-          </Card>
         ) : null}
       </ScrollView>
       <Snackbar
@@ -317,7 +264,7 @@ const styles = StyleSheet.create({
     gap: 16,
     backgroundColor: '#f3faf8',
   },
-  loadingState: {
+  centerState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -325,9 +272,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     backgroundColor: '#f3faf8',
   },
-  missingCopy: {
-    textAlign: 'center',
-    color: '#586562',
+  emptyCard: {
+    width: '100%',
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
+  },
+  emptyContent: {
+    gap: 8,
+  },
+  emptyText: {
+    color: '#5b6663',
   },
   headerCard: {
     borderRadius: 24,
@@ -361,14 +315,6 @@ const styles = StyleSheet.create({
   },
   primaryActionContent: {
     minHeight: 54,
-  },
-  completedNotice: {
-    borderRadius: 22,
-    backgroundColor: '#d8f2db',
-  },
-  completedNoticeText: {
-    marginTop: 4,
-    color: '#3f4f49',
   },
   pendingChip: {
     alignSelf: 'flex-start',

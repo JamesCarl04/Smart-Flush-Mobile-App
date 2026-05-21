@@ -1,12 +1,14 @@
 import { FlatList, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Card, Chip, Snackbar, Text } from 'react-native-paper';
+import { useMemo, useState } from 'react';
+import { Card, Chip, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
 import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
 import type { HistoryStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryHome'>;
+type HistoryRange = 'today' | 'week' | 'all';
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-PH', {
@@ -44,23 +46,75 @@ function EmptyState(): React.JSX.Element {
 
 export function HistoryScreen({ navigation }: Props): React.JSX.Element {
   const { historyTasks, loading, errorMessage, clearError } = useTasks();
-  const completedCount = historyTasks.length;
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRange, setSelectedRange] = useState<HistoryRange>('week');
+  const visibleHistory = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    return historyTasks.filter((task) => {
+      const completedAt = task.completedAt ?? task.createdAt;
+      const matchesRange =
+        selectedRange === 'all' ||
+        (selectedRange === 'today' && completedAt >= startOfToday) ||
+        (selectedRange === 'week' && completedAt >= sevenDaysAgo);
+      const matchesSearch =
+        !normalizedQuery ||
+        task.deviceId.toLowerCase().includes(normalizedQuery) ||
+        task.message.toLowerCase().includes(normalizedQuery);
+
+      return matchesRange && matchesSearch;
+    });
+  }, [historyTasks, searchQuery, selectedRange]);
+  const completedCount = visibleHistory.length;
 
   return (
     <View style={styles.screen}>
       <FlatList
-        data={historyTasks}
+        data={visibleHistory}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.contentContainer}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             <Text variant="headlineSmall" style={styles.headerTitle}>
-              Completed maintenance
+              Cleaning history
             </Text>
             <Text variant="bodyMedium" style={styles.headerDescription}>
-              Review the work your team has already resolved across the Smart
-              Toilet network.
+              Review completed jobs and search by restroom or instruction.
             </Text>
+            <TextInput
+              label="Search completed jobs"
+              value={searchQuery}
+              mode="outlined"
+              left={<TextInput.Icon icon="magnify" />}
+              onChangeText={setSearchQuery}
+            />
+            <View style={styles.filterRow}>
+              <Chip
+                selected={selectedRange === 'today'}
+                onPress={() => setSelectedRange('today')}
+              >
+                Today
+              </Chip>
+              <Chip
+                selected={selectedRange === 'week'}
+                onPress={() => setSelectedRange('week')}
+              >
+                7 days
+              </Chip>
+              <Chip
+                selected={selectedRange === 'all'}
+                onPress={() => setSelectedRange('all')}
+              >
+                All
+              </Chip>
+            </View>
             <Card mode="contained" style={styles.summaryCard}>
               <Card.Content>
                 <Text variant="labelLarge">Tasks completed</Text>
@@ -81,7 +135,7 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text variant="titleMedium">Device {item.deviceId}</Text>
+                  <Text variant="titleMedium">Restroom {item.deviceId}</Text>
                   <Text variant="bodySmall" style={styles.timeLabel}>
                     Completed {formatDate(item.completedAt ?? item.createdAt)}
                   </Text>
@@ -133,6 +187,11 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: '#dff4ef',
   },
+  filterRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
   taskCard: {
     borderRadius: 22,
   },
@@ -153,6 +212,8 @@ const styles = StyleSheet.create({
   },
   noteText: {
     color: '#31403c',
+    fontSize: 16,
+    lineHeight: 23,
   },
   triggerLabel: {
     color: '#127369',

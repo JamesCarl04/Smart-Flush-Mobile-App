@@ -2,7 +2,6 @@ import { createContext, useEffect, useState, type PropsWithChildren } from 'reac
 import {
   collection,
   onSnapshot,
-  orderBy,
   query,
   where,
   type QuerySnapshot,
@@ -67,7 +66,9 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     const handleSnapshotError = (error: Error): void => {
       console.warn('Failed to subscribe to maintenance tasks', error);
       setErrorMessage(
-        'Unable to refresh maintenance tasks. Check your connection and try again.',
+        error.message
+          ? `Unable to refresh maintenance tasks: ${error.message}`
+          : 'Unable to refresh maintenance tasks. Check your connection and try again.',
       );
       setLoading(false);
     };
@@ -75,12 +76,10 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     const assignedTasksQuery = query(
       collection(db, 'tasks'),
       where('assignedTo', '==', user.uid),
-      orderBy('createdAt', 'desc'),
     );
     const unassignedPendingTasksQuery = query(
       collection(db, 'tasks'),
       where('status', '==', 'pending'),
-      orderBy('createdAt', 'desc'),
     );
 
     const unsubscribeAssignedTasks = onSnapshot(

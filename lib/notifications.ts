@@ -39,6 +39,19 @@ function isMessagingPermissionGranted(status: FirebaseMessagingTypes.Authorizati
   );
 }
 
+function hasAndroidPostNotificationRuntimePermission(): boolean {
+  if (Platform.OS !== 'android') {
+    return false;
+  }
+
+  const version =
+    typeof Platform.Version === 'number'
+      ? Platform.Version
+      : Number.parseInt(Platform.Version, 10);
+
+  return Number.isFinite(version) && version >= 33;
+}
+
 async function requestAndroidPostNotificationsAsync(): Promise<boolean> {
   if (Platform.OS !== 'android') {
     return true;
@@ -74,17 +87,26 @@ async function requestNotificationPermissionOnceAsync(): Promise<{
     const androidGranted = await requestAndroidPostNotificationsAsync();
 
     return {
-      granted: isMessagingPermissionGranted(status) && androidGranted,
+      granted:
+        Platform.OS === 'android'
+          ? androidGranted
+          : isMessagingPermissionGranted(status),
       requestedNow: false,
     };
   }
 
-  const status = await messaging().requestPermission();
+  const status =
+    Platform.OS === 'android'
+      ? AuthorizationStatus.AUTHORIZED
+      : await messaging().requestPermission();
   const androidGranted = await requestAndroidPostNotificationsAsync();
   await AsyncStorage.setItem(NOTIF_PERMISSION_REQUESTED_KEY, 'true');
 
   return {
-    granted: isMessagingPermissionGranted(status) && androidGranted,
+    granted:
+      Platform.OS === 'android'
+        ? androidGranted
+        : isMessagingPermissionGranted(status),
     requestedNow: true,
   };
 }
@@ -133,6 +155,15 @@ export async function registerForPushNotificationsAsync(): Promise<FcmRegistrati
     permissionsGranted: true,
     permissionRequestedNow: permission.requestedNow,
   };
+}
+
+export async function forceRegisterForPushNotificationsAsync(): Promise<FcmRegistrationResult> {
+  await AsyncStorage.removeItem(NOTIF_PERMISSION_REQUESTED_KEY);
+  return registerForPushNotificationsAsync();
+}
+
+export function requiresAndroidNotificationPermission(): boolean {
+  return hasAndroidPostNotificationRuntimePermission();
 }
 
 export function subscribeToPushTokenRefresh(

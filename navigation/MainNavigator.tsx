@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
+import { ActiveTaskScreen } from '../screens/ActiveTaskScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { InboxScreen } from '../screens/InboxScreen';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
@@ -73,7 +74,11 @@ export function MainNavigator(): React.JSX.Element {
         },
         tabBarIcon: ({ color, size }) => {
           const iconName =
-            route.name === 'InboxTab' ? 'bell-outline' : 'clock-outline';
+            route.name === 'InboxTab'
+              ? 'bell-outline'
+              : route.name === 'TaskTab'
+                ? 'clipboard-text-outline'
+                : 'clock-outline';
 
           return (
             <MaterialCommunityIcons
@@ -90,6 +95,18 @@ export function MainNavigator(): React.JSX.Element {
         component={InboxStackNavigator}
         options={{
           title: 'Inbox',
+          tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: theme.colors.error,
+            color: theme.colors.onError,
+          },
+        }}
+      />
+      <Tab.Screen
+        name="TaskTab"
+        component={ActiveTaskScreen}
+        options={{
+          title: 'Task Detail',
           tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
           tabBarBadgeStyle: {
             backgroundColor: theme.colors.error,

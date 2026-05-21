@@ -46,6 +46,7 @@ export interface TasksContextValue {
 
 export type AuthStackParamList = {
   Login: undefined;
+  ForgotPassword: undefined;
 };
 
 export type InboxStackParamList = {
@@ -60,6 +61,7 @@ export type HistoryStackParamList = {
 
 export type MainTabParamList = {
   InboxTab: NavigatorScreenParams<InboxStackParamList>;
+  TaskTab: undefined;
   HistoryTab: NavigatorScreenParams<HistoryStackParamList>;
 };
 
