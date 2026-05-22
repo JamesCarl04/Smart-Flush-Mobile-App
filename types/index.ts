@@ -62,7 +62,7 @@ export type HistoryStackParamList = {
 
 export type MainTabParamList = {
   InboxTab: NavigatorScreenParams<InboxStackParamList>;
-  TaskTab: undefined;
+  TaskTab: { taskId?: string } | undefined;
   HistoryTab: NavigatorScreenParams<HistoryStackParamList>;
 };
 

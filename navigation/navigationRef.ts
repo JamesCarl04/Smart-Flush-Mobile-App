@@ -19,10 +19,9 @@ function flushPendingTaskNavigation(): void {
   pendingTaskId = null;
 
   navigationRef.navigate('Main', {
-    screen: 'InboxTab',
+    screen: 'TaskTab',
     params: {
-      screen: 'TaskDetail',
-      params: { taskId },
+      taskId,
     },
   });
 }

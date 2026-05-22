@@ -1,13 +1,15 @@
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import type { NavigationProp } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
 import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
 import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
-import type { InboxStackParamList, Task } from '../types';
+import type { InboxStackParamList, MainTabParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
+type MainTabNavigation = NavigationProp<MainTabParamList>;
 type InboxFilter = 'all' | 'pending' | 'acknowledged';
 
 function formatDate(date: Date): string {
@@ -67,6 +69,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     setRefreshing(true);
     await refreshTasks();
     setRefreshing(false);
+  };
+
+  const openTaskDetail = (taskId: string): void => {
+    navigation.getParent<MainTabNavigation>()?.navigate('TaskTab', { taskId });
   };
 
   return (
@@ -161,9 +167,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             <Card.Actions>
               <Button
                 mode="contained-tonal"
-                onPress={() =>
-                  navigation.navigate('TaskDetail', { taskId: item.id })
-                }
+                onPress={() => openTaskDetail(item.id)}
               >
                 Open Task Detail
               </Button>

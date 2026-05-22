@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import {
   ActivityIndicator,
   Button,
@@ -13,7 +14,9 @@ import {
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask, completeTask } from '../lib/task-api';
 import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
-import type { Task } from '../types';
+import type { MainTabParamList, Task } from '../types';
+
+type Props = BottomTabScreenProps<MainTabParamList, 'TaskTab'>;
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) {
@@ -76,19 +79,28 @@ function EmptyTaskPanel(): React.JSX.Element {
   );
 }
 
-export function ActiveTaskScreen(): React.JSX.Element {
-  const { inboxTasks, loading, refreshTasks } = useTasks();
+export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
+  const { tasks, inboxTasks, loading, refreshTasks } = useTasks();
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
   >(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
-  const activeTask = useMemo(
-    () =>
+  const selectedTaskId = route.params?.taskId;
+  const activeTask = useMemo(() => {
+    const selectedTask = selectedTaskId
+      ? tasks.find((task) => task.id === selectedTaskId)
+      : null;
+
+    if (selectedTask) {
+      return selectedTask;
+    }
+
+    return (
       inboxTasks.find((task) => task.status === 'pending') ??
       inboxTasks.find((task) => task.status === 'acknowledged') ??
-      null,
-    [inboxTasks],
-  );
+      null
+    );
+  }, [inboxTasks, selectedTaskId, tasks]);
 
   const handleAcknowledge = async (): Promise<void> => {
     if (!activeTask || actionInFlight) {
