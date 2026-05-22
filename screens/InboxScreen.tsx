@@ -47,6 +47,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     pendingCount,
     loading,
     errorMessage,
+    refreshTasks,
     clearError,
   } = useTasks();
   const acknowledgedCount = inboxTasks.filter(
@@ -62,9 +63,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     [activeFilter, inboxTasks],
   );
 
-  const handleRefresh = (): void => {
+  const handleRefresh = async (): Promise<void> => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 600);
+    await refreshTasks();
+    setRefreshing(false);
   };
 
   return (
@@ -74,7 +76,12 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.contentContainer}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => {
+              void handleRefresh();
+            }}
+          />
         }
         ListHeaderComponent={
           <View style={styles.headerBlock}>

@@ -41,6 +41,7 @@ export interface TasksContextValue {
   pendingCount: number;
   loading: boolean;
   errorMessage: string | null;
+  refreshTasks: () => Promise<void>;
   clearError: () => void;
 }
 

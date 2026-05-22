@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -18,7 +18,8 @@ import {
   formatTaskTrigger,
   parseTaskDocument,
 } from '../lib/tasks';
-import { acknowledgeTask, completeTask } from '../lib/task-api';
+import { acknowledgeTask, completeTask, fetchTask } from '../lib/task-api';
+import { useTasks } from '../hooks/useTasks';
 import type {
   HistoryStackParamList,
   InboxStackParamList,
@@ -75,16 +76,38 @@ function DetailRow({
 }
 
 export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Element {
+  const { refreshTasks } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
   >(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const taskId = route.params.taskId;
+
+  const refreshTaskDetail = useCallback(async (): Promise<void> => {
+    try {
+      const apiTask = await fetchTask(taskId);
+      setTask(apiTask);
+      setLoading(false);
+    } catch (error) {
+      setLoading(false);
+      setSnackbarMessage(
+        error instanceof Error
+          ? error.message
+          : 'Unable to refresh task details. Check your connection and try again.',
+      );
+    }
+  }, [taskId]);
 
   useEffect(() => {
+    void refreshTaskDetail();
+    const intervalId = setInterval(() => {
+      void refreshTaskDetail();
+    }, 10000);
+
     const unsubscribe = onSnapshot(
-      doc(db, 'tasks', route.params.taskId),
+      doc(db, 'tasks', taskId),
       (snapshot) => {
         if (!snapshot.exists()) {
           setTask(null);
@@ -105,8 +128,11 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
       },
     );
 
-    return unsubscribe;
-  }, [route.params.taskId]);
+    return () => {
+      clearInterval(intervalId);
+      unsubscribe();
+    };
+  }, [refreshTaskDetail, taskId]);
 
   const handleAcknowledge = async (): Promise<void> => {
     if (!task || actionInFlight) {
@@ -117,6 +143,8 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
 
     try {
       await acknowledgeTask(task.id);
+      await refreshTasks();
+      await refreshTaskDetail();
       setTask((currentTask) =>
         currentTask
           ? {
@@ -148,6 +176,8 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
 
     try {
       await completeTask(task.id);
+      await refreshTasks();
+      await refreshTaskDetail();
       setTask((currentTask) =>
         currentTask
           ? {

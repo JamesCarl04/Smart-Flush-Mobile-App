@@ -1,4 +1,10 @@
-import { createContext, useEffect, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useEffect,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 import {
   collection,
   onSnapshot,
@@ -9,6 +15,7 @@ import {
 
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
+import { fetchTasks } from '../lib/task-api';
 import { parseTaskDocument } from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
@@ -19,6 +26,42 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const refreshTasks = useCallback(async (): Promise<void> => {
+    if (!user) {
+      setTasks([]);
+      setLoading(false);
+      setErrorMessage(null);
+      return;
+    }
+
+    try {
+      const apiTasks = await fetchTasks();
+      setTasks(apiTasks);
+      setErrorMessage(null);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? `Unable to refresh maintenance tasks: ${error.message}`
+          : 'Unable to refresh maintenance tasks. Check your connection and try again.';
+      setErrorMessage(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    void refreshTasks();
+    const intervalId = setInterval(() => {
+      void refreshTasks();
+    }, 10000);
+
+    return () => clearInterval(intervalId);
+  }, [refreshTasks, user]);
 
   useEffect(() => {
     if (!user) {
@@ -120,6 +163,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         pendingCount,
         loading,
         errorMessage,
+        refreshTasks,
         clearError: () => setErrorMessage(null),
       }}
     >

@@ -77,7 +77,7 @@ function EmptyTaskPanel(): React.JSX.Element {
 }
 
 export function ActiveTaskScreen(): React.JSX.Element {
-  const { inboxTasks, loading } = useTasks();
+  const { inboxTasks, loading, refreshTasks } = useTasks();
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
   >(null);
@@ -99,6 +99,7 @@ export function ActiveTaskScreen(): React.JSX.Element {
 
     try {
       await acknowledgeTask(activeTask.id);
+      await refreshTasks();
       setSnackbarMessage('Task acknowledged.');
     } catch (error) {
       setSnackbarMessage(
@@ -120,6 +121,7 @@ export function ActiveTaskScreen(): React.JSX.Element {
 
     try {
       await completeTask(activeTask.id);
+      await refreshTasks();
       setSnackbarMessage('Task marked complete.');
     } catch (error) {
       setSnackbarMessage(
