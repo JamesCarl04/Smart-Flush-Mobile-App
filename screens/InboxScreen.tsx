@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
-import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
+import { formatTaskStatus } from '../lib/tasks';
 import type { InboxStackParamList, MainTabParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
@@ -72,7 +72,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   };
 
   const openTaskDetail = (taskId: string): void => {
-    navigation.getParent<MainTabNavigation>()?.navigate('TaskTab', { taskId });
+    navigation.getParent<MainTabNavigation>()?.navigate('TaskTab', {
+      screen: 'ActiveTask',
+      params: { taskId },
+    });
   };
 
   return (
@@ -154,9 +157,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   {formatTaskStatus(item.status)}
                 </Chip>
               </View>
-              <Text variant="labelMedium" style={styles.triggerLabel}>
-                {formatTaskTrigger(item.triggerType)}
-              </Text>
               <Text variant="bodyMedium" style={styles.noteText}>
                 {item.message}
               </Text>
@@ -248,10 +248,6 @@ const styles = StyleSheet.create({
   },
   openHint: {
     color: '#5f6c68',
-  },
-  triggerLabel: {
-    color: '#127369',
-    fontWeight: '700',
   },
   emptyCard: {
     marginTop: 12,

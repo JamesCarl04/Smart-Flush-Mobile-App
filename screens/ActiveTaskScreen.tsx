@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   ActivityIndicator,
   Button,
@@ -11,12 +11,13 @@ import {
   Text,
 } from 'react-native-paper';
 
+import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask, completeTask } from '../lib/task-api';
-import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
-import type { MainTabParamList, Task } from '../types';
+import { formatTaskStatus } from '../lib/tasks';
+import type { Task, TaskStackParamList } from '../types';
 
-type Props = BottomTabScreenProps<MainTabParamList, 'TaskTab'>;
+type Props = NativeStackScreenProps<TaskStackParamList, 'ActiveTask'>;
 
 function formatDate(date: Date | null | undefined): string {
   if (!date) {
@@ -63,6 +64,17 @@ function DetailRow({
   );
 }
 
+function formatAssignee(
+  assignedTo: string | null,
+  currentUserId: string | null,
+): string {
+  if (!assignedTo) {
+    return 'All maintenance team';
+  }
+
+  return assignedTo === currentUserId ? 'You' : 'Maintenance staff';
+}
+
 function EmptyTaskPanel(): React.JSX.Element {
   return (
     <View style={styles.centerState}>
@@ -80,6 +92,7 @@ function EmptyTaskPanel(): React.JSX.Element {
 }
 
 export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
+  const { user } = useAuth();
   const { tasks, inboxTasks, loading, refreshTasks } = useTasks();
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
@@ -206,12 +219,7 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
             <Divider />
             <DetailRow
               label="Assigned to"
-              value={activeTask.assignedTo ?? 'All maintenance staff'}
-            />
-            <Divider />
-            <DetailRow
-              label="Trigger"
-              value={formatTaskTrigger(activeTask.triggerType)}
+              value={formatAssignee(activeTask.assignedTo, user?.uid ?? null)}
             />
             <Divider />
             <DetailRow

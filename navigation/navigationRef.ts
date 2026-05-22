@@ -21,7 +21,8 @@ function flushPendingTaskNavigation(): void {
   navigationRef.navigate('Main', {
     screen: 'TaskTab',
     params: {
-      taskId,
+      screen: 'ActiveTask',
+      params: { taskId },
     },
   });
 }

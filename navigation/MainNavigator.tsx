@@ -8,19 +8,35 @@ import { ActiveTaskScreen } from '../screens/ActiveTaskScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { InboxScreen } from '../screens/InboxScreen';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
+import { LogoutHeaderButton } from './LogoutHeaderButton';
 import type {
   HistoryStackParamList,
   InboxStackParamList,
   MainTabParamList,
+  TaskStackParamList,
 } from '../types';
 
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const InboxStack = createNativeStackNavigator<InboxStackParamList>();
 const HistoryStack = createNativeStackNavigator<HistoryStackParamList>();
+const TaskStack = createNativeStackNavigator<TaskStackParamList>();
+
+const sharedHeaderOptions = {
+  headerRight: () => <LogoutHeaderButton />,
+  headerRightContainerStyle: {
+    paddingRight: 12,
+  },
+  headerShadowVisible: true,
+  headerStyle: {
+    backgroundColor: '#ffffff',
+  },
+} as const;
 
 function InboxStackNavigator(): React.JSX.Element {
   return (
-    <InboxStack.Navigator>
+    <InboxStack.Navigator
+      screenOptions={sharedHeaderOptions}
+    >
       <InboxStack.Screen
         name="InboxHome"
         component={InboxScreen}
@@ -37,7 +53,9 @@ function InboxStackNavigator(): React.JSX.Element {
 
 function HistoryStackNavigator(): React.JSX.Element {
   return (
-    <HistoryStack.Navigator>
+    <HistoryStack.Navigator
+      screenOptions={sharedHeaderOptions}
+    >
       <HistoryStack.Screen
         name="HistoryHome"
         component={HistoryScreen}
@@ -49,6 +67,18 @@ function HistoryStackNavigator(): React.JSX.Element {
         options={{ title: 'Task details' }}
       />
     </HistoryStack.Navigator>
+  );
+}
+
+function TaskStackNavigator(): React.JSX.Element {
+  return (
+    <TaskStack.Navigator screenOptions={sharedHeaderOptions}>
+      <TaskStack.Screen
+        name="ActiveTask"
+        component={ActiveTaskScreen}
+        options={{ title: 'Task Detail' }}
+      />
+    </TaskStack.Navigator>
   );
 }
 
@@ -104,7 +134,7 @@ export function MainNavigator(): React.JSX.Element {
       />
       <Tab.Screen
         name="TaskTab"
-        component={ActiveTaskScreen}
+        component={TaskStackNavigator}
         options={{
           title: 'Task Detail',
           tabBarBadge: pendingCount > 0 ? pendingCount : undefined,

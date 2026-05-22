@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
-import { formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
+import { formatTaskStatus } from '../lib/tasks';
 import type { HistoryStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<HistoryStackParamList, 'HistoryHome'>;
@@ -144,9 +144,6 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                   {formatTaskStatus(item.status)}
                 </Chip>
               </View>
-              <Text variant="labelMedium" style={styles.triggerLabel}>
-                {formatTaskTrigger(item.triggerType)}
-              </Text>
               <Text variant="bodyMedium" style={styles.noteText}>
                 {item.message}
               </Text>
@@ -214,10 +211,6 @@ const styles = StyleSheet.create({
     color: '#31403c',
     fontSize: 16,
     lineHeight: 23,
-  },
-  triggerLabel: {
-    color: '#127369',
-    fontWeight: '700',
   },
   emptyCard: {
     marginTop: 12,

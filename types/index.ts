@@ -60,9 +60,13 @@ export type HistoryStackParamList = {
   TaskDetail: { taskId: string };
 };
 
+export type TaskStackParamList = {
+  ActiveTask: { taskId?: string } | undefined;
+};
+
 export type MainTabParamList = {
   InboxTab: NavigatorScreenParams<InboxStackParamList>;
-  TaskTab: { taskId?: string } | undefined;
+  TaskTab: NavigatorScreenParams<TaskStackParamList> | undefined;
   HistoryTab: NavigatorScreenParams<HistoryStackParamList>;
 };
 

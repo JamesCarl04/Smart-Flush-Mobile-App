@@ -11,12 +11,9 @@ import {
   Text,
 } from 'react-native-paper';
 
-import { auth } from '../lib/firebase';
-import {
-  formatTaskStatus,
-  formatTaskTrigger,
-} from '../lib/tasks';
+import { formatTaskStatus } from '../lib/tasks';
 import { acknowledgeTask, completeTask, fetchTask } from '../lib/task-api';
+import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import type {
   HistoryStackParamList,
@@ -73,7 +70,19 @@ function DetailRow({
   );
 }
 
+function formatAssignee(
+  assignedTo: string | null,
+  currentUserId: string | null,
+): string {
+  if (!assignedTo) {
+    return 'All maintenance team';
+  }
+
+  return assignedTo === currentUserId ? 'You' : 'Maintenance staff';
+}
+
 export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Element {
+  const { user } = useAuth();
   const { tasks, refreshTasks } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,7 +161,6 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
           ? {
               ...currentTask,
               status: 'acknowledged',
-              assignedTo: auth.currentUser?.uid ?? currentTask.assignedTo,
               acknowledgedAt: new Date(),
             }
           : currentTask,
@@ -269,11 +277,9 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
           <Card.Content style={styles.sectionContent}>
             <DetailRow label="Task ID" value={task.id} />
             <Divider />
-            <DetailRow label="Assigned to" value={task.assignedTo ?? 'Unassigned'} />
-            <Divider />
             <DetailRow
-              label="Trigger"
-              value={formatTaskTrigger(task.triggerType)}
+              label="Assigned to"
+              value={formatAssignee(task.assignedTo, user?.uid ?? null)}
             />
             <Divider />
             <DetailRow label="Created at" value={formatDate(task.createdAt)} />
