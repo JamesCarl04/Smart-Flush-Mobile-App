@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { doc, onSnapshot } from 'firebase/firestore';
 import {
   ActivityIndicator,
   Button,
@@ -12,11 +11,10 @@ import {
   Text,
 } from 'react-native-paper';
 
-import { auth, db } from '../lib/firebase';
+import { auth } from '../lib/firebase';
 import {
   formatTaskStatus,
   formatTaskTrigger,
-  parseTaskDocument,
 } from '../lib/tasks';
 import { acknowledgeTask, completeTask, fetchTask } from '../lib/task-api';
 import { useTasks } from '../hooks/useTasks';
@@ -75,64 +73,63 @@ function DetailRow({
   );
 }
 
-export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Element {
+export function TaskDetailScreen({ route }: Props): React.JSX.Element {
   const { refreshTasks } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
   >(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
   const taskId = route.params.taskId;
 
-  const refreshTaskDetail = useCallback(async (): Promise<void> => {
+  const refreshTaskDetail = useCallback(async (silent = false): Promise<void> => {
+    if (!silent) {
+      setLoading(true);
+    }
+
     try {
       const apiTask = await fetchTask(taskId);
       setTask(apiTask);
+      setHasLoadedOnce(true);
       setLoading(false);
     } catch (error) {
       setLoading(false);
-      setSnackbarMessage(
-        error instanceof Error
-          ? error.message
-          : 'Unable to refresh task details. Check your connection and try again.',
-      );
+      if (task) {
+        return;
+      }
+
+      if (hasLoadedOnce || silent) {
+        setSnackbarMessage(
+          error instanceof Error
+            ? error.message
+            : 'Unable to refresh task details. Check your connection and try again.',
+        );
+      }
     }
-  }, [taskId]);
+  }, [hasLoadedOnce, task, taskId]);
 
   useEffect(() => {
-    void refreshTaskDetail();
+    let cancelled = false;
+
+    const loadInitialTask = async (): Promise<void> => {
+      await refreshTaskDetail();
+      if (!cancelled) {
+        setHasLoadedOnce(true);
+      }
+    };
+
+    void loadInitialTask();
     const intervalId = setInterval(() => {
-      void refreshTaskDetail();
+      void refreshTaskDetail(true);
     }, 10000);
 
-    const unsubscribe = onSnapshot(
-      doc(db, 'tasks', taskId),
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          setTask(null);
-          setLoading(false);
-          return;
-        }
-
-        setTask(parseTaskDocument(snapshot.id, snapshot.data()));
-        setLoading(false);
-      },
-      (error) => {
-        console.warn('Failed to load task details', error);
-        setTask(null);
-        setLoading(false);
-        setSnackbarMessage(
-          'Unable to refresh task details. Check your connection and try again.',
-        );
-      },
-    );
-
     return () => {
+      cancelled = true;
       clearInterval(intervalId);
-      unsubscribe();
     };
-  }, [refreshTaskDetail, taskId]);
+  }, [refreshTaskDetail]);
 
   const handleAcknowledge = async (): Promise<void> => {
     if (!task || actionInFlight) {
@@ -215,26 +212,11 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
     );
   };
 
-  if (loading) {
+  if (loading || !task) {
     return (
       <View style={styles.loadingState}>
         <ActivityIndicator size="large" />
         <Text variant="bodyLarge">Loading task details...</Text>
-      </View>
-    );
-  }
-
-  if (!task) {
-    return (
-      <View style={styles.loadingState}>
-        <Text variant="titleMedium">Task not found</Text>
-        <Text variant="bodyMedium" style={styles.missingCopy}>
-          This task may have been removed or is no longer assigned to your
-          account.
-        </Text>
-        <Button mode="contained" onPress={() => navigation.goBack()}>
-          Back
-        </Button>
       </View>
     );
   }
