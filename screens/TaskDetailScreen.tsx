@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
@@ -73,63 +73,68 @@ function DetailRow({
   );
 }
 
-export function TaskDetailScreen({ route }: Props): React.JSX.Element {
-  const { refreshTasks } = useTasks();
+export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Element {
+  const { tasks, refreshTasks } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState<
     'acknowledge' | 'complete' | null
   >(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
   const taskId = route.params.taskId;
+  const cachedTask = useMemo(
+    () => tasks.find((currentTask) => currentTask.id === taskId) ?? null,
+    [taskId, tasks],
+  );
+
+  useEffect(() => {
+    if (!cachedTask) {
+      return;
+    }
+
+    setTask(cachedTask);
+    setLoading(false);
+    setLoadError(null);
+  }, [cachedTask]);
 
   const refreshTaskDetail = useCallback(async (silent = false): Promise<void> => {
-    if (!silent) {
+    if (!silent && !cachedTask) {
       setLoading(true);
     }
 
     try {
       const apiTask = await fetchTask(taskId);
       setTask(apiTask);
-      setHasLoadedOnce(true);
+      setLoadError(null);
       setLoading(false);
     } catch (error) {
-      setLoading(false);
-      if (task) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Unable to refresh task details. Check your connection and try again.';
+
+      if (cachedTask) {
+        setTask(cachedTask);
+        setLoading(false);
         return;
       }
 
-      if (hasLoadedOnce || silent) {
-        setSnackbarMessage(
-          error instanceof Error
-            ? error.message
-            : 'Unable to refresh task details. Check your connection and try again.',
-        );
-      }
+      setLoadError(message);
+      setLoading(false);
     }
-  }, [hasLoadedOnce, task, taskId]);
+  }, [cachedTask, taskId]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadInitialTask = async (): Promise<void> => {
-      await refreshTaskDetail();
-      if (!cancelled) {
-        setHasLoadedOnce(true);
-      }
-    };
-
-    void loadInitialTask();
+    void refreshTaskDetail(Boolean(cachedTask));
     const intervalId = setInterval(() => {
       void refreshTaskDetail(true);
     }, 10000);
 
     return () => {
-      cancelled = true;
       clearInterval(intervalId);
     };
-  }, [refreshTaskDetail]);
+  }, [cachedTask, refreshTaskDetail]);
 
   const handleAcknowledge = async (): Promise<void> => {
     if (!task || actionInFlight) {
@@ -212,11 +217,34 @@ export function TaskDetailScreen({ route }: Props): React.JSX.Element {
     );
   };
 
-  if (loading || !task) {
+  if (loading) {
     return (
       <View style={styles.loadingState}>
         <ActivityIndicator size="large" />
         <Text variant="bodyLarge">Loading task details...</Text>
+      </View>
+    );
+  }
+
+  if (!task) {
+    return (
+      <View style={styles.loadingState}>
+        <Text variant="titleMedium">Still loading task details</Text>
+        <Text variant="bodyMedium" style={styles.missingCopy}>
+          {loadError ??
+            'The task is not available yet. Check your connection and try again.'}
+        </Text>
+        <Button
+          mode="contained"
+          onPress={() => {
+            void refreshTaskDetail();
+          }}
+        >
+          Try Again
+        </Button>
+        <Button mode="text" onPress={() => navigation.goBack()}>
+          Back to Inbox
+        </Button>
       </View>
     );
   }

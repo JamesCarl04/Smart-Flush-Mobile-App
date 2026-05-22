@@ -5,18 +5,9 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import {
-  collection,
-  onSnapshot,
-  query,
-  where,
-  type QuerySnapshot,
-} from 'firebase/firestore';
 
 import { useAuth } from '../hooks/useAuth';
-import { db } from '../lib/firebase';
 import { fetchTasks } from '../lib/task-api';
-import { parseTaskDocument } from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
@@ -52,19 +43,6 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   useEffect(() => {
     if (!user) {
-      return undefined;
-    }
-
-    void refreshTasks();
-    const intervalId = setInterval(() => {
-      void refreshTasks();
-    }, 10000);
-
-    return () => clearInterval(intervalId);
-  }, [refreshTasks, user]);
-
-  useEffect(() => {
-    if (!user) {
       setTasks([]);
       setLoading(false);
       setErrorMessage(null);
@@ -73,82 +51,16 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
     setLoading(true);
     setErrorMessage(null);
-    let assignedTasks: Task[] = [];
-    let unassignedPendingTasks: Task[] = [];
-    let assignedReady = false;
-    let pendingReady = false;
 
-    const mapSnapshot = (snapshot: QuerySnapshot): Task[] =>
-      snapshot.docs
-        .map((documentSnapshot) =>
-          parseTaskDocument(documentSnapshot.id, documentSnapshot.data()),
-        )
-        .filter((task): task is Task => task !== null);
-
-    const publishTasks = (): void => {
-      const taskMap = new Map<string, Task>();
-
-      for (const task of assignedTasks) {
-        taskMap.set(task.id, task);
-      }
-
-      for (const task of unassignedPendingTasks) {
-        if (task.assignedTo === null && task.status === 'pending') {
-          taskMap.set(task.id, task);
-        }
-      }
-
-      const nextTasks = Array.from(taskMap.values()).sort(
-        (left, right) => right.createdAt.getTime() - left.createdAt.getTime(),
-      );
-
-      setTasks(nextTasks);
-      setLoading(!(assignedReady && pendingReady));
-    };
-
-    const handleSnapshotError = (error: Error): void => {
-      console.warn('Failed to subscribe to maintenance tasks', error);
-      setErrorMessage(
-        error.message
-          ? `Unable to refresh maintenance tasks: ${error.message}`
-          : 'Unable to refresh maintenance tasks. Check your connection and try again.',
-      );
-      setLoading(false);
-    };
-
-    const assignedTasksQuery = query(
-      collection(db, 'tasks'),
-      where('assignedTo', '==', user.uid),
-    );
-    const unassignedPendingTasksQuery = query(
-      collection(db, 'tasks'),
-      where('status', '==', 'pending'),
-    );
-
-    const unsubscribeAssignedTasks = onSnapshot(
-      assignedTasksQuery,
-      (snapshot) => {
-        assignedTasks = mapSnapshot(snapshot);
-        assignedReady = true;
-        publishTasks();
-      },
-      handleSnapshotError,
-    );
-    const unsubscribeUnassignedPendingTasks = onSnapshot(
-      unassignedPendingTasksQuery,
-      (snapshot) => {
-        unassignedPendingTasks = mapSnapshot(snapshot);
-        pendingReady = true;
-        publishTasks();
-      },
-      handleSnapshotError,
-    );
+    void refreshTasks();
+    const intervalId = setInterval(() => {
+      void refreshTasks();
+    }, 10000);
 
     return () => {
-      unsubscribeAssignedTasks();
-      unsubscribeUnassignedPendingTasks();
+      clearInterval(intervalId);
     };
-  }, [user]);
+  }, [refreshTasks, user]);
 
   const inboxTasks = tasks.filter((task) => task.status !== 'completed');
   const historyTasks = tasks.filter((task) => task.status === 'completed');
