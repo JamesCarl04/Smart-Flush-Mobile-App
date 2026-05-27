@@ -140,9 +140,13 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                     Completed {formatDate(item.completedAt ?? item.createdAt)}
                   </Text>
                 </View>
-                <Chip compact style={getStatusChipStyle(item.status)}>
-                  {formatTaskStatus(item.status)}
-                </Chip>
+                <View
+                  style={[styles.statusBadge, getStatusChipStyle(item.status)]}
+                >
+                  <Text variant="labelLarge" style={styles.statusBadgeText}>
+                    {formatTaskStatus(item.status)}
+                  </Text>
+                </View>
               </View>
               <Text variant="bodyMedium" style={styles.noteText}>
                 {item.message}
@@ -198,6 +202,7 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
     gap: 12,
   },
   titleBlock: {
@@ -229,5 +234,19 @@ const styles = StyleSheet.create({
   },
   completedChip: {
     backgroundColor: '#d8f2db',
+  },
+  statusBadge: {
+    minHeight: 48,
+    minWidth: 92,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusBadgeText: {
+    color: '#111f1c',
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
 });
