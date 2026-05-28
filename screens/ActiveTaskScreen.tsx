@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  ActivityIndicator,
   Button,
   Card,
   Chip,
@@ -11,9 +10,11 @@ import {
   Text,
 } from 'react-native-paper';
 
+import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask, completeTask } from '../lib/task-api';
+import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
 import type { Task, TaskStackParamList } from '../types';
 
@@ -176,12 +177,7 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
   };
 
   if (loading) {
-    return (
-      <View style={styles.centerState}>
-        <ActivityIndicator size="large" />
-        <Text variant="bodyLarge">Loading active task...</Text>
-      </View>
-    );
+    return <TaskDetailSkeleton />;
   }
 
   if (!activeTask) {
@@ -194,7 +190,7 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
         <Card mode="contained" style={styles.headerCard}>
           <Card.Content style={styles.headerContent}>
             <Text variant="headlineSmall">Task Detail</Text>
-            <Text variant="titleLarge">Restroom {activeTask.deviceId}</Text>
+            <Text variant="titleLarge">{getRestroomLabel(activeTask)}</Text>
             <Text variant="bodyMedium" style={styles.headerCopy}>
               This page shows the current task that needs your attention.
             </Text>

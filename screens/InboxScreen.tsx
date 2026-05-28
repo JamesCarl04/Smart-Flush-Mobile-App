@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
+import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
 import type { InboxStackParamList, MainTabParamList, Task } from '../types';
 
@@ -148,7 +149,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text variant="titleMedium">Restroom {item.deviceId}</Text>
+                  <Text variant="titleMedium">{getRestroomLabel(item)}</Text>
                   <Text variant="bodySmall" style={styles.timeLabel}>
                     Created {formatDate(item.createdAt)}
                   </Text>

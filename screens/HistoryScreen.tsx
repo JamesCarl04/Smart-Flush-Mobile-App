@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Card, Chip, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import { useTasks } from '../hooks/useTasks';
+import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
 import type { HistoryStackParamList, Task } from '../types';
 
@@ -66,6 +67,7 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
         (selectedRange === 'week' && completedAt >= sevenDaysAgo);
       const matchesSearch =
         !normalizedQuery ||
+        getRestroomLabel(task).toLowerCase().includes(normalizedQuery) ||
         task.deviceId.toLowerCase().includes(normalizedQuery) ||
         task.message.toLowerCase().includes(normalizedQuery);
 
@@ -135,7 +137,7 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text variant="titleMedium">Restroom {item.deviceId}</Text>
+                  <Text variant="titleMedium">{getRestroomLabel(item)}</Text>
                   <Text variant="bodySmall" style={styles.timeLabel}>
                     Completed {formatDate(item.completedAt ?? item.createdAt)}
                   </Text>

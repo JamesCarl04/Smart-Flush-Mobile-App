@@ -5,6 +5,8 @@ import type { Task } from '../types';
 interface TaskApiData {
   id?: unknown;
   deviceId?: unknown;
+  restroomName?: unknown;
+  deviceName?: unknown;
   triggerType?: unknown;
   message?: unknown;
   status?: unknown;
@@ -52,6 +54,12 @@ function parseTaskApiData(data: TaskApiData): Task | null {
   return {
     id: data.id,
     deviceId: data.deviceId,
+    restroomName:
+      typeof data.restroomName === 'string'
+        ? data.restroomName
+        : typeof data.deviceName === 'string'
+          ? data.deviceName
+          : null,
     triggerType: data.triggerType,
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,

@@ -37,15 +37,23 @@ export async function apiFetch<TData>(
     throw new Error('You must be signed in to perform this action.');
   }
 
-  const idToken = await currentUser.getIdToken();
-  const response = await fetch(buildApiUrl(path), {
-    ...options,
-    headers: {
-      ...options.headers,
-      Authorization: `Bearer ${idToken}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  const request = async (forceRefresh = false) => {
+    const idToken = await currentUser.getIdToken(forceRefresh);
+    return fetch(buildApiUrl(path), {
+      ...options,
+      headers: {
+        ...options.headers,
+        Authorization: `Bearer ${idToken}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  };
+
+  let response = await request();
+
+  if (response.status === 401) {
+    response = await request(true);
+  }
 
   const payload: unknown = await response.json().catch(() => null);
 

@@ -11,6 +11,7 @@ export type TaskTriggerType =
 export interface Task {
   id: string;
   deviceId: string;
+  restroomName?: string | null;
   triggerType: TaskTriggerType;
   message: string;
   assignedTo: string | null;

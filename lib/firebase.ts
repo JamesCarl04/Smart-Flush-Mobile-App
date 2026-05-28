@@ -1,6 +1,6 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getAuth, type FirebaseAuthTypes } from '@react-native-firebase/auth';
 
 import { getRequiredConfigValue, runtimeConfig } from './config';
 
@@ -37,7 +37,7 @@ const app: FirebaseApp = hasExistingApp
   ? getApp()
   : initializeApp(firebaseConfig);
 
-const auth: Auth = getAuth(app);
+const auth: FirebaseAuthTypes.Module = getAuth();
 
 const db: Firestore = getFirestore(app);
 

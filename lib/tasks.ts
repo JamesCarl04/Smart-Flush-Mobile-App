@@ -6,6 +6,8 @@ type FirestoreDateValue = Date | Timestamp | null | undefined;
 
 type TaskDocumentShape = {
   deviceId?: unknown;
+  restroomName?: unknown;
+  deviceName?: unknown;
   triggerType?: unknown;
   message?: unknown;
   status?: unknown;
@@ -106,6 +108,12 @@ export function parseTaskDocument(
   return {
     id,
     deviceId: data.deviceId,
+    restroomName:
+      typeof data.restroomName === 'string'
+        ? data.restroomName
+        : typeof data.deviceName === 'string'
+          ? data.deviceName
+          : null,
     triggerType: data.triggerType,
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,

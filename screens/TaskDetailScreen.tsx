@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  ActivityIndicator,
   Button,
   Card,
   Chip,
@@ -11,8 +10,10 @@ import {
   Text,
 } from 'react-native-paper';
 
+import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import { formatTaskStatus } from '../lib/tasks';
 import { acknowledgeTask, completeTask, fetchTask } from '../lib/task-api';
+import { getRestroomLabel } from '../lib/restrooms';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import type {
@@ -226,12 +227,7 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
   };
 
   if (loading) {
-    return (
-      <View style={styles.loadingState}>
-        <ActivityIndicator size="large" />
-        <Text variant="bodyLarge">Loading task details...</Text>
-      </View>
-    );
+    return <TaskDetailSkeleton />;
   }
 
   if (!task) {
@@ -262,7 +258,7 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <Card mode="contained" style={styles.headerCard}>
           <Card.Content style={styles.headerContent}>
-            <Text variant="titleLarge">Restroom {task.deviceId}</Text>
+            <Text variant="titleLarge">{getRestroomLabel(task)}</Text>
             <Text variant="bodyMedium" style={styles.headerCopy}>
               Read the instruction, acknowledge when you are on the way, then
               mark it complete after cleaning.
