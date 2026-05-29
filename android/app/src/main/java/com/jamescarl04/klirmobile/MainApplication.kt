@@ -1,4 +1,4 @@
-package com.jamescarl04.klirmobile
+package com.james.klir
 
 import android.app.Application
 import android.content.res.Configuration

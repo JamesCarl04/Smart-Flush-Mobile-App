@@ -17,7 +17,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   android: {
     ...config.android,
-    package: 'com.jamescarl04.klirmobile',
+    package: 'com.james.klir',
     adaptiveIcon: {
       foregroundImage: './assets/adaptive-icon.png',
       backgroundColor: '#eaf7f4',

@@ -1,4 +1,4 @@
-package com.jamescarl04.klirmobile
+package com.james.klir
 
 import android.os.Build
 import android.os.Bundle
