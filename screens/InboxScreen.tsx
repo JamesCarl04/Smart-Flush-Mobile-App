@@ -1,5 +1,4 @@
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import type { NavigationProp } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
 import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
@@ -7,11 +6,10 @@ import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
 import { useTasks } from '../hooks/useTasks';
 import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
-import type { InboxStackParamList, MainTabParamList, Task } from '../types';
+import type { InboxStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
-type MainTabNavigation = NavigationProp<MainTabParamList>;
-type InboxFilter = 'all' | 'pending' | 'acknowledged';
+type InboxFilter = 'all' | 'active' | 'acknowledged';
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-PH', {
@@ -62,7 +60,14 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     () =>
       activeFilter === 'all'
         ? inboxTasks
-        : inboxTasks.filter((task) => task.status === activeFilter),
+        : activeFilter === 'active'
+          ? inboxTasks.filter(
+              (task) =>
+                task.status === 'assigned' ||
+                task.status === 'unassigned' ||
+                task.status === 'reassignment_needed',
+            )
+          : inboxTasks.filter((task) => task.status === activeFilter),
     [activeFilter, inboxTasks],
   );
 
@@ -73,10 +78,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   };
 
   const openTaskDetail = (taskId: string): void => {
-    navigation.getParent<MainTabNavigation>()?.navigate('TaskTab', {
-      screen: 'ActiveTask',
-      params: { taskId },
-    });
+    navigation.navigate('TaskDetail', { taskId });
   };
 
   return (
@@ -129,10 +131,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 All
               </Chip>
               <Chip
-                selected={activeFilter === 'pending'}
-                onPress={() => setActiveFilter('pending')}
+                selected={activeFilter === 'active'}
+                onPress={() => setActiveFilter('active')}
               >
-                Pending
+                Active
               </Chip>
               <Chip
                 selected={activeFilter === 'acknowledged'}

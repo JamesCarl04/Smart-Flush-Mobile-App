@@ -1,19 +1,16 @@
-import { useMemo, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { useMemo } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  Button,
   Card,
   Chip,
   Divider,
-  Snackbar,
   Text,
 } from 'react-native-paper';
 
 import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
-import { acknowledgeTask, completeTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
 import type { Task, TaskStackParamList } from '../types';
@@ -94,11 +91,7 @@ function EmptyTaskPanel(): React.JSX.Element {
 
 export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, inboxTasks, loading, refreshTasks } = useTasks();
-  const [actionInFlight, setActionInFlight] = useState<
-    'acknowledge' | 'complete' | null
-  >(null);
-  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const { tasks, inboxTasks, loading } = useTasks();
   const selectedTaskId = route.params?.taskId;
   const activeTask = useMemo(() => {
     const selectedTask = selectedTaskId
@@ -110,71 +103,12 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
     }
 
     return (
-      inboxTasks.find((task) => task.status === 'pending') ??
+      inboxTasks.find((task) => task.status === 'assigned') ??
+      inboxTasks.find((task) => task.status === 'unassigned') ??
       inboxTasks.find((task) => task.status === 'acknowledged') ??
       null
     );
   }, [inboxTasks, selectedTaskId, tasks]);
-
-  const handleAcknowledge = async (): Promise<void> => {
-    if (!activeTask || actionInFlight) {
-      return;
-    }
-
-    setActionInFlight('acknowledge');
-
-    try {
-      await acknowledgeTask(activeTask.id);
-      await refreshTasks();
-      setSnackbarMessage('Task acknowledged.');
-    } catch (error) {
-      setSnackbarMessage(
-        error instanceof Error
-          ? error.message
-          : 'Failed to acknowledge task. Please try again.',
-      );
-    } finally {
-      setActionInFlight(null);
-    }
-  };
-
-  const handleComplete = async (): Promise<void> => {
-    if (!activeTask || actionInFlight) {
-      return;
-    }
-
-    setActionInFlight('complete');
-
-    try {
-      await completeTask(activeTask.id);
-      await refreshTasks();
-      setSnackbarMessage('Task marked complete.');
-    } catch (error) {
-      setSnackbarMessage(
-        error instanceof Error
-          ? error.message
-          : 'Failed to complete task. Please try again.',
-      );
-    } finally {
-      setActionInFlight(null);
-    }
-  };
-
-  const confirmComplete = (): void => {
-    Alert.alert(
-      'Mark task complete?',
-      'Only complete this task after the restroom has been cleaned and checked.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Complete',
-          onPress: () => {
-            void handleComplete();
-          },
-        },
-      ],
-    );
-  };
 
   if (loading) {
     return <TaskDetailSkeleton />;
@@ -235,38 +169,15 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
           </Card.Content>
         </Card>
 
-        {activeTask.status === 'pending' ? (
-          <Button
-            mode="contained"
-            loading={actionInFlight === 'acknowledge'}
-            disabled={actionInFlight !== null}
-            onPress={() => {
-              void handleAcknowledge();
-            }}
-            contentStyle={styles.primaryActionContent}
-          >
-            Acknowledge Task
-          </Button>
-        ) : null}
-
-        {activeTask.status === 'acknowledged' ? (
-          <Button
-            mode="contained"
-            loading={actionInFlight === 'complete'}
-            disabled={actionInFlight !== null}
-            onPress={confirmComplete}
-            contentStyle={styles.primaryActionContent}
-          >
-            Mark as Completed
-          </Button>
-        ) : null}
+        <Card mode="contained" style={styles.emptyCard}>
+          <Card.Content>
+            <Text variant="bodyMedium" style={styles.emptyText}>
+              Open this task from the Inbox to acknowledge it, capture photos,
+              complete the checklist, and submit completion.
+            </Text>
+          </Card.Content>
+        </Card>
       </ScrollView>
-      <Snackbar
-        visible={snackbarMessage !== null}
-        onDismiss={() => setSnackbarMessage(null)}
-      >
-        {snackbarMessage ?? ''}
-      </Snackbar>
     </View>
   );
 }

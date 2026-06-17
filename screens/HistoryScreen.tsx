@@ -32,6 +32,16 @@ function getStatusChipStyle(status: Task['status']): object {
   return styles.pendingChip;
 }
 
+function formatDuration(seconds?: number | null): string {
+  if (!seconds) {
+    return 'N/A';
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes} min ${remainder} sec`;
+}
+
 function EmptyState(): React.JSX.Element {
   return (
     <Card mode="contained" style={styles.emptyCard}>
@@ -141,6 +151,9 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                   <Text variant="bodySmall" style={styles.timeLabel}>
                     Completed {formatDate(item.completedAt ?? item.createdAt)}
                   </Text>
+                  <Text variant="bodySmall" style={styles.timeLabel}>
+                    Work duration {formatDuration(item.workDuration)}
+                  </Text>
                 </View>
                 <View
                   style={[styles.statusBadge, getStatusChipStyle(item.status)]}
@@ -151,8 +164,9 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                 </View>
               </View>
               <Text variant="bodyMedium" style={styles.noteText}>
-                {item.message}
+                {item.type} - {item.component} - {item.location}, {item.floor}, {item.building}
               </Text>
+              {item.offlineSynced ? <Chip compact>Offline synced</Chip> : null}
             </Card.Content>
           </Card>
         )}

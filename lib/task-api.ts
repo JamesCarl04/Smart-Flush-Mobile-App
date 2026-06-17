@@ -1,19 +1,45 @@
 import { apiFetch } from './api';
-import { isTaskStatus, isTaskTriggerType } from './tasks';
-import type { Task } from '../types';
+import {
+  EMPTY_CHECKLIST,
+  isTaskStatus,
+  isTaskTriggerType,
+} from './tasks';
+import type { Task, TaskChecklist } from '../types';
 
 interface TaskApiData {
   id?: unknown;
+  alertId?: unknown;
   deviceId?: unknown;
   restroomName?: unknown;
   deviceName?: unknown;
+  type?: unknown;
+  component?: unknown;
+  location?: unknown;
+  floor?: unknown;
+  building?: unknown;
+  shift?: unknown;
   triggerType?: unknown;
   message?: unknown;
   status?: unknown;
   assignedTo?: unknown;
   createdAt?: unknown;
+  assignedAt?: unknown;
   acknowledgedAt?: unknown;
   completedAt?: unknown;
+  responseTime?: unknown;
+  workDuration?: unknown;
+  totalTime?: unknown;
+  checklist?: unknown;
+  remarks?: unknown;
+  beforePhotoUrl?: unknown;
+  beforePhotoCapturedAt?: unknown;
+  afterPhotoUrl?: unknown;
+  afterPhotoCapturedAt?: unknown;
+  biometricVerified?: unknown;
+  offlineSynced?: unknown;
+  completedBy?: unknown;
+  reassignCount?: unknown;
+  supervisorUid?: unknown;
   createdBy?: unknown;
 }
 
@@ -23,6 +49,33 @@ function millisToDate(value: unknown): Date | null {
   }
 
   return new Date(value);
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function numberOrNull(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function parseChecklist(value: unknown): TaskChecklist {
+  if (!value || typeof value !== 'object') {
+    return { ...EMPTY_CHECKLIST };
+  }
+
+  const record = value as Record<string, unknown>;
+  const result: TaskChecklist = { ...EMPTY_CHECKLIST };
+  for (const key of Object.keys(EMPTY_CHECKLIST) as Array<keyof TaskChecklist>) {
+      const raw = record[key];
+      result[key] =
+        raw === true || raw === 'done'
+          ? 'done'
+          : raw === 'N/A' || raw === 'na'
+            ? 'na'
+            : 'unchecked';
+  }
+  return result;
 }
 
 function parseTaskApiData(data: TaskApiData): Task | null {
@@ -53,6 +106,7 @@ function parseTaskApiData(data: TaskApiData): Task | null {
 
   return {
     id: data.id,
+    alertId: stringOrNull(data.alertId),
     deviceId: data.deviceId,
     restroomName:
       typeof data.restroomName === 'string'
@@ -60,13 +114,39 @@ function parseTaskApiData(data: TaskApiData): Task | null {
         : typeof data.deviceName === 'string'
           ? data.deviceName
           : null,
+    type: data.type === 'cleaning' ? 'cleaning' : 'maintenance',
+    component: typeof data.component === 'string' ? data.component : 'maintenance',
+    location:
+      typeof data.location === 'string'
+        ? data.location
+        : typeof data.restroomName === 'string'
+          ? data.restroomName
+          : data.deviceId,
+    floor: typeof data.floor === 'string' ? data.floor : 'Ground',
+    building: typeof data.building === 'string' ? data.building : 'GB3',
+    shift: data.shift === '2nd' ? '2nd' : '1st',
     triggerType: data.triggerType,
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
     status: data.status,
     createdAt,
+    assignedAt: millisToDate(data.assignedAt),
     acknowledgedAt: millisToDate(data.acknowledgedAt),
     completedAt: millisToDate(data.completedAt),
+    responseTime: numberOrNull(data.responseTime),
+    workDuration: numberOrNull(data.workDuration),
+    totalTime: numberOrNull(data.totalTime),
+    checklist: parseChecklist(data.checklist),
+    remarks: typeof data.remarks === 'string' ? data.remarks : '',
+    beforePhotoUrl: stringOrNull(data.beforePhotoUrl),
+    beforePhotoCapturedAt: millisToDate(data.beforePhotoCapturedAt),
+    afterPhotoUrl: stringOrNull(data.afterPhotoUrl),
+    afterPhotoCapturedAt: millisToDate(data.afterPhotoCapturedAt),
+    biometricVerified: data.biometricVerified === true,
+    offlineSynced: data.offlineSynced === true,
+    completedBy: stringOrNull(data.completedBy),
+    reassignCount: numberOrNull(data.reassignCount) ?? 0,
+    supervisorUid: stringOrNull(data.supervisorUid),
     createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',
   };
 }

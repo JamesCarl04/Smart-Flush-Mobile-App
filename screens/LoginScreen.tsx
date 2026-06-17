@@ -72,7 +72,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       setSubmitting(false);
       setAwaitingRoleValidation(false);
       setErrorMessage(
-        'Access denied. This app is for maintenance personnel only.',
+        'Access denied. This app is for maintenance and supervisor accounts only.',
       );
     }
   }, [awaitingRoleValidation, loading, role, user]);
@@ -125,8 +125,8 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             <View style={styles.headingBlock}>
               <Text variant="titleLarge">Sign in</Text>
               <Text variant="bodyMedium" style={styles.headingDescription}>
-                Use your maintenance account to access live cleaning and repair
-                tasks.
+                Use your maintenance or supervisor account to access task
+                operations.
               </Text>
             </View>
 
@@ -158,7 +158,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
             <HelperText type={errorMessage ? 'error' : 'info'} visible>
               {errorMessage ??
-                'Only maintenance personnel accounts can continue beyond this screen.'}
+                'Only maintenance and supervisor accounts can continue beyond this screen.'}
             </HelperText>
 
             <Button

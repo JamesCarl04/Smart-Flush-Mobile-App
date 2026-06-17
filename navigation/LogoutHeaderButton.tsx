@@ -1,10 +1,12 @@
-import { Alert } from 'react-native';
-import { IconButton } from 'react-native-paper';
+import { Alert, View } from 'react-native';
+import { ActivityIndicator, IconButton } from 'react-native-paper';
 
 import { useAuth } from '../hooks/useAuth';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 
 export function LogoutHeaderButton(): React.JSX.Element {
   const { logout } = useAuth();
+  const { syncing } = useOfflineSync();
 
   const confirmLogout = (): void => {
     Alert.alert(
@@ -24,12 +26,15 @@ export function LogoutHeaderButton(): React.JSX.Element {
   };
 
   return (
-    <IconButton
-      icon="logout"
-      size={24}
-      style={{ marginRight: 0 }}
-      accessibilityLabel="Log out"
-      onPress={confirmLogout}
-    />
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      {syncing ? <ActivityIndicator size={18} /> : null}
+      <IconButton
+        icon="logout"
+        size={24}
+        style={{ marginRight: 0 }}
+        accessibilityLabel="Log out"
+        onPress={confirmLogout}
+      />
+    </View>
   );
 }

@@ -6,6 +6,7 @@ import { MD3LightTheme, PaperProvider, Snackbar } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './contexts/AuthContext';
+import { OfflineSyncProvider } from './contexts/OfflineSyncContext';
 import { TasksProvider } from './contexts/TasksContext';
 import { useAuth } from './hooks/useAuth';
 import {
@@ -171,11 +172,13 @@ function Providers(): React.JSX.Element {
     <PaperProvider theme={theme}>
       <SafeAreaProvider>
         <AuthProvider>
-          <TasksProvider>
-            <NotificationLifecycle />
-            <AppNavigator />
-            <StatusBar style="dark" />
-          </TasksProvider>
+          <OfflineSyncProvider>
+            <TasksProvider>
+              <NotificationLifecycle />
+              <AppNavigator />
+              <StatusBar style="dark" />
+            </TasksProvider>
+          </OfflineSyncProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </PaperProvider>
