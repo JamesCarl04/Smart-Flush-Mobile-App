@@ -3,11 +3,19 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Card,
-  Chip,
   Divider,
   Text,
 } from 'react-native-paper';
 
+import {
+  EmptyOperationState,
+  MetaPill,
+  OperationBadge,
+  UI_COLORS,
+  sharedShadow,
+  statusTone,
+  urgencyTone,
+} from '../components/MaintenanceUI';
 import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
@@ -29,18 +37,6 @@ function formatDate(date: Date | null | undefined): string {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
-}
-
-function getStatusChipStyle(status: Task['status']): object {
-  if (status === 'completed') {
-    return styles.completedChip;
-  }
-
-  if (status === 'acknowledged') {
-    return styles.acknowledgedChip;
-  }
-
-  return styles.pendingChip;
 }
 
 function DetailRow({
@@ -76,15 +72,11 @@ function formatAssignee(
 function EmptyTaskPanel(): React.JSX.Element {
   return (
     <View style={styles.centerState}>
-      <Card mode="contained" style={styles.emptyCard}>
-        <Card.Content style={styles.emptyContent}>
-          <Text variant="titleLarge">No active task</Text>
-          <Text variant="bodyMedium" style={styles.emptyText}>
-            New dashboard notes will appear here after they arrive in your
-            notification inbox.
-          </Text>
-        </Card.Content>
-      </Card>
+      <EmptyOperationState
+        icon="clipboard-text-search-outline"
+        title="No active task"
+        body="No restroom work order needs your attention right now. New assigned tasks will appear in your Inbox."
+      />
     </View>
   );
 }
@@ -123,20 +115,37 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <Card mode="contained" style={styles.headerCard}>
           <Card.Content style={styles.headerContent}>
-            <Text variant="headlineSmall">Task Detail</Text>
-            <Text variant="titleLarge">{getRestroomLabel(activeTask)}</Text>
-            <Text variant="bodyMedium" style={styles.headerCopy}>
-              This page shows the current task that needs your attention.
+            <View style={styles.headerBadgeRow}>
+              <OperationBadge
+                label={urgencyTone(activeTask.status).label}
+                tone={urgencyTone(activeTask.status)}
+              />
+              <OperationBadge
+                label={formatTaskStatus(activeTask.status)}
+                tone={statusTone(activeTask.status)}
+              />
+            </View>
+            <Text variant="headlineSmall" style={styles.headerTitle}>
+              Active Work Order
             </Text>
-            <Chip compact style={getStatusChipStyle(activeTask.status)}>
-              {formatTaskStatus(activeTask.status)}
-            </Chip>
+            <Text variant="titleLarge" style={styles.locationTitle}>
+              {getRestroomLabel(activeTask)}
+            </Text>
+            <Text variant="bodyMedium" style={styles.headerCopy}>
+              {activeTask.building} - {activeTask.floor} - {activeTask.location}
+            </Text>
+            <View style={styles.metaRow}>
+              <MetaPill icon="toilet" label={activeTask.location} />
+              <MetaPill icon="timer-outline" label={formatDate(activeTask.createdAt)} />
+            </View>
           </Card.Content>
         </Card>
 
         <Card mode="elevated" style={styles.detailCard}>
           <Card.Content style={styles.sectionContent}>
-            <Text variant="titleMedium">Cleaning instruction</Text>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              Cleaning Instruction
+            </Text>
             <Text variant="bodyLarge" style={styles.noteText}>
               {activeTask.message}
             </Text>
@@ -169,9 +178,9 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
           </Card.Content>
         </Card>
 
-        <Card mode="contained" style={styles.emptyCard}>
+        <Card mode="contained" style={styles.guidanceCard}>
           <Card.Content>
-            <Text variant="bodyMedium" style={styles.emptyText}>
+            <Text variant="bodyMedium" style={styles.guidanceText}>
               Open this task from the Inbox to acknowledge it, capture photos,
               complete the checklist, and submit completion.
             </Text>
@@ -185,13 +194,13 @@ export function ActiveTaskScreen({ route }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   contentContainer: {
     padding: 16,
     paddingBottom: 32,
     gap: 16,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   centerState: {
     flex: 1,
@@ -199,31 +208,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#f3faf8',
-  },
-  emptyCard: {
-    width: '100%',
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-  },
-  emptyContent: {
-    gap: 8,
-  },
-  emptyText: {
-    color: '#5b6663',
+    backgroundColor: UI_COLORS.background,
   },
   headerCard: {
-    borderRadius: 24,
-    backgroundColor: '#dff4ef',
+    borderRadius: 22,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   headerContent: {
-    gap: 12,
+    gap: 10,
+  },
+  headerBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  headerTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
+  },
+  locationTitle: {
+    color: UI_COLORS.primaryStrong,
+    fontWeight: '900',
   },
   headerCopy: {
-    color: '#3a4c47',
+    color: UI_COLORS.muted,
+    fontWeight: '700',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   detailCard: {
-    borderRadius: 22,
+    borderRadius: 20,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   sectionContent: {
     gap: 12,
@@ -232,29 +256,33 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   detailLabel: {
-    color: '#5b6764',
+    color: UI_COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   detailValue: {
-    color: '#14211f',
+    color: UI_COLORS.text,
+    fontWeight: '700',
   },
   noteText: {
-    color: '#31403c',
+    color: UI_COLORS.text,
     fontSize: 18,
     lineHeight: 27,
   },
-  primaryActionContent: {
-    minHeight: 54,
+  sectionTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
   },
-  pendingChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#ffe2de',
+  guidanceCard: {
+    borderRadius: 20,
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
-  acknowledgedChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#dce9ff',
-  },
-  completedChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#d8f2db',
+  guidanceText: {
+    color: UI_COLORS.primaryStrong,
+    lineHeight: 22,
+    fontWeight: '700',
   },
 });

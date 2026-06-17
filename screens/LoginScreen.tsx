@@ -19,6 +19,7 @@ import {
   TextInput,
 } from 'react-native-paper';
 
+import { UI_COLORS, sharedShadow } from '../components/MaintenanceUI';
 import { useAuth } from '../hooks/useAuth';
 import { auth } from '../lib/firebase';
 import type { AuthStackParamList } from '../types';
@@ -113,17 +114,19 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             style={styles.heroIcon}
           />
           <Text variant="headlineMedium" style={styles.heroTitle}>
-            Klir Mobile
+            Smart Flush Field
           </Text>
           <Text variant="bodyLarge" style={styles.heroSubtitle}>
-            Smart Toilet maintenance personnel login
+            Sanitation maintenance work orders and proof-based completion
           </Text>
         </Surface>
 
         <Card mode="elevated" style={styles.formCard}>
           <Card.Content style={styles.formContent}>
             <View style={styles.headingBlock}>
-              <Text variant="titleLarge">Sign in</Text>
+              <Text variant="titleLarge" style={styles.formTitle}>
+                Sign in
+              </Text>
               <Text variant="bodyMedium" style={styles.headingDescription}>
                 Use your maintenance or supervisor account to access task
                 operations.
@@ -190,7 +193,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#eef8f5',
+    backgroundColor: UI_COLORS.background,
   },
   scrollContent: {
     flexGrow: 1,
@@ -205,21 +208,27 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   heroIcon: {
-    backgroundColor: '#d5f1eb',
+    backgroundColor: '#CCFBF1',
   },
   heroTitle: {
-    color: '#0f1f1b',
+    color: UI_COLORS.text,
     textAlign: 'center',
+    fontWeight: '900',
   },
   heroSubtitle: {
-    color: '#556561',
+    color: UI_COLORS.muted,
     textAlign: 'center',
+    lineHeight: 24,
   },
   formCard: {
     width: '100%',
     maxWidth: 460,
     alignSelf: 'center',
-    borderRadius: 28,
+    borderRadius: 22,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   formContent: {
     gap: 16,
@@ -228,8 +237,13 @@ const styles = StyleSheet.create({
   headingBlock: {
     gap: 6,
   },
+  formTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
+  },
   headingDescription: {
-    color: '#5d6a67',
+    color: UI_COLORS.muted,
+    lineHeight: 22,
   },
   buttonContent: {
     paddingVertical: 6,

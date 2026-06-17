@@ -3,6 +3,14 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
 import { Card, Chip, Snackbar, Text, TextInput } from 'react-native-paper';
 
+import {
+  EmptyOperationState,
+  MetaPill,
+  OperationBadge,
+  UI_COLORS,
+  sharedShadow,
+  statusTone,
+} from '../components/MaintenanceUI';
 import { useTasks } from '../hooks/useTasks';
 import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
@@ -20,18 +28,6 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
-function getStatusChipStyle(status: Task['status']): object {
-  if (status === 'completed') {
-    return styles.completedChip;
-  }
-
-  if (status === 'acknowledged') {
-    return styles.acknowledgedChip;
-  }
-
-  return styles.pendingChip;
-}
-
 function formatDuration(seconds?: number | null): string {
   if (!seconds) {
     return 'N/A';
@@ -44,14 +40,11 @@ function formatDuration(seconds?: number | null): string {
 
 function EmptyState(): React.JSX.Element {
   return (
-    <Card mode="contained" style={styles.emptyCard}>
-      <Card.Content>
-        <Text variant="titleMedium">No completed tasks yet</Text>
-        <Text variant="bodyMedium" style={styles.emptyText}>
-          Completed maintenance work will appear here once tasks are closed out.
-        </Text>
-      </Card.Content>
-    </Card>
+    <EmptyOperationState
+      icon="clipboard-check-multiple-outline"
+      title="No completed tasks yet"
+      body="Completed restroom work will appear here after proof photos and checklist submissions are closed out."
+    />
   );
 }
 
@@ -95,10 +88,10 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             <Text variant="headlineSmall" style={styles.headerTitle}>
-              Cleaning history
+              Completed Work
             </Text>
             <Text variant="bodyMedium" style={styles.headerDescription}>
-              Review completed jobs and search by restroom or instruction.
+              Search verified restroom jobs and review submitted proof.
             </Text>
             <TextInput
               label="Search completed jobs"
@@ -128,9 +121,9 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
               </Chip>
             </View>
             <Card mode="contained" style={styles.summaryCard}>
-              <Card.Content>
-                <Text variant="labelLarge">Tasks completed</Text>
-                <Text variant="displaySmall">{completedCount}</Text>
+              <Card.Content style={styles.summaryContent}>
+                <Text style={styles.summaryLabel}>Tasks Completed</Text>
+                <Text style={styles.summaryValue}>{completedCount}</Text>
               </Card.Content>
             </Card>
           </View>
@@ -138,7 +131,7 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
         ListEmptyComponent={!loading ? <EmptyState /> : null}
         renderItem={({ item }) => (
           <Card
-            mode="elevated"
+            mode="contained"
             style={styles.taskCard}
             onPress={() =>
               navigation.navigate('TaskDetail', { taskId: item.id })
@@ -147,26 +140,31 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text variant="titleMedium">{getRestroomLabel(item)}</Text>
-                  <Text variant="bodySmall" style={styles.timeLabel}>
-                    Completed {formatDate(item.completedAt ?? item.createdAt)}
+                  <OperationBadge
+                    label={formatTaskStatus(item.status)}
+                    tone={statusTone(item.status)}
+                  />
+                  <Text variant="titleLarge" style={styles.cardTitle}>
+                    {getRestroomLabel(item)}
                   </Text>
                   <Text variant="bodySmall" style={styles.timeLabel}>
-                    Work duration {formatDuration(item.workDuration)}
+                    Finished {formatDate(item.completedAt ?? item.createdAt)}
                   </Text>
                 </View>
-                <View
-                  style={[styles.statusBadge, getStatusChipStyle(item.status)]}
-                >
-                  <Text variant="labelLarge" style={styles.statusBadgeText}>
-                    {formatTaskStatus(item.status)}
-                  </Text>
-                </View>
+                <MetaPill
+                  icon="timer-check-outline"
+                  label={formatDuration(item.workDuration)}
+                />
               </View>
               <Text variant="bodyMedium" style={styles.noteText}>
                 {item.type} - {item.component} - {item.location}, {item.floor}, {item.building}
               </Text>
-              {item.offlineSynced ? <Chip compact>Offline synced</Chip> : null}
+              <View style={styles.metaRow}>
+                <MetaPill icon="image-check-outline" label="Proof submitted" />
+                {item.offlineSynced ? (
+                  <MetaPill icon="cloud-check-outline" label="Offline synced" />
+                ) : null}
+              </View>
             </Card.Content>
           </Card>
         )}
@@ -181,13 +179,13 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   contentContainer: {
     padding: 16,
     paddingBottom: 32,
     gap: 14,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
     flexGrow: 1,
   },
   headerBlock: {
@@ -195,14 +193,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   headerTitle: {
-    color: '#11201d',
+    color: UI_COLORS.text,
+    fontWeight: '900',
   },
   headerDescription: {
-    color: '#52605c',
+    color: UI_COLORS.muted,
+    lineHeight: 22,
   },
   summaryCard: {
-    borderRadius: 24,
-    backgroundColor: '#dff4ef',
+    borderRadius: 18,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
+  },
+  summaryContent: {
+    gap: 6,
+  },
+  summaryLabel: {
+    color: UI_COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  summaryValue: {
+    color: UI_COLORS.text,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '900',
   },
   filterRow: {
     flexDirection: 'row',
@@ -210,7 +228,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   taskCard: {
-    borderRadius: 22,
+    borderRadius: 20,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   cardContent: {
     gap: 14,
@@ -223,46 +245,23 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     flex: 1,
-    gap: 2,
+    gap: 6,
+  },
+  cardTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
   },
   timeLabel: {
-    color: '#65736f',
+    color: UI_COLORS.muted,
   },
   noteText: {
-    color: '#31403c',
+    color: UI_COLORS.text,
     fontSize: 16,
     lineHeight: 23,
   },
-  emptyCard: {
-    marginTop: 12,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
-  },
-  emptyText: {
-    marginTop: 8,
-    color: '#5b6663',
-  },
-  pendingChip: {
-    backgroundColor: '#f9d8d6',
-  },
-  acknowledgedChip: {
-    backgroundColor: '#dce9ff',
-  },
-  completedChip: {
-    backgroundColor: '#d8f2db',
-  },
-  statusBadge: {
-    minHeight: 48,
-    minWidth: 92,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusBadgeText: {
-    color: '#111f1c',
-    textAlign: 'center',
-    textAlignVertical: 'center',
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
 });

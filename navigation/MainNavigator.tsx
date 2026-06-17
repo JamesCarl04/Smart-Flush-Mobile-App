@@ -37,9 +37,14 @@ const sharedHeaderOptions = {
   headerRightContainerStyle: {
     paddingRight: 12,
   },
-  headerShadowVisible: true,
+  headerShadowVisible: false,
   headerStyle: {
     backgroundColor: '#ffffff',
+  },
+  headerTitleStyle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
   },
 } as const;
 
@@ -146,14 +151,21 @@ export function MainNavigator(): React.JSX.Element {
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
         tabBarStyle: {
-          height: 70,
-          paddingBottom: 10,
-          paddingTop: 10,
-          backgroundColor: theme.colors.surface,
+          height: 76,
+          paddingBottom: 12,
+          paddingTop: 9,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E5E7EB',
+          borderTopWidth: 1,
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.06,
+          shadowRadius: 10,
+          elevation: 10,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: '600',
+          fontWeight: '800',
         },
         tabBarIcon: ({ color, size }) => {
           const iconName =

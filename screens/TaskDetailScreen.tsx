@@ -16,6 +16,14 @@ import {
   TextInput,
 } from 'react-native-paper';
 
+import {
+  MetaPill,
+  OperationBadge,
+  UI_COLORS,
+  sharedShadow,
+  statusTone,
+  urgencyTone,
+} from '../components/MaintenanceUI';
 import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import {
   completeTaskOnline,
@@ -66,18 +74,6 @@ function formatComponent(value: string): string {
     .join(' ');
 }
 
-function getStatusChipStyle(status: Task['status']): object {
-  if (status === 'completed') {
-    return styles.completedChip;
-  }
-
-  if (status === 'acknowledged') {
-    return styles.acknowledgedChip;
-  }
-
-  return styles.pendingChip;
-}
-
 function DetailRow({
   label,
   value,
@@ -93,6 +89,43 @@ function DetailRow({
       <Text variant="bodyLarge" style={styles.detailValue}>
         {value}
       </Text>
+    </View>
+  );
+}
+
+function StatusTimeline({ status }: { status: Task['status'] }): React.JSX.Element {
+  const steps = [
+    { key: 'reported', label: 'Reported', complete: true },
+    {
+      key: 'accepted',
+      label: 'Accepted',
+      complete:
+        status === 'acknowledged' ||
+        status === 'completed' ||
+        status === 'flagged',
+    },
+    {
+      key: 'proof',
+      label: 'Proof',
+      complete: status === 'completed' || status === 'flagged',
+    },
+    { key: 'done', label: 'Completed', complete: status === 'completed' },
+  ];
+
+  return (
+    <View style={styles.timeline}>
+      {steps.map((item, index) => (
+        <View key={item.key} style={styles.timelineItem}>
+          <View
+            style={[
+              styles.timelineDot,
+              item.complete ? styles.timelineDotComplete : null,
+            ]}
+          />
+          <Text style={styles.timelineLabel}>{item.label}</Text>
+          {index < steps.length - 1 ? <View style={styles.timelineLine} /> : null}
+        </View>
+      ))}
     </View>
   );
 }
@@ -415,18 +448,44 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
       <ScrollView contentContainerStyle={styles.contentContainer}>
         <Card mode="contained" style={styles.headerCard}>
           <Card.Content style={styles.headerContent}>
-            <Text variant="titleLarge">{getRestroomLabel(task)}</Text>
-            <Text variant="bodyMedium" style={styles.headerCopy}>
-              {task.location}, {task.floor}, {task.building}
+            <View style={styles.headerBadgeRow}>
+              <OperationBadge
+                label={urgencyTone(task.status).label}
+                tone={urgencyTone(task.status)}
+              />
+              <OperationBadge
+                label={formatTaskStatus(task.status)}
+                tone={statusTone(task.status)}
+              />
+            </View>
+            <Text variant="headlineSmall" style={styles.headerTitle}>
+              Restroom Work Order
             </Text>
-            <Chip compact style={getStatusChipStyle(task.status)}>
-              {formatTaskStatus(task.status)}
-            </Chip>
+            <Text variant="titleLarge" style={styles.locationTitle}>
+              {getRestroomLabel(task)}
+            </Text>
+            <Text variant="bodyMedium" style={styles.headerCopy}>
+              {task.building} - {task.floor} - {task.location}
+            </Text>
+            <View style={styles.metaRow}>
+              <MetaPill icon="toilet" label={task.location} />
+              <MetaPill icon="office-building-marker-outline" label={task.building} />
+              <MetaPill icon="map-marker-radius-outline" label={task.floor} />
+            </View>
           </Card.Content>
         </Card>
 
         {step === 'details' ? (
           <>
+            <Card mode="contained" style={styles.detailCard}>
+              <Card.Content style={styles.sectionContent}>
+                <Text variant="titleMedium" style={styles.sectionTitle}>
+                  Status Timeline
+                </Text>
+                <StatusTimeline status={task.status} />
+              </Card.Content>
+            </Card>
+
             <Card mode="elevated" style={styles.detailCard}>
               <Card.Content style={styles.sectionContent}>
                 <DetailRow label="Component" value={formatComponent(task.component)} />
@@ -441,7 +500,9 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
 
             <Card mode="elevated" style={styles.detailCard}>
               <Card.Content style={styles.sectionContent}>
-                <Text variant="titleMedium">Task details</Text>
+                <Text variant="titleMedium" style={styles.sectionTitle}>
+                  Issue
+                </Text>
                 <Text variant="bodyLarge" style={styles.noteText}>
                   {task.message}
                 </Text>
@@ -455,6 +516,8 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
                 disabled={actionInFlight}
                 onPress={() => void handleAcknowledge()}
                 contentStyle={styles.primaryActionContent}
+                style={styles.primaryAction}
+                icon="clipboard-check-outline"
               >
                 Acknowledge Task
               </Button>
@@ -467,19 +530,27 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
                 disabled={actionInFlight}
                 onPress={() => void startCompletionFlow()}
                 contentStyle={styles.primaryActionContent}
+                style={styles.primaryAction}
+                icon="camera-outline"
               >
-                Start Photo and Checklist
+                Take Proof Photo
               </Button>
             ) : null}
 
-            <Button mode="outlined" onPress={() => navigation.goBack()}>
+            <Button
+              mode="outlined"
+              onPress={() => navigation.goBack()}
+              style={styles.secondaryAction}
+            >
               View History
             </Button>
 
             {task.status === 'completed' ? (
               <Card mode="elevated" style={styles.detailCard}>
                 <Card.Content style={styles.sectionContent}>
-                  <Text variant="titleMedium">Completion Evidence</Text>
+                  <Text variant="titleMedium" style={styles.sectionTitle}>
+                    Completion Evidence
+                  </Text>
                   <View style={styles.photoRow}>
                     {task.beforePhotoUrl ? (
                       <Image
@@ -522,7 +593,12 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
         {step === 'checklist' ? (
           <Card mode="elevated" style={styles.detailCard}>
             <Card.Content style={styles.sectionContent}>
-              <Text variant="titleMedium">SDCA F-TGS 203 Checklist</Text>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                SDCA F-TGS 203 Checklist
+              </Text>
+              <Text variant="bodyMedium" style={styles.sectionHint}>
+                Set every item to Done or N/A before taking the after photo.
+              </Text>
               {CHECKLIST_LABELS.map((item) => (
                 <View key={item.key} style={styles.checklistItem}>
                   <Text variant="bodyMedium" style={styles.checklistLabel}>
@@ -552,7 +628,13 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
                 numberOfLines={4}
                 onChangeText={setRemarks}
               />
-              <Button mode="contained" onPress={() => void captureAfterPhoto()}>
+              <Button
+                mode="contained"
+                onPress={() => void captureAfterPhoto()}
+                contentStyle={styles.primaryActionContent}
+                style={styles.primaryAction}
+                icon="camera-flip-outline"
+              >
                 Take After Photo
               </Button>
             </Card.Content>
@@ -562,7 +644,9 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
         {step === 'summary' ? (
           <Card mode="elevated" style={styles.detailCard}>
             <Card.Content style={styles.sectionContent}>
-              <Text variant="titleMedium">Completion Summary</Text>
+              <Text variant="titleMedium" style={styles.sectionTitle}>
+                Completion Summary
+              </Text>
               <View style={styles.photoRow}>
                 {beforePhotoUri ? (
                   <Image source={{ uri: beforePhotoUri }} style={styles.summaryPhoto} />
@@ -585,6 +669,8 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
                 disabled={actionInFlight}
                 onPress={() => void submitCompletion()}
                 contentStyle={styles.primaryActionContent}
+                style={styles.primaryAction}
+                icon="cloud-upload-outline"
               >
                 Submit Completion
               </Button>
@@ -617,13 +703,13 @@ export function TaskDetailScreen({ navigation, route }: Props): React.JSX.Elemen
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   contentContainer: {
     padding: 16,
     paddingBottom: 32,
     gap: 16,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   loadingState: {
     flex: 1,
@@ -631,51 +717,98 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   missingCopy: {
     textAlign: 'center',
-    color: '#586562',
+    color: UI_COLORS.muted,
   },
   headerCard: {
-    borderRadius: 20,
-    backgroundColor: '#dff4ef',
+    borderRadius: 22,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   headerContent: {
     gap: 10,
   },
+  headerBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  headerTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
+  },
+  locationTitle: {
+    color: UI_COLORS.primaryStrong,
+    fontWeight: '900',
+  },
   headerCopy: {
-    color: '#3a4c47',
+    color: UI_COLORS.muted,
+    fontWeight: '700',
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   detailCard: {
-    borderRadius: 18,
+    borderRadius: 20,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   sectionContent: {
     gap: 12,
+  },
+  sectionTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
+  },
+  sectionHint: {
+    color: UI_COLORS.muted,
+    lineHeight: 22,
   },
   detailRow: {
     gap: 4,
   },
   detailLabel: {
-    color: '#5b6764',
+    color: UI_COLORS.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   detailValue: {
-    color: '#14211f',
+    color: UI_COLORS.text,
+    fontWeight: '700',
   },
   noteText: {
-    color: '#31403c',
+    color: UI_COLORS.text,
     fontSize: 17,
     lineHeight: 25,
   },
+  primaryAction: {
+    borderRadius: 14,
+  },
   primaryActionContent: {
-    minHeight: 52,
+    minHeight: 54,
+  },
+  secondaryAction: {
+    borderRadius: 14,
   },
   checklistItem: {
-    gap: 8,
+    gap: 10,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: UI_COLORS.softGray,
   },
   checklistLabel: {
-    color: '#243532',
-    fontWeight: '600',
+    color: UI_COLORS.text,
+    fontWeight: '800',
   },
   photoRow: {
     flexDirection: 'row',
@@ -684,20 +817,56 @@ const styles = StyleSheet.create({
   summaryPhoto: {
     flex: 1,
     height: 180,
-    borderRadius: 10,
-    backgroundColor: '#dfe7e4',
+    borderRadius: 14,
+    backgroundColor: '#E5E7EB',
   },
-  pendingChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#ffe2de',
+  completedChecklistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 4,
   },
-  acknowledgedChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#dce9ff',
+  checklistResultText: {
+    flex: 1,
+    color: UI_COLORS.text,
+    fontWeight: '600',
   },
-  completedChip: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#d8f2db',
+  timeline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  timelineItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 7,
+  },
+  timelineDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#D1D5DB',
+    borderWidth: 3,
+    borderColor: '#F3F4F6',
+  },
+  timelineDotComplete: {
+    backgroundColor: UI_COLORS.primary,
+    borderColor: '#CCFBF1',
+  },
+  timelineLine: {
+    position: 'absolute',
+    top: 6,
+    left: '58%',
+    right: '-42%',
+    height: 2,
+    backgroundColor: UI_COLORS.border,
+  },
+  timelineLabel: {
+    color: UI_COLORS.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   overlayStage: {
     position: 'absolute',
