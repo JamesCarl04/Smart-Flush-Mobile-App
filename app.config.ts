@@ -9,7 +9,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'light',
   platforms: ['android'],
   plugins: [
-    'expo-dev-client',
     'expo-font',
     'expo-notifications',
     '@react-native-firebase/app',

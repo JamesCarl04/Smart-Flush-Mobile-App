@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImageManipulator from 'expo-image-manipulator';
-import * as ImagePicker from 'expo-image-picker';
+import * as ImagePicker from '../lib/native-image-picker';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { captureRef } from 'react-native-view-shot';
 import {
