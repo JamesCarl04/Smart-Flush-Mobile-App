@@ -1,6 +1,5 @@
 import { createContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
 
 import { getRequiredConfigValue, runtimeConfig } from '../lib/config';
@@ -8,14 +7,15 @@ import { auth } from '../lib/firebase';
 import type { AuthContextValue, AuthUser } from '../types';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-const MAINTENANCE_ROLE_VERIFIED_KEY = 'maintenanceRoleVerified';
-
 interface ProfileResponse {
   success: boolean;
   data?: {
     id?: unknown;
     email?: unknown;
+    displayName?: unknown;
+    name?: unknown;
     role?: unknown;
+    building?: unknown;
   };
   error?: string;
 }
@@ -30,7 +30,7 @@ function buildApiUrl(path: string): string {
   return `${baseUrl}${normalizedPath}`;
 }
 
-async function verifyMaintenanceProfile(
+async function verifyUserProfile(
   firebaseUser: NonNullable<typeof auth.currentUser>,
 ): Promise<AuthUser> {
   const request = async (forceRefresh = false) => {
@@ -56,8 +56,11 @@ async function verifyMaintenanceProfile(
     throw new Error(payload?.error ?? 'Unable to verify your account.');
   }
 
-  if (payload.data?.role !== 'maintenance') {
-    throw new Error('Access denied. This app is for maintenance personnel only.');
+  if (
+    payload.data?.role !== 'maintenance' &&
+    payload.data?.role !== 'supervisor'
+  ) {
+    throw new Error('Access denied. This app is for maintenance and supervisor accounts only.');
   }
 
   return {
@@ -66,7 +69,15 @@ async function verifyMaintenanceProfile(
       typeof payload.data.email === 'string'
         ? payload.data.email
         : firebaseUser.email ?? '',
-    role: 'maintenance',
+    role: payload.data.role,
+    name:
+      typeof payload.data.name === 'string'
+        ? payload.data.name
+        : typeof payload.data.displayName === 'string'
+          ? payload.data.displayName
+          : firebaseUser.displayName ?? firebaseUser.email ?? '',
+    building:
+      typeof payload.data.building === 'string' ? payload.data.building : null,
   };
 }
 
@@ -95,35 +106,18 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       }
 
       try {
-        const maintenanceUser = await verifyMaintenanceProfile(firebaseUser);
-        await AsyncStorage.setItem(MAINTENANCE_ROLE_VERIFIED_KEY, 'true');
-        setUser(maintenanceUser);
-        setRole('maintenance');
+        const verifiedUser = await verifyUserProfile(firebaseUser);
+        setUser(verifiedUser);
+        setRole(verifiedUser.role);
       } catch (error) {
         const message =
           error instanceof Error
             ? error.message
             : 'Unable to verify your maintenance account.';
 
-        const wasVerifiedMaintenance = await AsyncStorage.getItem(
-          MAINTENANCE_ROLE_VERIFIED_KEY,
-        );
-
-        if (wasVerifiedMaintenance === 'true') {
-          setUser({
-            uid: firebaseUser.uid,
-            email: firebaseUser.email ?? '',
-            role: 'maintenance',
-          });
-          setRole('maintenance');
-          console.warn('Using cached maintenance role after lookup failed', message);
-          return;
-        }
-
         setUser(null);
         setRole(null);
         Alert.alert('Authentication error', message);
-        await AsyncStorage.removeItem(MAINTENANCE_ROLE_VERIFIED_KEY);
         await safeSignOut();
       } finally {
         setLoading(false);
@@ -134,7 +128,6 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   }, []);
 
   const logout = async (): Promise<void> => {
-    await AsyncStorage.removeItem(MAINTENANCE_ROLE_VERIFIED_KEY);
     await signOut(auth);
   };
 

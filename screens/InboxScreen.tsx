@@ -1,17 +1,24 @@
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import type { NavigationProp } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useMemo, useState } from 'react';
 import { Button, Card, Chip, Snackbar, Text } from 'react-native-paper';
 
+import {
+  EmptyOperationState,
+  MetaPill,
+  OperationBadge,
+  UI_COLORS,
+  sharedShadow,
+  statusTone,
+  urgencyTone,
+} from '../components/MaintenanceUI';
 import { useTasks } from '../hooks/useTasks';
 import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskStatus } from '../lib/tasks';
-import type { InboxStackParamList, MainTabParamList, Task } from '../types';
+import type { InboxStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
-type MainTabNavigation = NavigationProp<MainTabParamList>;
-type InboxFilter = 'all' | 'pending' | 'acknowledged';
+type InboxFilter = 'all' | 'active' | 'acknowledged';
 
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('en-PH', {
@@ -22,25 +29,27 @@ function formatDate(date: Date): string {
   }).format(date);
 }
 
-function getStatusChipStyle(status: Task['status']): object {
-  if (status === 'acknowledged') {
-    return styles.acknowledgedChip;
-  }
-
-  return styles.pendingChip;
-}
-
 function EmptyState(): React.JSX.Element {
   return (
-    <Card mode="contained" style={styles.emptyCard}>
-      <Card.Content>
-        <Text variant="titleMedium">Inbox is clear</Text>
-        <Text variant="bodyMedium" style={styles.emptyText}>
-          New maintenance alerts will show up here as soon as the IoT system
-          assigns them to you. The Task Detail screen opens from any inbox task.
-        </Text>
-      </Card.Content>
-    </Card>
+    <EmptyOperationState
+      icon="shield-check-outline"
+      title="No pending tasks"
+      body="You are all caught up for now. New restroom alerts will appear here as soon as the IoT system assigns them to you."
+    />
+  );
+}
+
+function LoadingCards(): React.JSX.Element {
+  return (
+    <View style={styles.loadingList}>
+      {[0, 1, 2].map((item) => (
+        <View key={item} style={styles.loadingCard}>
+          <View style={styles.loadingLineShort} />
+          <View style={styles.loadingLineWide} />
+          <View style={styles.loadingLineMid} />
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -56,13 +65,25 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   const acknowledgedCount = inboxTasks.filter(
     (task) => task.status === 'acknowledged',
   ).length;
+  const urgentTask =
+    inboxTasks.find((task) => task.status === 'reassignment_needed') ??
+    inboxTasks.find((task) => task.status === 'unassigned') ??
+    inboxTasks.find((task) => task.status === 'assigned') ??
+    null;
   const [activeFilter, setActiveFilter] = useState<InboxFilter>('all');
   const [refreshing, setRefreshing] = useState(false);
   const visibleTasks = useMemo(
     () =>
       activeFilter === 'all'
         ? inboxTasks
-        : inboxTasks.filter((task) => task.status === activeFilter),
+        : activeFilter === 'active'
+          ? inboxTasks.filter(
+              (task) =>
+                task.status === 'assigned' ||
+                task.status === 'unassigned' ||
+                task.status === 'reassignment_needed',
+            )
+          : inboxTasks.filter((task) => task.status === activeFilter),
     [activeFilter, inboxTasks],
   );
 
@@ -73,10 +94,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   };
 
   const openTaskDetail = (taskId: string): void => {
-    navigation.getParent<MainTabNavigation>()?.navigate('TaskTab', {
-      screen: 'ActiveTask',
-      params: { taskId },
-    });
+    navigation.navigate('TaskDetail', { taskId });
   };
 
   return (
@@ -95,47 +113,77 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
         }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            <Text variant="headlineSmall" style={styles.headerTitle}>
-              Notification inbox
-            </Text>
-            <Text variant="bodyMedium" style={styles.headerDescription}>
-              Dashboard notes and cleaning tasks arrive here in real time.
-            </Text>
+            <View style={styles.commandHeader}>
+              <View style={styles.onDutyPill}>
+                <View style={styles.onDutyDot} />
+                <Text style={styles.onDutyText}>On Duty</Text>
+              </View>
+              <Text variant="headlineSmall" style={styles.headerTitle}>
+                Today's Tasks
+              </Text>
+              <Text variant="bodyMedium" style={styles.headerDescription}>
+                Review assigned restroom alerts and open the next task that needs action.
+              </Text>
+            </View>
             <View style={styles.summaryRow}>
-              <Card
-                mode="contained"
-                style={[styles.summaryCard, styles.summaryTeal]}
-              >
-                <Card.Content>
-                  <Text variant="labelLarge">Pending</Text>
-                  <Text variant="displaySmall">{pendingCount}</Text>
+              <Card mode="contained" style={styles.summaryCard}>
+                <Card.Content style={styles.summaryContent}>
+                  <Text style={styles.summaryLabel}>Pending</Text>
+                  <Text style={styles.summaryValue}>{pendingCount}</Text>
                 </Card.Content>
               </Card>
-              <Card
-                mode="contained"
-                style={[styles.summaryCard, styles.summaryBlue]}
-              >
-                <Card.Content>
-                  <Text variant="labelLarge">Acknowledged</Text>
-                  <Text variant="displaySmall">{acknowledgedCount}</Text>
+              <Card mode="contained" style={styles.summaryCardAlt}>
+                <Card.Content style={styles.summaryContent}>
+                  <Text style={styles.summaryLabel}>In Progress</Text>
+                  <Text style={styles.summaryValue}>{acknowledgedCount}</Text>
                 </Card.Content>
               </Card>
             </View>
+            {urgentTask ? (
+              <Card mode="contained" style={styles.urgentCard}>
+                <Card.Content style={styles.urgentContent}>
+                  <OperationBadge
+                    label={urgencyTone(urgentTask.status).label}
+                    tone={urgencyTone(urgentTask.status)}
+                  />
+                  <Text variant="titleLarge" style={styles.urgentTitle}>
+                    {getRestroomLabel(urgentTask)}
+                  </Text>
+                  <Text variant="bodyMedium" style={styles.urgentMeta}>
+                    {urgentTask.building} - {urgentTask.floor} - {urgentTask.location}
+                  </Text>
+                  <Text variant="bodyMedium" style={styles.urgentMessage}>
+                    {urgentTask.message}
+                  </Text>
+                  <Button
+                    mode="contained"
+                    onPress={() => openTaskDetail(urgentTask.id)}
+                    contentStyle={styles.actionButtonContent}
+                    icon="arrow-right"
+                  >
+                    Open Priority Task
+                  </Button>
+                </Card.Content>
+              </Card>
+            ) : null}
             <View style={styles.filterRow}>
               <Chip
                 selected={activeFilter === 'all'}
+                style={styles.filterChip}
                 onPress={() => setActiveFilter('all')}
               >
                 All
               </Chip>
               <Chip
-                selected={activeFilter === 'pending'}
-                onPress={() => setActiveFilter('pending')}
+                selected={activeFilter === 'active'}
+                style={styles.filterChip}
+                onPress={() => setActiveFilter('active')}
               >
-                Pending
+                Active
               </Chip>
               <Chip
                 selected={activeFilter === 'acknowledged'}
+                style={styles.filterChip}
                 onPress={() => setActiveFilter('acknowledged')}
               >
                 Acknowledged
@@ -143,38 +191,47 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             </View>
           </View>
         }
-        ListEmptyComponent={!loading ? <EmptyState /> : null}
+        ListEmptyComponent={loading ? <LoadingCards /> : <EmptyState />}
         renderItem={({ item }) => (
-          <Card mode="elevated" style={styles.taskCard}>
+          <Card mode="contained" style={styles.taskCard}>
             <Card.Content style={styles.cardContent}>
               <View style={styles.cardHeader}>
                 <View style={styles.titleBlock}>
-                  <Text variant="titleMedium">{getRestroomLabel(item)}</Text>
+                  <OperationBadge
+                    label={urgencyTone(item.status).label}
+                    tone={urgencyTone(item.status)}
+                  />
+                  <Text variant="titleLarge" style={styles.cardTitle}>
+                    {item.building}
+                  </Text>
+                  <Text variant="titleMedium" style={styles.locationText}>
+                    {item.floor} - {item.location}
+                  </Text>
                   <Text variant="bodySmall" style={styles.timeLabel}>
-                    Created {formatDate(item.createdAt)}
+                    Reported {formatDate(item.createdAt)}
                   </Text>
                 </View>
-                <View
-                  style={[styles.statusBadge, getStatusChipStyle(item.status)]}
-                >
-                  <Text variant="labelLarge" style={styles.statusBadgeText}>
-                    {formatTaskStatus(item.status)}
-                  </Text>
-                </View>
+                <OperationBadge
+                  label={formatTaskStatus(item.status)}
+                  tone={statusTone(item.status)}
+                />
               </View>
               <Text variant="bodyMedium" style={styles.noteText}>
                 {item.message}
               </Text>
-              <Text variant="labelSmall" style={styles.openHint}>
-                Tap to view instructions and update status
-              </Text>
+              <View style={styles.metaRow}>
+                <MetaPill icon="toilet" label={getRestroomLabel(item)} />
+                <MetaPill icon="clipboard-text-clock-outline" label={item.type} />
+              </View>
             </Card.Content>
-            <Card.Actions>
+            <Card.Actions style={styles.cardActions}>
               <Button
-                mode="contained-tonal"
+                mode="contained"
                 onPress={() => openTaskDetail(item.id)}
+                contentStyle={styles.actionButtonContent}
+                icon="clipboard-arrow-right-outline"
               >
-                Open Task Detail
+                View Details
               </Button>
             </Card.Actions>
           </Card>
@@ -190,24 +247,49 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
   },
   contentContainer: {
     padding: 16,
-    paddingBottom: 32,
+    paddingBottom: 34,
     gap: 14,
-    backgroundColor: '#f3faf8',
+    backgroundColor: UI_COLORS.background,
     flexGrow: 1,
   },
   headerBlock: {
-    gap: 14,
+    gap: 16,
     marginBottom: 8,
   },
+  commandHeader: {
+    gap: 8,
+  },
+  onDutyPill: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: UI_COLORS.softGreen,
+  },
+  onDutyDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: UI_COLORS.success,
+  },
+  onDutyText: {
+    color: UI_COLORS.success,
+    fontWeight: '800',
+  },
   headerTitle: {
-    color: '#11201d',
+    color: UI_COLORS.text,
+    fontWeight: '900',
   },
   headerDescription: {
-    color: '#52605c',
+    color: UI_COLORS.muted,
+    lineHeight: 22,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -218,21 +300,72 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 8,
   },
+  filterChip: {
+    minHeight: 40,
+    borderRadius: 999,
+  },
   summaryCard: {
     flex: 1,
-    borderRadius: 24,
+    borderRadius: 18,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
-  summaryTeal: {
-    backgroundColor: '#dff4ef',
+  summaryCardAlt: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
-  summaryBlue: {
-    backgroundColor: '#e0ebff',
+  summaryContent: {
+    gap: 6,
+  },
+  summaryLabel: {
+    color: UI_COLORS.muted,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    fontSize: 12,
+  },
+  summaryValue: {
+    color: UI_COLORS.text,
+    fontSize: 34,
+    lineHeight: 40,
+    fontWeight: '900',
+  },
+  urgentCard: {
+    borderRadius: 20,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    ...sharedShadow,
+  },
+  urgentContent: {
+    gap: 10,
+  },
+  urgentTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
+  },
+  urgentMeta: {
+    color: UI_COLORS.primaryStrong,
+    fontWeight: '800',
+  },
+  urgentMessage: {
+    color: UI_COLORS.muted,
+    lineHeight: 22,
   },
   taskCard: {
-    borderRadius: 22,
+    borderRadius: 20,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+    ...sharedShadow,
   },
   cardContent: {
-    gap: 14,
+    gap: 13,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -242,46 +375,64 @@ const styles = StyleSheet.create({
   },
   titleBlock: {
     flex: 1,
-    gap: 2,
+    gap: 5,
+  },
+  cardTitle: {
+    color: UI_COLORS.text,
+    fontWeight: '900',
+  },
+  locationText: {
+    color: UI_COLORS.primaryStrong,
+    fontWeight: '800',
   },
   timeLabel: {
-    color: '#65736f',
+    color: UI_COLORS.muted,
   },
   noteText: {
-    color: '#31403c',
+    color: UI_COLORS.text,
     fontSize: 16,
     lineHeight: 23,
   },
-  openHint: {
-    color: '#5f6c68',
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
   },
-  emptyCard: {
-    marginTop: 12,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
+  cardActions: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  emptyText: {
-    marginTop: 8,
-    color: '#5b6663',
-  },
-  pendingChip: {
-    backgroundColor: '#ffe2de',
-  },
-  acknowledgedChip: {
-    backgroundColor: '#dce9ff',
-  },
-  statusBadge: {
+  actionButtonContent: {
     minHeight: 48,
-    minWidth: 92,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  statusBadgeText: {
-    color: '#111f1c',
-    textAlign: 'center',
-    textAlignVertical: 'center',
+  loadingList: {
+    gap: 12,
+  },
+  loadingCard: {
+    height: 138,
+    padding: 16,
+    gap: 14,
+    borderRadius: 20,
+    backgroundColor: UI_COLORS.surface,
+    borderWidth: 1,
+    borderColor: UI_COLORS.border,
+  },
+  loadingLineShort: {
+    width: '34%',
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E5E7EB',
+  },
+  loadingLineWide: {
+    width: '80%',
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E5E7EB',
+  },
+  loadingLineMid: {
+    width: '56%',
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#E5E7EB',
   },
 });

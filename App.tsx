@@ -6,6 +6,7 @@ import { MD3LightTheme, PaperProvider, Snackbar } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './contexts/AuthContext';
+import { OfflineSyncProvider } from './contexts/OfflineSyncContext';
 import { TasksProvider } from './contexts/TasksContext';
 import { useAuth } from './hooks/useAuth';
 import {
@@ -28,28 +29,29 @@ const theme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#127369',
+    primary: '#0F766E',
     onPrimary: '#ffffff',
-    primaryContainer: '#c5efe8',
+    primaryContainer: '#CCFBF1',
     onPrimaryContainer: '#00201c',
-    secondary: '#4c8577',
+    secondary: '#2563EB',
     onSecondary: '#ffffff',
-    secondaryContainer: '#d0ede6',
-    onSecondaryContainer: '#0b1f1a',
-    tertiary: '#31628b',
+    secondaryContainer: '#DBEAFE',
+    onSecondaryContainer: '#172554',
+    tertiary: '#F59E0B',
     onTertiary: '#ffffff',
-    tertiaryContainer: '#d1e4ff',
-    onTertiaryContainer: '#001d34',
-    background: '#f3faf8',
-    onBackground: '#171d1c',
+    tertiaryContainer: '#FEF3C7',
+    onTertiaryContainer: '#451A03',
+    background: '#F6F8FA',
+    onBackground: '#111827',
     surface: '#ffffff',
-    onSurface: '#171d1c',
-    surfaceVariant: '#dce5e2',
-    onSurfaceVariant: '#404946',
-    error: '#ba1a1a',
+    onSurface: '#111827',
+    surfaceVariant: '#F3F4F6',
+    onSurfaceVariant: '#6B7280',
+    error: '#DC2626',
     onError: '#ffffff',
-    outline: '#707977',
+    outline: '#E5E7EB',
   },
+  roundness: 5,
 };
 
 function NotificationLifecycle(): React.JSX.Element | null {
@@ -171,11 +173,13 @@ function Providers(): React.JSX.Element {
     <PaperProvider theme={theme}>
       <SafeAreaProvider>
         <AuthProvider>
-          <TasksProvider>
-            <NotificationLifecycle />
-            <AppNavigator />
-            <StatusBar style="dark" />
-          </TasksProvider>
+          <OfflineSyncProvider>
+            <TasksProvider>
+              <NotificationLifecycle />
+              <AppNavigator />
+              <StatusBar style="dark" />
+            </TasksProvider>
+          </OfflineSyncProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </PaperProvider>

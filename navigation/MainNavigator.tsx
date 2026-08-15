@@ -3,16 +3,26 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from 'react-native-paper';
 
+import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { ActiveTaskScreen } from '../screens/ActiveTaskScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 import { InboxScreen } from '../screens/InboxScreen';
+import {
+  CompletedReviewDetailScreen,
+  CompletedReviewsScreen,
+  SupervisorDashboardScreen,
+  SupervisorTaskDetailScreen,
+  SupervisorTasksScreen,
+  TeamAvailabilityScreen,
+} from '../screens/SupervisorScreens';
 import { TaskDetailScreen } from '../screens/TaskDetailScreen';
 import { LogoutHeaderButton } from './LogoutHeaderButton';
 import type {
   HistoryStackParamList,
   InboxStackParamList,
   MainTabParamList,
+  SupervisorStackParamList,
   TaskStackParamList,
 } from '../types';
 
@@ -20,15 +30,21 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 const InboxStack = createNativeStackNavigator<InboxStackParamList>();
 const HistoryStack = createNativeStackNavigator<HistoryStackParamList>();
 const TaskStack = createNativeStackNavigator<TaskStackParamList>();
+const SupervisorStack = createNativeStackNavigator<SupervisorStackParamList>();
 
 const sharedHeaderOptions = {
   headerRight: () => <LogoutHeaderButton />,
   headerRightContainerStyle: {
     paddingRight: 12,
   },
-  headerShadowVisible: true,
+  headerShadowVisible: false,
   headerStyle: {
     backgroundColor: '#ffffff',
+  },
+  headerTitleStyle: {
+    color: '#111827',
+    fontSize: 18,
+    fontWeight: '800',
   },
 } as const;
 
@@ -82,9 +98,51 @@ function TaskStackNavigator(): React.JSX.Element {
   );
 }
 
+function SupervisorStackNavigator(): React.JSX.Element {
+  return (
+    <SupervisorStack.Navigator screenOptions={sharedHeaderOptions}>
+      <SupervisorStack.Screen
+        name="SupervisorDashboard"
+        component={SupervisorDashboardScreen}
+        options={{ title: 'Supervisor Dashboard' }}
+      />
+      <SupervisorStack.Screen
+        name="TeamAvailability"
+        component={TeamAvailabilityScreen}
+        options={{ title: 'Team Availability' }}
+      />
+      <SupervisorStack.Screen
+        name="SupervisorTasks"
+        component={SupervisorTasksScreen}
+        options={{ title: 'Task Management' }}
+      />
+      <SupervisorStack.Screen
+        name="SupervisorTaskDetail"
+        component={SupervisorTaskDetailScreen}
+        options={{ title: 'Task Details' }}
+      />
+      <SupervisorStack.Screen
+        name="CompletedReviews"
+        component={CompletedReviewsScreen}
+        options={{ title: 'Completed Reviews' }}
+      />
+      <SupervisorStack.Screen
+        name="CompletedReviewDetail"
+        component={CompletedReviewDetailScreen}
+        options={{ title: 'Review Details' }}
+      />
+    </SupervisorStack.Navigator>
+  );
+}
+
 export function MainNavigator(): React.JSX.Element {
   const theme = useTheme();
+  const { role } = useAuth();
   const { pendingCount } = useTasks();
+
+  if (role === 'supervisor') {
+    return <SupervisorStackNavigator />;
+  }
 
   return (
     <Tab.Navigator
@@ -93,14 +151,21 @@ export function MainNavigator(): React.JSX.Element {
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
         tabBarStyle: {
-          height: 70,
-          paddingBottom: 10,
-          paddingTop: 10,
-          backgroundColor: theme.colors.surface,
+          height: 76,
+          paddingBottom: 12,
+          paddingTop: 9,
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#E5E7EB',
+          borderTopWidth: 1,
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.06,
+          shadowRadius: 10,
+          elevation: 10,
         },
         tabBarLabelStyle: {
           fontSize: 12,
-          fontWeight: '600',
+          fontWeight: '800',
         },
         tabBarIcon: ({ color, size }) => {
           const iconName =

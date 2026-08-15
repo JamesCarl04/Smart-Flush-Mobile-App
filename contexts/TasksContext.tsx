@@ -63,8 +63,15 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   }, [refreshTasks, user]);
 
   const inboxTasks = tasks.filter((task) => task.status !== 'completed');
-  const historyTasks = tasks.filter((task) => task.status === 'completed');
-  const pendingCount = tasks.filter((task) => task.status === 'pending').length;
+  const historyTasks = tasks.filter(
+    (task) => task.status === 'completed' && task.completedBy === user?.uid,
+  );
+  const pendingCount = tasks.filter(
+    (task) =>
+      task.status === 'unassigned' ||
+      task.status === 'assigned' ||
+      task.status === 'reassignment_needed',
+  ).length;
 
   return (
     <TasksContext.Provider
