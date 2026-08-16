@@ -1,0 +1,104 @@
+appId: com.james.klir
+---
+- launchApp:
+    clearState: true
+
+# 1. Worker login
+- assertVisible: "Sign in"
+- tapOn: "Email"
+- inputText: "technician@smartflush.com"
+- hideKeyboard
+- tapOn: "Password"
+- inputText: "TechnicianPass123"
+- hideKeyboard
+- tapOn: "Sign in"
+
+# 2. Open urgent task from Inbox
+- assertVisible: "Today's Tasks"
+- tapOn:
+    text: "Open Priority Task"
+    optional: true
+- tapOn:
+    text: "View Details"
+    optional: true
+
+# 3. Acknowledge task
+- assertVisible: "Restroom Work Order"
+- tapOn:
+    text: "Acknowledge Task"
+    optional: true
+
+# 4. Trigger Before Photo proof
+- assertVisible: "Take Proof Photo"
+- tapOn: "Take Proof Photo"
+
+# Handle potential system permissions / biometric prompt if shown
+- tapOn:
+    text: "While using the app"
+    optional: true
+- tapOn:
+    text: "Allow"
+    optional: true
+
+# 5. Toggle all checklist items & enter remarks
+- assertVisible: "SDCA F-TGS 203 Checklist"
+
+# Select Done on checklist segmented buttons
+- tapOn:
+    text: "Done"
+    index: 0
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 1
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 2
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 3
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 4
+    optional: true
+- scroll
+- tapOn:
+    text: "Done"
+    index: 0
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 1
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 2
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 3
+    optional: true
+- tapOn:
+    text: "Done"
+    index: 4
+    optional: true
+
+- tapOn: "Remarks"
+- inputText: "Completed sanitation and refilled soap dispensers."
+- hideKeyboard
+
+# 6. Capture After Photo
+- tapOn: "Take After Photo"
+
+# 7. Submit Task Completion Online
+- assertVisible: "Completion Summary"
+- tapOn: "Submit Completion"
+
+# 8. Verify and navigate to History tab
+- assertVisible: "Restroom Work Order"
+- tapOn: "History"
+- assertVisible: "Completed Work"
+- assertVisible: "Proof submitted"

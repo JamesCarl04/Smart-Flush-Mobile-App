@@ -1,0 +1,43 @@
+appId: com.james.klir
+---
+- launchApp:
+    clearState: true
+
+# 1. Check initial Login Screen elements
+- assertVisible: "Smart Flush Field"
+- assertVisible: "Sign in"
+- assertVisible: "Email"
+- assertVisible: "Password"
+
+# 2. Test Invalid Credentials Error Handling
+- tapOn: "Email"
+- inputText: "technician@smartflush.com"
+- hideKeyboard
+- tapOn: "Password"
+- inputText: "WrongPassword!999"
+- hideKeyboard
+
+- tapOn: "Sign in"
+- assertVisible: ".*(Incorrect password|invalid|Unable to sign in).*"
+
+# 3. Successful Sign-in with Valid Technician Account
+- tapOn: "Password"
+- eraseText
+- inputText: "TechnicianPass123"
+- hideKeyboard
+
+- tapOn: "Sign in"
+
+# 4. Verify Inbox Screen Loaded
+- assertVisible: "Today's Tasks"
+- assertVisible: "On Duty"
+- assertVisible: "Pending"
+
+# 5. Test Logout Flow
+- tapOn:
+    text: "Log out"
+    optional: true
+- tapOn:
+    text: "Log out"
+    optional: true
+- assertVisible: "Sign in"

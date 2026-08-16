@@ -221,3 +221,25 @@ export async function consumeInitialNotificationResponse(
     onTaskSelected(taskId);
   }
 }
+
+type LocalNotificationListener = (notification: ForegroundTaskNotification) => void;
+const localNotificationListeners = new Set<LocalNotificationListener>();
+
+export function emitLocalNotification(notification: ForegroundTaskNotification): void {
+  localNotificationListeners.forEach((listener) => {
+    try {
+      listener(notification);
+    } catch {
+      // Ignore listener error
+    }
+  });
+}
+
+export function subscribeLocalNotifications(
+  listener: LocalNotificationListener,
+): () => void {
+  localNotificationListeners.add(listener);
+  return () => {
+    localNotificationListeners.delete(listener);
+  };
+}

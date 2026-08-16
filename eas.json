@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 16.0.0"
+    "version": ">= 16.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -8,12 +9,34 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBUJcW8S3neoN3b-rJ6MNI6zq717eT4Z5k",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "klir-project.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "klir-project",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "klir-project.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "526260279429",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:526260279429:android:98d069af9c580bdd7831ec",
+        "EXPO_PUBLIC_EXPO_PROJECT_ID": "8791e31f-401b-455e-8843-ec18485147e8",
+        "EXPO_PUBLIC_BACKEND_API_BASE_URL": "https://smart-flush-web-app.vercel.app",
+        "GOOGLE_SERVICES_JSON": "./google-services.json"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_FIREBASE_API_KEY": "AIzaSyBUJcW8S3neoN3b-rJ6MNI6zq717eT4Z5k",
+        "EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN": "klir-project.firebaseapp.com",
+        "EXPO_PUBLIC_FIREBASE_PROJECT_ID": "klir-project",
+        "EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET": "klir-project.firebasestorage.app",
+        "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "526260279429",
+        "EXPO_PUBLIC_FIREBASE_APP_ID": "1:526260279429:android:98d069af9c580bdd7831ec",
+        "EXPO_PUBLIC_EXPO_PROJECT_ID": "8791e31f-401b-455e-8843-ec18485147e8",
+        "EXPO_PUBLIC_BACKEND_API_BASE_URL": "https://smart-flush-web-app.vercel.app",
+        "GOOGLE_SERVICES_JSON": "./google-services.json"
       }
     },
     "production": {

@@ -73,6 +73,35 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       task.status === 'reassignment_needed',
   ).length;
 
+  const simulateHardwareFailureAlert = useCallback((): Task => {
+    const fakeAlertTask: Task = {
+      id: `task-hw-${Date.now()}`,
+      deviceId: 'toilet-01',
+      restroomName: 'Restroom 2',
+      location: 'Ground Floor Male Restroom',
+      floor: 'Ground',
+      building: 'GB3 Building',
+      component: 'flush_valve',
+      triggerType: 'hardware_failure',
+      status: 'assigned',
+      message: '🚨 CRITICAL HARDWARE ALERT: Continuous water running detected in flush valve (Critical Flow Leak).',
+      assignedTo: user?.uid ?? null,
+      createdAt: new Date(),
+      assignedAt: new Date(),
+      acknowledgedAt: null,
+      completedAt: null,
+      completedBy: null,
+      beforePhotoUrl: null,
+      afterPhotoUrl: null,
+      type: 'maintenance',
+      shift: '1st',
+      createdBy: 'system_iot',
+    };
+
+    setTasks((prev) => [fakeAlertTask, ...prev]);
+    return fakeAlertTask;
+  }, [user]);
+
   return (
     <TasksContext.Provider
       value={{
@@ -84,6 +113,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         errorMessage,
         refreshTasks,
         clearError: () => setErrorMessage(null),
+        simulateHardwareFailureAlert,
       }}
     >
       {children}

@@ -71,6 +71,7 @@ export interface AuthUser {
   role: UserRole;
   name: string;
   building?: string | null;
+  shift?: string | null;
 }
 
 export interface AuthContextValue {
@@ -89,6 +90,7 @@ export interface TasksContextValue {
   errorMessage: string | null;
   refreshTasks: () => Promise<void>;
   clearError: () => void;
+  simulateHardwareFailureAlert?: () => Task;
 }
 
 export type AuthStackParamList = {
@@ -108,6 +110,7 @@ export type HistoryStackParamList = {
 
 export type TaskStackParamList = {
   ActiveTask: { taskId?: string } | undefined;
+  TaskDetail: { taskId: string };
 };
 
 export type SupervisorStackParamList = {

@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
@@ -24,13 +25,15 @@ export function OfflineSyncProvider({
 }: PropsWithChildren): React.JSX.Element {
   const { user } = useAuth();
   const [syncing, setSyncing] = useState(false);
+  const syncingRef = useRef(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const syncNow = useCallback(async (): Promise<void> => {
-    if (!user || syncing) {
+    if (!user || syncingRef.current) {
       return;
     }
 
+    syncingRef.current = true;
     setSyncing(true);
     try {
       const count = await syncOfflineCompletions();
@@ -38,9 +41,10 @@ export function OfflineSyncProvider({
         setMessage(`Offline sync complete. ${count} task${count === 1 ? '' : 's'} uploaded.`);
       }
     } finally {
+      syncingRef.current = false;
       setSyncing(false);
     }
-  }, [syncing, user]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) {

@@ -1,0 +1,372 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
+
+import {
+  SupervisorDashboardScreen,
+  TeamAvailabilityScreen,
+  SupervisorTasksScreen,
+  SupervisorTaskDetailScreen,
+  CompletedReviewsScreen,
+  CompletedReviewDetailScreen,
+} from '../../../screens/SupervisorScreens';
+import * as supervisorApi from '../../../lib/supervisor-api';
+import * as useAuthHook from '../../../hooks/useAuth';
+import type { Task } from '../../../types';
+
+jest.mock('../../../lib/supervisor-api');
+jest.mock('../../../hooks/useAuth');
+
+const mockPersonnel: supervisorApi.MaintenancePerson[] = [
+  {
+    id: 'person-1',
+    displayName: 'Juan Cruz',
+    email: 'juan@smartflush.com',
+    isAvailable: true,
+    currentTaskId: null,
+    shift: '1st',
+    building: 'GB3 Building',
+    supervisorUid: 'sup-user-1',
+  },
+  {
+    id: 'person-2',
+    displayName: 'Maria Santos',
+    email: 'maria@smartflush.com',
+    isAvailable: false,
+    currentTaskId: 'task-active-1',
+    shift: '1st',
+    building: 'GB3 Building',
+    supervisorUid: 'sup-user-1',
+  },
+  {
+    id: 'person-3',
+    displayName: 'Pedro Reyes',
+    email: 'pedro@smartflush.com',
+    isAvailable: false,
+    currentTaskId: null,
+    shift: '1st',
+    building: 'GB3 Building',
+    supervisorUid: 'sup-user-1',
+  },
+];
+
+const mockSupervisorTasks: Task[] = [
+  {
+    id: 'task-active-1',
+    deviceId: 'dev-pipe-1',
+    restroomName: '2F Male Restroom',
+    type: 'maintenance',
+    component: 'pipe',
+    location: '2F Male Restroom',
+    floor: '2F',
+    building: 'GB3 Building',
+    shift: '1st',
+    triggerType: 'hardware_failure',
+    message: 'Urgent leak in main water feed',
+    assignedTo: 'person-2',
+    status: 'assigned',
+    createdAt: new Date(),
+    assignedAt: new Date(),
+    createdBy: 'system',
+  },
+  {
+    id: 'task-unassigned-2',
+    deviceId: 'dev-toilet-2',
+    restroomName: '3F Female Restroom',
+    type: 'maintenance',
+    component: 'toilet_bowl',
+    location: '3F Female Restroom',
+    floor: '3F',
+    building: 'GB3 Building',
+    shift: '1st',
+    triggerType: 'hardware_failure',
+    message: 'Unassigned toilet flush sensor malfunction',
+    assignedTo: null,
+    status: 'unassigned',
+    createdAt: new Date(),
+    createdBy: 'system',
+  },
+  {
+    id: 'task-completed-3',
+    deviceId: 'dev-valve-3',
+    restroomName: '1F Lobby Restroom',
+    type: 'maintenance',
+    component: 'flush_valve',
+    location: '1F Lobby Restroom',
+    floor: '1F',
+    building: 'GB3 Building',
+    shift: '1st',
+    triggerType: 'maintenance',
+    message: 'Replaced solenoid flush valve',
+    assignedTo: 'person-1',
+    status: 'completed',
+    completedBy: 'person-1',
+    createdAt: new Date(),
+    completedAt: new Date(),
+    responseTime: 90,
+    workDuration: 300,
+    totalTime: 390,
+    biometricVerified: true,
+    beforePhotoUrl: 'https://storage.example.com/before.jpg',
+    afterPhotoUrl: 'https://storage.example.com/after.jpg',
+    remarks: 'Replaced gasket and calibrated flow rate.',
+    checklist: {
+      removeCeilingDust: 'done',
+      removeWallDust: 'done',
+      removeLightBulbDust: 'done',
+      cleanWindows: 'na',
+      wipeDownFixtures: 'na',
+      disinfectTouchedSurfaces: 'done',
+      sweepAndDryFloors: 'done',
+      emptyTrashBins: 'done',
+      arrangeFixtures: 'na',
+      disinfectUVLights: 'done',
+    },
+    createdBy: 'system',
+  },
+];
+
+describe('Supervisor Screens Integration Suite', () => {
+  const mockNavigation: any = {
+    navigate: jest.fn(),
+    goBack: jest.fn(),
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useAuthHook.useAuth as jest.Mock).mockReturnValue({
+      user: {
+        uid: 'sup-user-1',
+        email: 'supervisor@smartflush.com',
+        role: 'supervisor',
+        name: 'Supervisor Chief',
+        building: 'GB3 Building',
+      },
+      role: 'supervisor',
+      loading: false,
+      logout: jest.fn(),
+    });
+
+    (supervisorApi.fetchSupervisorTasks as jest.Mock).mockResolvedValue(mockSupervisorTasks);
+    (supervisorApi.fetchMaintenancePersonnel as jest.Mock).mockResolvedValue(mockPersonnel);
+    (supervisorApi.reassignTask as jest.Mock).mockResolvedValue(undefined);
+    (supervisorApi.flagTask as jest.Mock).mockResolvedValue(undefined);
+  });
+
+  describe('SupervisorDashboardScreen', () => {
+    it('displays active tasks today, staff counts (available, on task, offline), and unassigned tasks', async () => {
+      render(
+        <PaperProvider>
+          <SupervisorDashboardScreen
+            navigation={mockNavigation}
+            route={{ key: 'SupervisorDashboard', name: 'SupervisorDashboard' }}
+          />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(supervisorApi.fetchSupervisorTasks).toHaveBeenCalled();
+      });
+
+      // Active tasks today: task-active-1, task-unassigned-2 -> 2
+      expect(screen.getByText('Total active tasks today')).toBeTruthy();
+      expect(screen.getByText('2')).toBeTruthy();
+
+      // Personnel breakdown: 1 available (Juan), 1 on task (Maria), 1 offline (Pedro)
+      expect(screen.getByText('Maintenance personnel')).toBeTruthy();
+      expect(screen.getByText('1 available, 1 on task, 1 offline')).toBeTruthy();
+
+      // Unassigned tasks: task-unassigned-2 -> 1
+      expect(screen.getByText('Unassigned tasks')).toBeTruthy();
+      expect(screen.getByText('1')).toBeTruthy();
+    });
+
+    it('navigates to management screens on button presses', async () => {
+      render(
+        <PaperProvider>
+          <SupervisorDashboardScreen
+            navigation={mockNavigation}
+            route={{ key: 'SupervisorDashboard', name: 'SupervisorDashboard' }}
+          />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Manage Tasks')).toBeTruthy();
+      });
+
+      fireEvent.press(screen.getByText('Manage Tasks'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('SupervisorTasks');
+
+      fireEvent.press(screen.getByText('Team Availability'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('TeamAvailability');
+
+      fireEvent.press(screen.getByText('Review Completed Tasks'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('CompletedReviews');
+    });
+  });
+
+  describe('TeamAvailabilityScreen', () => {
+    it('displays staff list with status tags and active task descriptions', async () => {
+      render(
+        <PaperProvider>
+          <TeamAvailabilityScreen />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Juan Cruz')).toBeTruthy();
+      });
+
+      expect(screen.getByText('Available')).toBeTruthy();
+      expect(screen.getByText('Maria Santos')).toBeTruthy();
+      expect(screen.getByText('On Task')).toBeTruthy();
+      expect(screen.getByText(/Urgent leak in main water feed/)).toBeTruthy();
+      expect(screen.getByText('Pedro Reyes')).toBeTruthy();
+      expect(screen.getByText('Offline')).toBeTruthy();
+    });
+  });
+
+  describe('SupervisorTasksScreen & SupervisorTaskDetailScreen', () => {
+    it('lists active tasks and opens task detail on press', async () => {
+      render(
+        <PaperProvider>
+          <SupervisorTasksScreen
+            navigation={mockNavigation}
+            route={{ key: 'SupervisorTasks', name: 'SupervisorTasks' }}
+          />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('2F Male Restroom')).toBeTruthy();
+      });
+
+      expect(screen.getByText('3F Female Restroom')).toBeTruthy();
+      // Completed task is excluded from active list
+      expect(screen.queryByText('1F Lobby Restroom')).toBeNull();
+
+      fireEvent.press(screen.getByText('3F Female Restroom'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('SupervisorTaskDetail', {
+        taskId: 'task-unassigned-2',
+      });
+    });
+
+    it('submits reassignment for an unassigned or assigned task', async () => {
+      render(
+        <PaperProvider>
+          <SupervisorTaskDetailScreen
+            navigation={mockNavigation}
+            route={{
+              key: 'SupervisorTaskDetail',
+              name: 'SupervisorTaskDetail',
+              params: { taskId: 'task-unassigned-2' },
+            }}
+          />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('3F Female Restroom')).toBeTruthy();
+      });
+
+      // Available staff: Juan Cruz (person-1)
+      expect(screen.getByText('Juan Cruz')).toBeTruthy();
+
+      // Select Juan Cruz
+      fireEvent.press(screen.getByText('Juan Cruz'));
+
+      // Change Reason
+      const reasonInput = screen.getByDisplayValue('Manual reassignment');
+      fireEvent.changeText(reasonInput, 'Priority reassignment to available technician');
+
+      // Submit reassignment
+      const reassignButton = screen.getByText('Reassign');
+      fireEvent.press(reassignButton);
+
+      await waitFor(() => {
+        expect(supervisorApi.reassignTask).toHaveBeenCalledWith({
+          taskId: 'task-unassigned-2',
+          newAssigneeUid: 'person-1',
+          reason: 'Priority reassignment to available technician',
+          supervisorUid: 'sup-user-1',
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Task reassigned.')).toBeTruthy();
+      });
+    });
+  });
+
+  describe('CompletedReviewsScreen & CompletedReviewDetailScreen', () => {
+    it('lists today completed tasks and opens detail view', async () => {
+      render(
+        <PaperProvider>
+          <CompletedReviewsScreen
+            navigation={mockNavigation}
+            route={{ key: 'CompletedReviews', name: 'CompletedReviews' }}
+          />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('1F Lobby Restroom')).toBeTruthy();
+      });
+
+      fireEvent.press(screen.getByText('1F Lobby Restroom'));
+
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('CompletedReviewDetail', {
+        taskId: 'task-completed-3',
+      });
+    });
+
+    it('displays completion details, checklist, proof metrics, and allows flagging task', async () => {
+      render(
+        <PaperProvider>
+          <CompletedReviewDetailScreen
+            navigation={mockNavigation}
+            route={{
+              key: 'CompletedReviewDetail',
+              name: 'CompletedReviewDetail',
+              params: { taskId: 'task-completed-3' },
+            }}
+          />
+        </PaperProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Checklist')).toBeTruthy();
+      });
+
+      expect(screen.getByText('Biometric verified')).toBeTruthy();
+      expect(screen.getByText('Remarks: Replaced gasket and calibrated flow rate.')).toBeTruthy();
+      expect(screen.getByText('Response time: 1 min 30 sec')).toBeTruthy();
+      expect(screen.getByText('Work duration: 5 min 0 sec')).toBeTruthy();
+
+      // Open Flag Dialog
+      fireEvent.press(screen.getByText('Flag for Re-inspection'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Flag task')).toBeTruthy();
+      });
+
+      const reasonInput = screen.getByDisplayValue('Requires re-inspection');
+      fireEvent.changeText(reasonInput, 'Water pressure is still suboptimal.');
+
+      fireEvent.press(screen.getByText('Flag'));
+
+      await waitFor(() => {
+        expect(supervisorApi.flagTask).toHaveBeenCalledWith({
+          taskId: 'task-completed-3',
+          reason: 'Water pressure is still suboptimal.',
+          supervisorUid: 'sup-user-1',
+        });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Task flagged for re-inspection.')).toBeTruthy();
+      });
+    });
+  });
+});

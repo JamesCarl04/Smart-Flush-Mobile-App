@@ -81,8 +81,35 @@ export async function isOnlineAsync(): Promise<boolean> {
 }
 
 async function uriToBlob(uri: string): Promise<Blob> {
-  const response = await fetch(uri);
-  return response.blob();
+  return new Promise((resolve, reject) => {
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.onload = function () {
+        if (xhr.response instanceof Blob) {
+          resolve(xhr.response);
+        } else {
+          fetch(uri)
+            .then((res) => res.blob())
+            .then(resolve)
+            .catch(reject);
+        }
+      };
+      xhr.onerror = function () {
+        fetch(uri)
+          .then((res) => res.blob())
+          .then(resolve)
+          .catch(reject);
+      };
+      xhr.responseType = 'blob';
+      xhr.open('GET', uri, true);
+      xhr.send(null);
+    } catch {
+      fetch(uri)
+        .then((res) => res.blob())
+        .then(resolve)
+        .catch(reject);
+    }
+  });
 }
 
 export async function uploadTaskPhoto(
@@ -91,11 +118,31 @@ export async function uploadTaskPhoto(
   kind: 'before' | 'after',
   capturedAt: Date,
 ): Promise<string> {
-  const blob = await uriToBlob(uri);
-  const timestamp = capturedAt.getTime();
-  const photoRef = ref(storage, `tasks/${taskId}/${kind}_${timestamp}.jpg`);
-  await uploadBytes(photoRef, blob, { contentType: 'image/jpeg' });
-  return getDownloadURL(photoRef);
+  let blob: Blob | null = null;
+  try {
+    blob = await uriToBlob(uri);
+    const timestamp = capturedAt.getTime();
+    const photoRef = ref(storage, `tasks/${taskId}/${kind}_${timestamp}.jpg`);
+    await uploadBytes(photoRef, blob, { contentType: 'image/jpeg' });
+    return await getDownloadURL(photoRef);
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string };
+    const code = err?.code ?? 'storage/unknown';
+    const message = err?.message ?? String(error);
+    console.error(
+      `[UploadTaskPhoto] Error uploading ${kind} photo for task ${taskId} (${code}):`,
+      message,
+    );
+    throw new Error(`Photo upload failed (${code}): ${message}`);
+  } finally {
+    if (blob && typeof (blob as any).close === 'function') {
+      try {
+        (blob as any).close();
+      } catch {
+        // Safe ignore
+      }
+    }
+  }
 }
 
 export async function completeTaskOnline(input: OnlineCompletionInput): Promise<void> {
@@ -116,27 +163,49 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   const workDuration = secondsBetween(input.acknowledgedAt, input.completedAt);
   const totalTime = secondsBetween(input.createdAt, input.completedAt);
 
-  await updateDoc(doc(db, 'tasks', input.taskId), {
-    checklist: input.checklist,
-    remarks: input.remarks,
-    beforePhotoUrl,
-    beforePhotoCapturedAt: Timestamp.fromDate(input.beforePhotoCapturedAt),
-    afterPhotoUrl,
-    afterPhotoCapturedAt: Timestamp.fromDate(input.afterPhotoCapturedAt),
-    biometricVerified: input.biometricVerified,
-    offlineSynced: false,
-    status: 'completed',
-    completedAt: Timestamp.fromDate(input.completedAt),
-    completedBy: input.completedBy,
-    workDuration,
-    totalTime,
-  });
+  try {
+    await updateDoc(doc(db, 'tasks', input.taskId), {
+      checklist: input.checklist,
+      remarks: input.remarks,
+      beforePhotoUrl,
+      beforePhotoCapturedAt: Timestamp.fromDate(input.beforePhotoCapturedAt),
+      afterPhotoUrl,
+      afterPhotoCapturedAt: Timestamp.fromDate(input.afterPhotoCapturedAt),
+      biometricVerified: input.biometricVerified,
+      offlineSynced: false,
+      status: 'completed',
+      completedAt: Timestamp.fromDate(input.completedAt),
+      completedBy: input.completedBy,
+      workDuration,
+      totalTime,
+    });
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string };
+    const code = err?.code ?? 'unknown';
+    const message = err?.message ?? String(error);
+    console.error(
+      `[Firestore Task Update] Error: Failed to update task document ${input.taskId} (${code}):`,
+      message,
+    );
+    throw new Error(`[Firestore Task Update] Error: ${message}`);
+  }
 
-  await updateDoc(doc(db, 'maintenancePersonnel', input.completedBy), {
-    isAvailable: true,
-    currentTaskId: null,
-    lastTaskCompletedAt: serverTimestamp(),
-  });
+  try {
+    await updateDoc(doc(db, 'maintenancePersonnel', input.completedBy), {
+      isAvailable: true,
+      currentTaskId: null,
+      lastTaskCompletedAt: serverTimestamp(),
+    });
+  } catch (error: unknown) {
+    const err = error as { code?: string; message?: string };
+    const code = err?.code ?? 'unknown';
+    const message = err?.message ?? String(error);
+    console.error(
+      `[Firestore Task Update] Error: Failed to update personnel document ${input.completedBy} (${code}):`,
+      message,
+    );
+    throw new Error(`[Firestore Task Update] Error: ${message}`);
+  }
 }
 
 export async function readOfflineCompletions(): Promise<CompletionBundle[]> {

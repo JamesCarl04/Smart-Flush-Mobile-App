@@ -4,18 +4,22 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { FirebaseError } from 'firebase/app';
 import { sendPasswordResetEmail } from '@react-native-firebase/auth';
-import {
-  Button,
-  Card,
-  HelperText,
-  Text,
-  TextInput,
-} from 'react-native-paper';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
+import { TextInput } from 'react-native-paper';
+
+import { KlirButton } from '../components/KlirButton';
+import {
+  KLIR_COLORS,
+  KLIR_TYPOGRAPHY,
+} from '../components/MaintenanceUI';
 import { auth } from '../lib/firebase';
 import type { AuthStackParamList } from '../types';
 
@@ -66,58 +70,102 @@ export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
-        <Card mode="elevated" style={styles.card}>
-          <Card.Content style={styles.content}>
-            <Text variant="headlineMedium" style={styles.title}>
-              Reset Password
+        <View style={styles.container}>
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.iconCircle}>
+              <MaterialCommunityIcons
+                name="lock-reset"
+                size={34}
+                color={KLIR_COLORS.primary}
+              />
+            </View>
+            <Text style={styles.title}>Reset Password</Text>
+            <Text style={styles.subtitle}>
+              Enter your registered email address to receive reset instructions.
             </Text>
-            <Text variant="bodyLarge" style={styles.description}>
-              Enter your email and we'll send you instructions to reset your
-              password.
-            </Text>
+          </View>
 
+          {/* Status Message Banner */}
+          {message ? (
+            <View
+              style={[
+                styles.statusBanner,
+                isError ? styles.errorBanner : styles.successBanner,
+              ]}
+            >
+              <MaterialCommunityIcons
+                name={isError ? 'alert-circle-outline' : 'check-circle-outline'}
+                size={18}
+                color={isError ? KLIR_COLORS.danger : KLIR_COLORS.success}
+              />
+              <Text
+                style={[
+                  styles.statusText,
+                  isError ? styles.errorText : styles.successText,
+                ]}
+              >
+                {message}
+              </Text>
+            </View>
+          ) : null}
+
+          {/* Seamless Form Container */}
+          <View style={styles.formContainer}>
             <TextInput
+              testID="text-input-outlined"
               label="Email"
               value={email}
               mode="outlined"
-              placeholder="email@example.com"
+              placeholder="tech@smartflush.com"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               disabled={isLoading}
+              left={<TextInput.Icon icon="email-outline" />}
               onChangeText={setEmail}
-              outlineStyle={styles.inputOutline}
-              contentStyle={styles.inputContent}
+              outlineColor="#E5E5E5"
+              activeOutlineColor="#222222"
+              textColor="#222222"
+              style={styles.outlinedInput}
             />
 
-            <HelperText type={isError ? 'error' : 'info'} visible={!!message}>
-              {message ?? ''}
-            </HelperText>
+            <View style={styles.actionStack}>
+              <KlirButton
+                title="Send Reset Link"
+                variant="primary"
+                loading={isLoading}
+                disabled={isLoading}
+                onPress={() => {
+                  void handleSendResetLink();
+                }}
+              />
 
-            <Button
-              mode="contained"
-              loading={isLoading}
-              disabled={isLoading}
-              onPress={() => {
-                void handleSendResetLink();
-              }}
-              contentStyle={styles.primaryButtonContent}
-              style={styles.primaryButton}
-            >
-              Send Reset Link
-            </Button>
+              <TouchableOpacity
+                onPress={() => navigation.goBack()}
+                disabled={isLoading}
+                style={styles.backButton}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="arrow-left"
+                  size={16}
+                  color={KLIR_COLORS.primary}
+                />
+                <Text style={styles.backButtonText}>Back to Login</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
-            <Button
-              mode="text"
-              disabled={isLoading}
-              onPress={() => navigation.goBack()}
-              labelStyle={styles.backButtonLabel}
-            >
-              Back to Login
-            </Button>
-          </Card.Content>
-        </Card>
+          {/* Footer note */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>
+              Need assistance? Contact your facility supervisor.
+            </Text>
+          </View>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -126,56 +174,111 @@ export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#eef8f5',
+    backgroundColor: KLIR_COLORS.canvas,
   },
   scrollContent: {
     flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
     justifyContent: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 14,
+    alignItems: 'center',
   },
-  card: {
+  container: {
     width: '100%',
-    maxWidth: 480,
-    alignSelf: 'center',
-    borderRadius: 28,
-    backgroundColor: '#ffffff',
+    maxWidth: 400,
+    gap: 28,
   },
-  content: {
-    paddingHorizontal: 32,
-    paddingVertical: 44,
-    gap: 20,
+  header: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: KLIR_COLORS.primarySurface,
+    borderWidth: 1,
+    borderColor: KLIR_COLORS.primaryBorder,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
   },
   title: {
+    ...KLIR_TYPOGRAPHY.h2,
+    fontSize: 24,
+    lineHeight: 30,
+    color: KLIR_COLORS.charcoal,
     textAlign: 'center',
-    color: '#0f1f1b',
-    fontWeight: '800',
   },
-  description: {
+  subtitle: {
+    ...KLIR_TYPOGRAPHY.bodyMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    color: KLIR_COLORS.slateMuted,
     textAlign: 'center',
-    color: '#556561',
-    lineHeight: 25,
-    marginBottom: 8,
+    maxWidth: 320,
   },
-  inputOutline: {
-    borderRadius: 10,
+  formContainer: {
+    width: '100%',
+    gap: 20,
   },
-  inputContent: {
-    minHeight: 58,
-    fontSize: 18,
+  outlinedInput: {
+    backgroundColor: '#FFFFFF',
   },
-  primaryButton: {
-    marginTop: 10,
-    borderRadius: 10,
-    backgroundColor: '#127369',
+  statusBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 14,
+    borderRadius: 12,
+    borderWidth: 1,
   },
-  primaryButtonContent: {
-    minHeight: 60,
+  errorBanner: {
+    backgroundColor: KLIR_COLORS.softRed,
+    borderColor: '#FECACA',
   },
-  backButtonLabel: {
-    color: '#127369',
-    fontSize: 16,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
+  successBanner: {
+    backgroundColor: KLIR_COLORS.softGreen,
+    borderColor: '#BBF7D0',
+  },
+  statusText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  errorText: {
+    color: KLIR_COLORS.danger,
+  },
+  successText: {
+    color: KLIR_COLORS.successText,
+  },
+  actionStack: {
+    gap: 12,
+    marginTop: 4,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: KLIR_COLORS.primary,
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  footerText: {
+    fontSize: 12,
+    color: KLIR_COLORS.slateLight,
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
+
+

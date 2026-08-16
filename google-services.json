@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "526260279429",
+    "project_id": "klir-project",
+    "storage_bucket": "klir-project.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:526260279429:android:98d069af9c580bdd7831ec",
+        "android_client_info": {
+          "package_name": "com.james.klir"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUJcW8S3neoN3b-rJ6MNI6zq717eT4Z5k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

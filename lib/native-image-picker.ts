@@ -1,57 +1,25 @@
-import { requireNativeModule, UnavailabilityError } from 'expo-modules-core';
+import * as ExpoImagePicker from 'expo-image-picker';
 
-const ExponentImagePicker = requireNativeModule<{
-  requestCameraPermissionsAsync: () => Promise<CameraPermissionResponse>;
-  launchCameraAsync?: (options: ImagePickerOptions) => Promise<ImagePickerResult>;
-}>('ExponentImagePicker');
+export type CameraPermissionResponse = ExpoImagePicker.CameraPermissionResponse;
+export type ImagePickerAsset = ExpoImagePicker.ImagePickerAsset;
+export type ImagePickerResult = ExpoImagePicker.ImagePickerResult;
+export type ImagePickerOptions = ExpoImagePicker.ImagePickerOptions;
 
-export interface CameraPermissionResponse {
-  status: string;
-  granted: boolean;
-  canAskAgain: boolean;
-  expires: string | number;
+export const MediaTypeOptions = ExpoImagePicker.MediaTypeOptions;
+export const CameraType = ExpoImagePicker.CameraType;
+
+export async function requestCameraPermissionsAsync(): Promise<ExpoImagePicker.CameraPermissionResponse> {
+  return ExpoImagePicker.requestCameraPermissionsAsync();
 }
 
-export interface ImagePickerAsset {
-  uri: string;
-  width?: number;
-  height?: number;
-  type?: string;
-  fileName?: string | null;
-  fileSize?: number;
-  mimeType?: string;
+export async function launchCameraAsync(
+  options: ExpoImagePicker.ImagePickerOptions = {}
+): Promise<ExpoImagePicker.ImagePickerResult> {
+  return ExpoImagePicker.launchCameraAsync(options);
 }
 
-export type ImagePickerResult =
-  | { canceled: true; assets: null }
-  | { canceled: false; assets: ImagePickerAsset[] };
-
-export interface ImagePickerOptions {
-  mediaTypes?: 'Images' | 'Videos' | 'All';
-  allowsEditing?: boolean;
-  quality?: number;
-  cameraType?: 'back' | 'front';
-}
-
-export const MediaTypeOptions = {
-  Images: 'Images',
-  Videos: 'Videos',
-  All: 'All',
-} as const;
-
-export const CameraType = {
-  back: 'back',
-  front: 'front',
-} as const;
-
-export async function requestCameraPermissionsAsync(): Promise<CameraPermissionResponse> {
-  return ExponentImagePicker.requestCameraPermissionsAsync();
-}
-
-export async function launchCameraAsync(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
-  if (!ExponentImagePicker.launchCameraAsync) {
-    throw new UnavailabilityError('ImagePicker', 'launchCameraAsync');
-  }
-
-  return ExponentImagePicker.launchCameraAsync(options);
-}
+export async function launchImageLibraryAsync(
+  options: ExpoImagePicker.ImagePickerOptions = {}
+): Promise<ExpoImagePicker.ImagePickerResult> {
+  return ExpoImagePicker.launchImageLibraryAsync(options);
+}

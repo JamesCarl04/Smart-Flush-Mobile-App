@@ -14,6 +14,7 @@ import {
   consumeInitialNotificationResponse,
   type ForegroundTaskNotification,
   registerForPushNotificationsAsync,
+  subscribeLocalNotifications,
   subscribeToNotificationEvents,
   subscribeToPushTokenRefresh,
 } from './lib/notifications';
@@ -29,32 +30,15 @@ const theme = {
   ...MD3LightTheme,
   colors: {
     ...MD3LightTheme.colors,
-    primary: '#0F766E',
-    onPrimary: '#ffffff',
-    primaryContainer: '#CCFBF1',
-    onPrimaryContainer: '#00201c',
-    secondary: '#2563EB',
-    onSecondary: '#ffffff',
-    secondaryContainer: '#DBEAFE',
-    onSecondaryContainer: '#172554',
-    tertiary: '#F59E0B',
-    onTertiary: '#ffffff',
-    tertiaryContainer: '#FEF3C7',
-    onTertiaryContainer: '#451A03',
-    background: '#F6F8FA',
-    onBackground: '#111827',
-    surface: '#ffffff',
-    onSurface: '#111827',
-    surfaceVariant: '#F3F4F6',
-    onSurfaceVariant: '#6B7280',
-    error: '#DC2626',
-    onError: '#ffffff',
-    outline: '#E5E7EB',
+    primary: '#B5121B',
+    secondary: '#D97706',
+    error: '#B5121B',
+    background: '#F9FAFB',
+    surface: '#FFFFFF',
   },
-  roundness: 5,
 };
 
-function NotificationLifecycle(): React.JSX.Element | null {
+function NotificationLifecycle(): React.JSX.Element {
   const { user } = useAuth();
   const [banner, setBanner] = useState<ForegroundTaskNotification | null>(null);
 
@@ -67,13 +51,19 @@ function NotificationLifecycle(): React.JSX.Element | null {
       }
     };
 
-    const unsubscribe = subscribeToNotificationEvents({
+    const unsubscribeFirebase = subscribeToNotificationEvents({
       onForegroundMessage: setBanner,
       onTaskSelected: handleTaskSelection,
     });
+    const unsubscribeLocal = subscribeLocalNotifications((notification) => {
+      setBanner(notification);
+    });
     void consumeInitialNotificationResponse(handleTaskSelection);
 
-    return unsubscribe;
+    return () => {
+      unsubscribeFirebase();
+      unsubscribeLocal();
+    };
   }, [user]);
 
   useEffect(() => {

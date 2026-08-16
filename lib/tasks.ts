@@ -117,6 +117,85 @@ export function formatTaskTrigger(triggerType: TaskTriggerType): string {
   return 'Manual';
 }
 
+export const HARDWARE_FAILURE_COMPONENTS = [
+  'pump',
+  'water_leak',
+  'sensor_ultrasonic',
+  'servo_lid',
+  'waterflow',
+  'water_flow',
+  'connectivity',
+  'flush_valve',
+  'urinal_sensor',
+  'pipe',
+  'faucet',
+] as const;
+
+export const COMPONENT_LABELS: Record<string, string> = {
+  pump: 'Water Pump',
+  water_leak: 'Water Leak Detector',
+  leak: 'Water Leak Detector',
+  sensor_ultrasonic: 'Ultrasonic Distance Sensor',
+  ultrasonic: 'Ultrasonic Distance Sensor',
+  servo_lid: 'Servo Lid Mechanism',
+  servo: 'Servo Lid Mechanism',
+  waterflow: 'Water Flow Sensor',
+  water_flow: 'Water Flow Sensor',
+  connectivity: 'Device Connectivity',
+  offline: 'Device Connectivity',
+  flush_valve: 'Flush Valve',
+  valve: 'Flush Valve',
+  faucet: 'Faucet',
+  toilet_bowl: 'Toilet Bowl',
+  pipe: 'Plumbing Pipe',
+  soap_dispenser: 'Soap Dispenser',
+  urinal_sensor: 'Urinal Sensor',
+  sanitary_bin: 'Sanitary Bin',
+  grab_bar_and_sink: 'Grab Bar & Sink',
+  mirror: 'Mirror',
+  floor: 'Restroom Floor',
+  uv_light: 'UV Disinfection Light',
+  maintenance: 'General Maintenance',
+  cleaning: 'General Cleaning',
+};
+
+export function isHardwareFailureComponent(component: unknown): boolean {
+  if (typeof component !== 'string') {
+    return false;
+  }
+  const normalized = component.trim().toLowerCase();
+  return (
+    HARDWARE_FAILURE_COMPONENTS.includes(
+      normalized as (typeof HARDWARE_FAILURE_COMPONENTS)[number],
+    ) ||
+    normalized.includes('pump') ||
+    normalized.includes('leak') ||
+    normalized.includes('ultrasonic') ||
+    normalized.includes('servo') ||
+    normalized.includes('flow') ||
+    normalized.includes('connectivity') ||
+    normalized.includes('valve') ||
+    normalized.includes('sensor')
+  );
+}
+
+export function formatTaskComponent(component: unknown): string {
+  if (typeof component !== 'string' || !component.trim()) {
+    return 'General Maintenance';
+  }
+
+  const normalized = component.trim().toLowerCase();
+  if (COMPONENT_LABELS[normalized]) {
+    return COMPONENT_LABELS[normalized];
+  }
+
+  return normalized
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 export const CHECKLIST_LABELS: Array<{
   key: keyof TaskChecklist;
   label: string;

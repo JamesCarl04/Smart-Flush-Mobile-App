@@ -1,4 +1,5 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { getFocusedRouteNameFromRoute } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useTheme } from 'react-native-paper';
@@ -39,20 +40,19 @@ const sharedHeaderOptions = {
   },
   headerShadowVisible: false,
   headerStyle: {
-    backgroundColor: '#ffffff',
+    backgroundColor: '#FFFFFF',
   },
   headerTitleStyle: {
-    color: '#111827',
+    color: '#222222',
     fontSize: 18,
-    fontWeight: '800',
+    fontWeight: '800' as const,
   },
+  headerTintColor: '#B5121B',
 } as const;
 
 function InboxStackNavigator(): React.JSX.Element {
   return (
-    <InboxStack.Navigator
-      screenOptions={sharedHeaderOptions}
-    >
+    <InboxStack.Navigator screenOptions={sharedHeaderOptions}>
       <InboxStack.Screen
         name="InboxHome"
         component={InboxScreen}
@@ -61,7 +61,7 @@ function InboxStackNavigator(): React.JSX.Element {
       <InboxStack.Screen
         name="TaskDetail"
         component={TaskDetailScreen}
-        options={{ title: 'Task details' }}
+        options={{ title: 'Task Details', headerRight: () => null }}
       />
     </InboxStack.Navigator>
   );
@@ -69,9 +69,7 @@ function InboxStackNavigator(): React.JSX.Element {
 
 function HistoryStackNavigator(): React.JSX.Element {
   return (
-    <HistoryStack.Navigator
-      screenOptions={sharedHeaderOptions}
-    >
+    <HistoryStack.Navigator screenOptions={sharedHeaderOptions}>
       <HistoryStack.Screen
         name="HistoryHome"
         component={HistoryScreen}
@@ -80,7 +78,7 @@ function HistoryStackNavigator(): React.JSX.Element {
       <HistoryStack.Screen
         name="TaskDetail"
         component={TaskDetailScreen}
-        options={{ title: 'Task details' }}
+        options={{ title: 'Task Details', headerRight: () => null }}
       />
     </HistoryStack.Navigator>
   );
@@ -92,7 +90,12 @@ function TaskStackNavigator(): React.JSX.Element {
       <TaskStack.Screen
         name="ActiveTask"
         component={ActiveTaskScreen}
-        options={{ title: 'Task Detail' }}
+        options={{ title: 'Active Task' }}
+      />
+      <TaskStack.Screen
+        name="TaskDetail"
+        component={TaskDetailScreen}
+        options={{ title: 'Task Details', headerRight: () => null }}
       />
     </TaskStack.Navigator>
   );
@@ -114,12 +117,12 @@ function SupervisorStackNavigator(): React.JSX.Element {
       <SupervisorStack.Screen
         name="SupervisorTasks"
         component={SupervisorTasksScreen}
-        options={{ title: 'Task Management' }}
+        options={{ title: 'All Tasks' }}
       />
       <SupervisorStack.Screen
         name="SupervisorTaskDetail"
         component={SupervisorTaskDetailScreen}
-        options={{ title: 'Task Details' }}
+        options={{ title: 'Task Review', headerRight: () => null }}
       />
       <SupervisorStack.Screen
         name="CompletedReviews"
@@ -129,7 +132,7 @@ function SupervisorStackNavigator(): React.JSX.Element {
       <SupervisorStack.Screen
         name="CompletedReviewDetail"
         component={CompletedReviewDetailScreen}
-        options={{ title: 'Review Details' }}
+        options={{ title: 'Review Details', headerRight: () => null }}
       />
     </SupervisorStack.Navigator>
   );
@@ -146,44 +149,54 @@ export function MainNavigator(): React.JSX.Element {
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.onSurfaceVariant,
-        tabBarStyle: {
-          height: 76,
-          paddingBottom: 12,
-          paddingTop: 9,
-          backgroundColor: '#FFFFFF',
-          borderTopColor: '#E5E7EB',
-          borderTopWidth: 1,
-          shadowColor: '#0F172A',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.06,
-          shadowRadius: 10,
-          elevation: 10,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '800',
-        },
-        tabBarIcon: ({ color, size }) => {
-          const iconName =
-            route.name === 'InboxTab'
-              ? 'bell-outline'
-              : route.name === 'TaskTab'
-                ? 'clipboard-text-outline'
-                : 'clock-outline';
+      screenOptions={({ route }) => {
+        const routeName = getFocusedRouteNameFromRoute(route);
+        const hideTabBar =
+          routeName === 'TaskDetail' ||
+          routeName === 'SupervisorTaskDetail' ||
+          routeName === 'CompletedReviewDetail';
 
-          return (
-            <MaterialCommunityIcons
-              name={iconName}
-              size={size}
-              color={color}
-            />
-          );
-        },
-      })}
+        return {
+          headerShown: false,
+          tabBarActiveTintColor: '#B5121B',
+          tabBarInactiveTintColor: '#757575',
+          tabBarStyle: {
+            display: hideTabBar ? 'none' : 'flex',
+            height: 74,
+            paddingBottom: 12,
+            paddingTop: 8,
+            backgroundColor: '#FFFFFF',
+            borderTopColor: '#E5E5E5',
+            borderTopWidth: 1,
+            shadowColor: '#222222',
+            shadowOffset: { width: 0, height: -4 },
+            shadowOpacity: 0.08,
+            shadowRadius: 12,
+            elevation: 10,
+          },
+          tabBarLabelStyle: {
+            fontSize: 12,
+            fontWeight: '700',
+            letterSpacing: 0.2,
+          },
+          tabBarIcon: ({ color, focused }) => {
+            const iconName =
+              route.name === 'InboxTab'
+                ? (focused ? 'bell' : 'bell-outline')
+                : route.name === 'TaskTab'
+                  ? (focused ? 'clipboard-text' : 'clipboard-text-outline')
+                  : (focused ? 'clock-check' : 'clock-check-outline');
+
+            return (
+              <MaterialCommunityIcons
+                name={iconName}
+                size={24}
+                color={color}
+              />
+            );
+          },
+        };
+      }}
     >
       <Tab.Screen
         name="InboxTab"
@@ -194,6 +207,8 @@ export function MainNavigator(): React.JSX.Element {
           tabBarBadgeStyle: {
             backgroundColor: theme.colors.error,
             color: theme.colors.onError,
+            fontSize: 11,
+            fontWeight: '800',
           },
         }}
       />
@@ -201,11 +216,13 @@ export function MainNavigator(): React.JSX.Element {
         name="TaskTab"
         component={TaskStackNavigator}
         options={{
-          title: 'Task Detail',
+          title: 'Active Task',
           tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
           tabBarBadgeStyle: {
             backgroundColor: theme.colors.error,
             color: theme.colors.onError,
+            fontSize: 11,
+            fontWeight: '800',
           },
         }}
       />

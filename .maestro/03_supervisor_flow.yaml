@@ -1,0 +1,61 @@
+appId: com.james.klir
+---
+- launchApp:
+    clearState: true
+
+# 1. Supervisor Login
+- assertVisible: "Sign in"
+- tapOn: "Email"
+- inputText: "supervisor@smartflush.com"
+- hideKeyboard
+- tapOn: "Password"
+- inputText: "SupervisorPass123"
+- hideKeyboard
+- tapOn: "Sign in"
+
+# 2. Inspect Supervisor Dashboard Operational Counters
+- assertVisible: "Total active tasks today"
+- assertVisible: "Maintenance personnel"
+- assertVisible: "Unassigned tasks"
+- assertVisible: "Manage Tasks"
+- assertVisible: "Team Availability"
+- assertVisible: "Review Completed Tasks"
+
+# 3. View Team Availability
+- tapOn: "Team Availability"
+- assertVisible: ".*(Available|On Task|Offline).*"
+- back
+
+# 4. Identify & Reassign Task
+- tapOn: "Manage Tasks"
+- tapOn:
+    text: "Unassigned"
+    optional: true
+- tapOn:
+    text: "Assigned"
+    optional: true
+
+# Select staff member from radio list and submit reassignment
+- assertVisible: "Available maintenance"
+- tapOn:
+    index: 0
+    optional: true
+- tapOn: "Reason"
+- eraseText
+- inputText: "Urgent sanitation bottleneck reassigned for rapid response."
+- hideKeyboard
+
+- tapOn: "Reassign"
+- assertVisible: ".*(Task reassigned|Manage Tasks).*"
+- back
+
+# 5. Review Completed Proof & Ratings
+- tapOn: "Review Completed Tasks"
+- tapOn:
+    index: 0
+    optional: true
+
+- assertVisible: "Checklist"
+- assertVisible: "Remarks:"
+- assertVisible: "Work duration:"
+- assertVisible: "Flag for Re-inspection"
