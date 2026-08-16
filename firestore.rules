@@ -1,10 +1,114 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read and write access to all collections for Smart Flush app
-    match /{document=**} {
-      allow read, write: if true;
+    // ── Helper Functions ──────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function currentUserRole() {
+      return isAuthenticated()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isAdmin() {
+      return currentUserRole() == 'admin';
+    }
+
+    function isSupervisor() {
+      return currentUserRole() == 'supervisor';
+    }
+
+    function isMaintenance() {
+      return currentUserRole() == 'maintenance';
+    }
+
+    function isStaff() {
+      return isAdmin() || isSupervisor() || isMaintenance();
+    }
+
+    // ── Users & FCM Push Tokens ──────────────────────────────────
+    match /users/{userId} {
+      // Supervisors need to read team availability for work order assignments
+      allow read: if isSelf(userId) || isSupervisor() || isAdmin();
+      allow create: if isSelf(userId) || isAdmin();
+      allow update: if isAdmin()
+        || (
+          isSelf(userId)
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
+        );
+      allow delete: if isAdmin();
+
+      match /fcmToken/{tokenId} {
+        allow read, write: if isSelf(userId) || isAdmin();
+      }
+    }
+
+    // ── Work Orders & Maintenance Tasks ──────────────────────────
+    match /tasks/{taskId} {
+      allow read: if isAuthenticated();
+      // Admins and supervisors can create tasks; maintenance can log on-site work orders
+      allow create: if isStaff();
+      // Maintenance can acknowledge/complete; supervisors can reassign/flag; admins manage all
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
+    // ── Maintenance Notes & Shift Logs ───────────────────────────
+    match /maintenanceNotes/{noteId} {
+      allow read: if isStaff();
+      allow create: if isAuthenticated() && currentUserRole() != 'viewer';
+      allow update, delete: if isAdmin();
+    }
+
+    // ── IoT Devices & Hardware Telemetry ─────────────────────────
+    match /devices/{deviceId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+
+      match /maintenanceCounters/{counterId} {
+        allow read, write: if isStaff();
+      }
+    }
+
+    match /sensorReadings/{date}/readings/{readingId} {
+      allow read: if isAuthenticated();
+      allow write: if false; // Ingested via backend service account
+    }
+
+    match /alerts/{alertId} {
+      allow read: if isAuthenticated();
+      allow write: if isStaff();
+    }
+
+    match /automationRules/{ruleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() || isSupervisor();
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isSupervisor() || isAdmin());
+      allow write: if false;
+    }
+
+    match /flushEvents/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /lidEvents/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
+    match /uvCycles/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
   }
 }
