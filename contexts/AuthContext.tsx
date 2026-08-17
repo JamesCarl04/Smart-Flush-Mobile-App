@@ -4,7 +4,7 @@ import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
 
 import { getRequiredConfigValue, runtimeConfig } from '../lib/config';
 import { auth } from '../lib/firebase';
-import type { AuthContextValue, AuthUser } from '../types';
+import type { AuthContextValue, AuthUser, UserRole } from '../types';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 interface ProfileResponse {
@@ -56,28 +56,30 @@ async function verifyUserProfile(
     throw new Error(payload?.error ?? 'Unable to verify your account.');
   }
 
-  if (
-    payload.data?.role !== 'maintenance' &&
-    payload.data?.role !== 'supervisor'
-  ) {
+  const roleString =
+    typeof payload.data?.role === 'string'
+      ? payload.data.role.trim().toLowerCase()
+      : null;
+
+  if (roleString !== 'maintenance' && roleString !== 'supervisor') {
     throw new Error('Access denied. This app is for maintenance and supervisor accounts only.');
   }
 
   return {
     uid: firebaseUser.uid,
     email:
-      typeof payload.data.email === 'string'
+      typeof payload.data?.email === 'string'
         ? payload.data.email
         : firebaseUser.email ?? '',
-    role: payload.data.role,
+    role: roleString as UserRole,
     name:
-      typeof payload.data.name === 'string'
+      typeof payload.data?.name === 'string'
         ? payload.data.name
-        : typeof payload.data.displayName === 'string'
+        : typeof payload.data?.displayName === 'string'
           ? payload.data.displayName
           : firebaseUser.displayName ?? firebaseUser.email ?? '',
     building:
-      typeof payload.data.building === 'string' ? payload.data.building : null,
+      typeof payload.data?.building === 'string' ? payload.data.building : null,
   };
 }
 
