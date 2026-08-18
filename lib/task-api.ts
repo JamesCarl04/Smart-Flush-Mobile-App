@@ -123,7 +123,8 @@ function parseTaskApiData(data: TaskApiData): Task | null {
           ? data.restroomName
           : data.deviceId,
     floor: typeof data.floor === 'string' ? data.floor : 'Ground',
-    building: typeof data.building === 'string' ? data.building : 'GB3',
+    building:
+      typeof data.building === 'string' ? data.building : 'SDCA Annex Building',
     shift: data.shift === '2nd' ? '2nd' : '1st',
     triggerType: data.triggerType,
     message: data.message,

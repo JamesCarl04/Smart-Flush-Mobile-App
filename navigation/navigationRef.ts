@@ -10,7 +10,7 @@ function queueTaskNavigation(taskId: string): void {
   pendingTaskId = taskId;
 }
 
-function flushPendingTaskNavigation(): void {
+function flushPendingTaskNavigation(userRole?: string | null): void {
   if (!pendingTaskId || !navigationRef.isReady()) {
     return;
   }
@@ -18,13 +18,20 @@ function flushPendingTaskNavigation(): void {
   const taskId = pendingTaskId;
   pendingTaskId = null;
 
-  navigationRef.navigate('Main', {
-    screen: 'InboxTab',
-    params: {
-      screen: 'TaskDetail',
+  if (userRole === 'supervisor') {
+    navigationRef.navigate('Main', {
+      screen: 'SupervisorTaskDetail',
       params: { taskId },
-    },
-  });
+    } as never);
+  } else {
+    navigationRef.navigate('Main', {
+      screen: 'InboxTab',
+      params: {
+        screen: 'TaskDetail',
+        params: { taskId },
+      },
+    } as never);
+  }
 }
 
 export { navigationRef, queueTaskNavigation, flushPendingTaskNavigation };

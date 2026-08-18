@@ -39,7 +39,7 @@ const theme = {
 };
 
 function NotificationLifecycle(): React.JSX.Element {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [banner, setBanner] = useState<ForegroundTaskNotification | null>(null);
 
   useEffect(() => {
@@ -47,7 +47,7 @@ function NotificationLifecycle(): React.JSX.Element {
       queueTaskNavigation(taskId);
 
       if (user) {
-        flushPendingTaskNavigation();
+        flushPendingTaskNavigation(role);
       }
     };
 
@@ -64,7 +64,7 @@ function NotificationLifecycle(): React.JSX.Element {
       unsubscribeFirebase();
       unsubscribeLocal();
     };
-  }, [user]);
+  }, [role, user]);
 
   useEffect(() => {
     if (!user) {
@@ -97,7 +97,7 @@ function NotificationLifecycle(): React.JSX.Element {
         }
 
         if (registration.permissionsGranted) {
-          flushPendingTaskNavigation();
+          flushPendingTaskNavigation(role);
           return;
         }
 
@@ -121,13 +121,13 @@ function NotificationLifecycle(): React.JSX.Element {
       isMounted = false;
       unsubscribeTokenRefresh();
     };
-  }, [user]);
+  }, [role, user]);
 
   useEffect(() => {
     if (user) {
-      flushPendingTaskNavigation();
+      flushPendingTaskNavigation(role);
     }
-  }, [user]);
+  }, [role, user]);
 
   const openBannerTask = (): void => {
     const taskId = banner?.taskId;
@@ -135,7 +135,7 @@ function NotificationLifecycle(): React.JSX.Element {
 
     if (taskId) {
       queueTaskNavigation(taskId);
-      flushPendingTaskNavigation();
+      flushPendingTaskNavigation(role);
     }
   };
 

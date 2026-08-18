@@ -177,7 +177,9 @@ export function SupervisorDashboardScreen({
           <View style={styles.rowBetween}>
             <View style={styles.headerTitleGroup}>
               <Text style={styles.facilitySubtitle}>
-                {user?.building ? `${user.building} Command Hub` : 'Facility Operations Hub'}
+                {user?.building
+                  ? `${user.building} Command Hub`
+                  : 'SDCA Annex Command Hub'}
               </Text>
               <Text style={styles.facilityLeadName}>
                 {user?.name || 'Lead Supervisor'}

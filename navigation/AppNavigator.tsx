@@ -15,13 +15,13 @@ import {
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 export function AppNavigator(): React.JSX.Element {
-  const { loading, user } = useAuth();
+  const { loading, user, role } = useAuth();
 
   useEffect(() => {
     if (user) {
-      flushPendingTaskNavigation();
+      flushPendingTaskNavigation(role);
     }
-  }, [user]);
+  }, [role, user]);
 
   if (loading) {
     return <AppStartupSkeleton />;
@@ -32,7 +32,7 @@ export function AppNavigator(): React.JSX.Element {
       ref={navigationRef}
       onReady={() => {
         if (user) {
-          flushPendingTaskNavigation();
+          flushPendingTaskNavigation(role);
         }
       }}
     >

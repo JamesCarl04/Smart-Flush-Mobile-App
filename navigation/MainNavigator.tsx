@@ -143,7 +143,7 @@ export function MainNavigator(): React.JSX.Element {
   const { role } = useAuth();
   const { pendingCount } = useTasks();
 
-  if (role === 'supervisor') {
+  if (role !== 'maintenance') {
     return <SupervisorStackNavigator />;
   }
 
