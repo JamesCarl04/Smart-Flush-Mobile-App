@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
   useCallback,
@@ -26,6 +27,25 @@ export interface SupervisorContextValue {
   clearError: () => void;
 }
 
+const SUPERVISOR_TASKS_CACHE_KEY = '@klir:supervisor_tasks';
+const SUPERVISOR_PEOPLE_CACHE_KEY = '@klir:supervisor_people';
+
+function hydrateCachedTask(raw: any): Task {
+  return {
+    ...raw,
+    createdAt: new Date(raw.createdAt),
+    assignedAt: raw.assignedAt ? new Date(raw.assignedAt) : null,
+    acknowledgedAt: raw.acknowledgedAt ? new Date(raw.acknowledgedAt) : null,
+    completedAt: raw.completedAt ? new Date(raw.completedAt) : null,
+    beforePhotoCapturedAt: raw.beforePhotoCapturedAt
+      ? new Date(raw.beforePhotoCapturedAt)
+      : null,
+    afterPhotoCapturedAt: raw.afterPhotoCapturedAt
+      ? new Date(raw.afterPhotoCapturedAt)
+      : null,
+  };
+}
+
 const SupervisorContext = createContext<SupervisorContextValue | undefined>(
   undefined,
 );
@@ -38,6 +58,51 @@ export function SupervisorProvider({
   const [people, setPeople] = useState<MaintenancePerson[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // 1. Instant Cache Hydration on initial mount (0ms)
+  useEffect(() => {
+    let isMounted = true;
+    void (async () => {
+      try {
+        const [cachedTasksStr, cachedPeopleStr] = await Promise.all([
+          AsyncStorage.getItem(SUPERVISOR_TASKS_CACHE_KEY),
+          AsyncStorage.getItem(SUPERVISOR_PEOPLE_CACHE_KEY),
+        ]);
+
+        if (!isMounted) return;
+
+        if (cachedTasksStr) {
+          const parsed = JSON.parse(cachedTasksStr);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTasks(parsed.map(hydrateCachedTask));
+            setLoading(false);
+          }
+        }
+
+        if (cachedPeopleStr) {
+          const parsed = JSON.parse(cachedPeopleStr);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setPeople(parsed);
+          }
+        }
+      } catch (err) {
+        console.warn('[SupervisorContext] Cache hydration warning:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const saveCache = useCallback((nextTasks: Task[], nextPeople: MaintenancePerson[]) => {
+    try {
+      void AsyncStorage.setItem(SUPERVISOR_TASKS_CACHE_KEY, JSON.stringify(nextTasks));
+      void AsyncStorage.setItem(SUPERVISOR_PEOPLE_CACHE_KEY, JSON.stringify(nextPeople));
+    } catch {
+      // ignore cache write failures
+    }
+  }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
     if (!user || role !== 'supervisor') {
@@ -54,6 +119,7 @@ export function SupervisorProvider({
       ]);
       setTasks(nextTasks);
       setPeople(nextPeople);
+      saveCache(nextTasks, nextPeople);
       setError(null);
     } catch (caught) {
       setError(
@@ -64,7 +130,7 @@ export function SupervisorProvider({
     } finally {
       setLoading(false);
     }
-  }, [role, user]);
+  }, [role, saveCache, user]);
 
   useEffect(() => {
     if (!user || role !== 'supervisor') {
@@ -93,9 +159,11 @@ export function SupervisorProvider({
                   .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
                 setTasks(parsed);
                 setLoading(false);
+                void AsyncStorage.setItem(SUPERVISOR_TASKS_CACHE_KEY, JSON.stringify(parsed));
               } else if (snapshot && snapshot.empty) {
                 setTasks([]);
                 setLoading(false);
+                void AsyncStorage.setItem(SUPERVISOR_TASKS_CACHE_KEY, JSON.stringify([]));
               }
             },
             (err) => {
@@ -151,6 +219,7 @@ export function SupervisorProvider({
                     (person): person is MaintenancePerson => person !== null,
                   );
                 setPeople(mappedPeople);
+                void AsyncStorage.setItem(SUPERVISOR_PEOPLE_CACHE_KEY, JSON.stringify(mappedPeople));
               }
             },
             (err) => {

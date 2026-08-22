@@ -117,15 +117,49 @@ export function SupervisorDashboardScreen({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const activeToday = tasks.filter(
-    (task) => task.createdAt >= today && task.status !== 'completed',
-  );
-  const available = people.filter((person) => person.isAvailable).length;
-  const onTask = people.filter((person) => person.currentTaskId).length;
-  const offline = Math.max(0, people.length - available - onTask);
-  const unassigned = activeToday.filter(
-    (task) => task.status === 'unassigned' || !task.assignedTo,
-  ).length;
+  const activeToday = useMemo(() => {
+    return tasks.filter(
+      (task) => task.createdAt >= today && task.status !== 'completed',
+    );
+  }, [tasks, today]);
+
+  const unassigned = useMemo(() => {
+    return activeToday.filter(
+      (task) => task.status === 'unassigned' || !task.assignedTo,
+    ).length;
+  }, [activeToday]);
+
+  const staffStats = useMemo(() => {
+    let onTaskCount = 0;
+    let availableCount = 0;
+    let offlineCount = 0;
+
+    for (const person of people) {
+      const hasActiveTask = tasks.some(
+        (task) =>
+          task.status !== 'completed' &&
+          (task.id === person.currentTaskId ||
+            task.assignedTo === person.id ||
+            task.assignedTo === person.email),
+      );
+
+      if (hasActiveTask || Boolean(person.currentTaskId)) {
+        onTaskCount++;
+      } else if (person.isAvailable) {
+        availableCount++;
+      } else {
+        offlineCount++;
+      }
+    }
+
+    return {
+      onTask: onTaskCount,
+      available: availableCount,
+      offline: offlineCount,
+    };
+  }, [people, tasks]);
+
+  const isColdLoading = loading && tasks.length === 0;
 
   return (
     <View style={styles.screen}>
@@ -179,7 +213,7 @@ export function SupervisorDashboardScreen({
                 </Text>
               </View>
               <Text variant="displaySmall" style={styles.metricBigNumber}>
-                {activeToday.length}
+                {isColdLoading ? '—' : activeToday.length}
               </Text>
               <Text style={styles.metricFooterText}>Active in facility</Text>
             </Card.Content>
@@ -212,7 +246,7 @@ export function SupervisorDashboardScreen({
                 variant="displaySmall"
                 style={[styles.metricBigNumber, unassigned > 0 && styles.urgentMetricNumber]}
               >
-                {unassigned}
+                {isColdLoading ? '—' : unassigned}
               </Text>
               <Text style={styles.metricFooterText}>
                 {unassigned > 0 ? 'Needs immediate dispatch' : 'All alerts assigned'}
@@ -239,22 +273,24 @@ export function SupervisorDashboardScreen({
                 </View>
               </View>
               <Text variant="titleLarge" style={styles.teamSummaryText}>
-                {available} available, {onTask} on task, {offline} offline
+                {isColdLoading && people.length === 0
+                  ? 'Syncing team...'
+                  : `${staffStats.available} available, ${staffStats.onTask} on task, ${staffStats.offline} offline`}
               </Text>
               <View style={styles.teamPillRow}>
                 <View style={[styles.teamBadge, { backgroundColor: KLIR_COLORS.softGreen }]}>
                   <Text style={[styles.teamBadgeText, { color: KLIR_COLORS.successText }]}>
-                    ● {available} Available
+                    ● {isColdLoading && people.length === 0 ? '—' : staffStats.available} Available
                   </Text>
                 </View>
                 <View style={[styles.teamBadge, { backgroundColor: KLIR_COLORS.softRed }]}>
                   <Text style={[styles.teamBadgeText, { color: KLIR_COLORS.dangerText }]}>
-                    ● {onTask} On Task
+                    ● {isColdLoading && people.length === 0 ? '—' : staffStats.onTask} On Task
                   </Text>
                 </View>
                 <View style={[styles.teamBadge, { backgroundColor: KLIR_COLORS.softYellow }]}>
                   <Text style={[styles.teamBadgeText, { color: KLIR_COLORS.warningText }]}>
-                    ● {offline} Offline
+                    ● {isColdLoading && people.length === 0 ? '—' : staffStats.offline} Offline
                   </Text>
                 </View>
               </View>
