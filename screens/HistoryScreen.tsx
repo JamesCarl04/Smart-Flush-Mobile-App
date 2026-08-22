@@ -6,8 +6,10 @@ import { Card, Divider, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import {
   EmptyOperationState,
+  KLIR_RADII,
   MetaPill,
   OperationBadge,
+  SegmentedFilterControl,
   UI_COLORS,
   getComponentMeta,
   sharedShadow,
@@ -57,6 +59,8 @@ function EmptyState(): React.JSX.Element {
           name="clipboard-check-multiple-outline"
           size={32}
           color={UI_COLORS.primary}
+          accessibilityElementsHidden={true}
+          importantForAccessibility="no"
         />
       </View>
       <Text style={styles.emptyTitle}>
@@ -177,40 +181,16 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
               style={styles.searchInput}
             />
 
-            {/* Range Filter Pills */}
-            <View style={styles.filterRow}>
-              {(
-                [
-                  { id: 'today', label: 'Today' },
-                  { id: 'week', label: '7 days' },
-                  { id: 'all', label: 'All' },
-                ] as const
-              ).map((range) => {
-                const isActive = selectedRange === range.id;
-                return (
-                  <TouchableOpacity
-                    key={range.id}
-                    onPress={() => setSelectedRange(range.id)}
-                    style={[
-                      styles.filterPill,
-                      isActive ? styles.filterPillActive : styles.filterPillInactive,
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.filterPillText,
-                        isActive
-                          ? styles.filterPillTextActive
-                          : styles.filterPillTextInactive,
-                      ]}
-                    >
-                      {range.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* Range Filter Segmented Control */}
+            <SegmentedFilterControl<HistoryRange>
+              items={[
+                { key: 'today', label: 'Today' },
+                { key: 'week', label: '7 days' },
+                { key: 'all', label: 'All' },
+              ]}
+              activeKey={selectedRange}
+              onChange={setSelectedRange}
+            />
           </View>
         }
         ListEmptyComponent={!loading ? <EmptyState /> : null}
@@ -361,7 +341,7 @@ const styles = StyleSheet.create({
   },
   metricCard: {
     flex: 1,
-    borderRadius: 16,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -397,9 +377,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterPill: {
-    minHeight: 38,
-    paddingHorizontal: 16,
-    borderRadius: 999,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: KLIR_RADII.chip,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -413,7 +393,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   filterPillText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   filterPillTextActive: {
     color: '#FFFFFF',
@@ -431,10 +411,12 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emptyIconContainer: {
-    width: 60,
-    height: 60,
-    borderRadius: 20,
-    backgroundColor: '#FEF9E7',
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,
@@ -453,7 +435,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
   taskCard: {
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -477,20 +459,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   biometricBadge: {
+    minHeight: 26,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: UI_COLORS.softGreen,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
     borderColor: '#BBF7D0',
   },
   biometricBadgeText: {
     fontSize: 11,
     fontWeight: '800',
-    color: UI_COLORS.success,
+    color: UI_COLORS.successText,
   },
   titleBlock: {
     gap: 4,
@@ -523,8 +506,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     padding: 10,
-    borderRadius: 14,
-    backgroundColor: UI_COLORS.softGray,
+    borderRadius: KLIR_RADII.chip,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   previewThumbWrapper: {
     flex: 1,
@@ -539,13 +524,13 @@ const styles = StyleSheet.create({
   previewThumbnail: {
     width: '100%',
     height: 76,
-    borderRadius: 10,
+    borderRadius: 6,
     backgroundColor: '#E5E5E5',
   },
   previewThumbEmpty: {
     width: '100%',
     height: 76,
-    borderRadius: 10,
+    borderRadius: 6,
     backgroundColor: '#E5E5E5',
     alignItems: 'center',
     justifyContent: 'center',

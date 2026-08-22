@@ -180,13 +180,14 @@ export const DESIGN_3_TOKENS = {
     huge: 40,
   },
 
-  // 2. Radii
+  // 2. Radii (Industrial Precision Standard)
   radii: {
-    sm: 6,
-    md: 10,
-    lg: 14,
-    sheet: 24,
-    pill: 999,
+    sm: 4,
+    tag: 6,
+    chip: 8,
+    input: 10,
+    card: 14,
+    sheet: 20,
   },
 
   // 3. Typography Scale
@@ -670,7 +671,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEE2E2',
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#FECACA',
     gap: 4,
   },
   alertText: {

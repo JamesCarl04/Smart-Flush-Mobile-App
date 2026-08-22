@@ -6,10 +6,12 @@ import { Button, Card, Divider, Snackbar, Text } from 'react-native-paper';
 
 import {
   EmptyOperationState,
+  KLIR_RADII,
   MetaPill,
   OperationBadge,
   UI_COLORS,
   getComponentMeta,
+  getTaskDisplayTone,
   sharedShadow,
   statusTone,
 } from '../components/MaintenanceUI';
@@ -19,7 +21,12 @@ import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
-import { formatTaskComponent, formatTaskStatus, formatTaskTrigger } from '../lib/tasks';
+import {
+  formatTaskComponent,
+  formatTaskStatus,
+  formatTaskTrigger,
+  getTaskDisplayStatus,
+} from '../lib/tasks';
 import type { Task, TaskStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<TaskStackParamList, 'ActiveTask'>;
@@ -76,7 +83,7 @@ function EmptyTaskPanel(): React.JSX.Element {
       <EmptyOperationState
         icon="clipboard-text-search-outline"
         title="No active task"
-        body="No restroom work order needs your attention right now. New assigned tasks will appear in your Inbox."
+        body="No tasks need your attention right now. New assigned tasks will appear in your Inbox."
       />
     </View>
   );
@@ -150,14 +157,16 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
             {/* Top Row: Single Status Badge + Shift Pill */}
             <View style={styles.headerTopRow}>
               <OperationBadge
-                label={formatTaskStatus(activeTask.status)}
-                tone={statusTone(activeTask.status)}
+                label={getTaskDisplayStatus(activeTask)}
+                tone={getTaskDisplayTone(activeTask)}
               />
               <View style={styles.shiftPill}>
                 <MaterialCommunityIcons
                   name="clock-outline"
-                  size={13}
+                  size={12}
                   color={UI_COLORS.muted}
+                  accessibilityElementsHidden={true}
+                  importantForAccessibility="no"
                 />
                 <Text style={styles.shiftPillText}>
                   {`${activeTask.shift} Shift`}
@@ -181,8 +190,10 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
                 <MaterialCommunityIcons
                   name="clipboard-text-outline"
                   size={18}
-                  color={UI_COLORS.primary}
+                  color="#B45309"
                   style={styles.instructionIcon}
+                  accessibilityElementsHidden={true}
+                  importantForAccessibility="no"
                 />
                 <View style={styles.instructionTextWrapper}>
                   <Text style={styles.instructionLabel}>INSTRUCTION</Text>
@@ -282,7 +293,7 @@ const styles = StyleSheet.create({
     backgroundColor: UI_COLORS.background,
   },
   heroCard: {
-    borderRadius: 22,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -298,20 +309,21 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   shiftPill: {
+    minHeight: 26,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: UI_COLORS.softGray,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
+    borderColor: '#E2E8F0',
   },
   shiftPillText: {
     fontSize: 11,
     fontWeight: '700',
-    color: UI_COLORS.muted,
+    color: '#475569',
   },
   locationHeadline: {
     fontSize: 22,
@@ -331,10 +343,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 10,
     padding: 12,
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.chip,
     backgroundColor: '#FFFBEB',
     borderWidth: 1,
     borderColor: '#FDE68A',
+    borderLeftWidth: 4,
+    borderLeftColor: '#D97706',
   },
   instructionIcon: {
     marginTop: 2,
@@ -361,7 +375,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: '#B5121B',
     marginTop: 4,
   },
@@ -374,7 +388,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   detailCard: {
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,

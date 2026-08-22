@@ -199,13 +199,13 @@ describe('Supervisor Operations Flow E2E', () => {
     render(<App />);
 
     // Step 1 & 2: Supervisor logs in and views operational dashboard stats
-    expect(await screen.findByText('Total active tasks today', {}, { timeout: 15000 })).toBeTruthy();
-    expect(await screen.findByText('Maintenance personnel', {}, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText('Active Tasks', {}, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText('Team Availability', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('1 available, 1 on task, 0 offline', {}, { timeout: 15000 })).toBeTruthy();
-    expect(screen.getByText('Unassigned tasks')).toBeTruthy();
+    expect(screen.getByText('Unassigned')).toBeTruthy();
 
     // Step 3: Check Team Availability
-    const teamAvailabilityBtn = screen.getByRole('button', { name: 'Team Availability' });
+    const teamAvailabilityBtn = screen.getByRole('button', { name: 'Team' });
     fireEvent.press(teamAvailabilityBtn);
 
     expect(await screen.findByText('Carlos Tech', {}, { timeout: 15000 })).toBeTruthy();
@@ -217,9 +217,9 @@ describe('Supervisor Operations Flow E2E', () => {
   test('reassigns bottleneck task to available staff and reviews completed proof with flag action', async () => {
     render(<App />);
 
-    // Step 1: Click Manage Tasks from Dashboard
-    expect(await screen.findByText('Manage Tasks', {}, { timeout: 15000 })).toBeTruthy();
-    const manageTasksBtn = screen.getByRole('button', { name: 'Manage Tasks' });
+    // Step 1: Click Tasks from Dashboard
+    expect(await screen.findByText('Tasks', {}, { timeout: 15000 })).toBeTruthy();
+    const manageTasksBtn = screen.getByRole('button', { name: 'Tasks' });
     fireEvent.press(manageTasksBtn);
 
     // Step 2: Identifies unassigned task card and opens detail
@@ -228,7 +228,7 @@ describe('Supervisor Operations Flow E2E', () => {
     fireEvent.press(taskCard);
 
     // Step 3: Reassign to available staff member with reason
-    expect(await screen.findByText('Available maintenance', {}, { timeout: 15000 })).toBeTruthy();
+    expect(await screen.findByText('Select Team Member', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('Carlos Tech', {}, { timeout: 15000 })).toBeTruthy();
 
     // Select Carlos Tech
@@ -238,7 +238,7 @@ describe('Supervisor Operations Flow E2E', () => {
     const reasonInput = screen.getByDisplayValue('Manual reassignment');
     fireEvent.changeText(reasonInput, 'High-priority restroom overflow - reassigned to Carlos for immediate response');
 
-    const reassignBtn = screen.getByRole('button', { name: 'Reassign' });
+    const reassignBtn = screen.getByRole('button', { name: 'Reassign Task' });
     fireEvent.press(reassignBtn);
 
     // Verify Reassignment API call
@@ -260,9 +260,9 @@ describe('Supervisor Operations Flow E2E', () => {
   test('reviews completed inspection proof, checks duration and biometric flag', async () => {
     render(<App />);
 
-    // Step 1: Open Completed Reviews from Dashboard
-    expect(await screen.findByText('Review Completed Tasks', {}, { timeout: 15000 })).toBeTruthy();
-    const reviewBtn = screen.getByRole('button', { name: 'Review Completed Tasks' });
+    // Step 1: Open Completed Tasks from Dashboard
+    expect(await screen.findByText('Completed Tasks', {}, { timeout: 15000 })).toBeTruthy();
+    const reviewBtn = screen.getByRole('button', { name: 'Completed Tasks' });
     fireEvent.press(reviewBtn);
 
     // Step 2: Open completed task detail
@@ -272,10 +272,10 @@ describe('Supervisor Operations Flow E2E', () => {
 
     // Step 3: Verify proof details, work duration (30 min), biometric badge, checklist
     expect(await screen.findByText('Checklist', {}, { timeout: 15000 })).toBeTruthy();
-    expect(await screen.findByText('Remarks: Replaced optical sensor battery and fully sanitized area.', {}, { timeout: 15000 })).toBeTruthy();
-    expect(screen.getByText('Work duration: 30 min 0 sec')).toBeTruthy();
+    expect(await screen.findByText('Notes: Replaced optical sensor battery and fully sanitized area.', {}, { timeout: 15000 })).toBeTruthy();
+    expect(screen.getByText('Duration: 30 min 0 sec')).toBeTruthy();
     expect(screen.getByText('Completed by: worker-available-01')).toBeTruthy();
-    expect(screen.getByText('Biometric verified')).toBeTruthy();
+    expect(screen.getByText('Biometric Verified')).toBeTruthy();
 
     // Step 4: Open Flag Dialog & submit flag for re-inspection
     const flagBtn = screen.getByRole('button', { name: 'Flag for Re-inspection' });

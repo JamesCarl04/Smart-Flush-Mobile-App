@@ -7,10 +7,13 @@ import { Button, Card, Snackbar, Text } from 'react-native-paper';
 import {
   AssigneeAvatarCluster,
   EmptyOperationState,
+  KLIR_RADII,
   MetaPill,
   OperationBadge,
+  SegmentedFilterControl,
   UI_COLORS,
   getComponentMeta,
+  getTaskDisplayTone,
   getTaskPriority,
   sharedShadow,
   statusTone,
@@ -23,7 +26,7 @@ import { AuthContext } from '../contexts/AuthContext';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
-import { formatTaskStatus } from '../lib/tasks';
+import { formatTaskStatus, getTaskDisplayStatus } from '../lib/tasks';
 import type { InboxStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
@@ -181,9 +184,18 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 <View style={styles.onDutyDot} />
                 <Text style={styles.onDutyText}>On Duty</Text>
               </View>
-              <Text style={styles.shiftLabel}>
-                {user?.shift ?? '1st Shift'}
-              </Text>
+              <View style={styles.shiftPill}>
+                <MaterialCommunityIcons
+                  name="clock-time-four-outline"
+                  size={12}
+                  color={UI_COLORS.muted}
+                  accessibilityElementsHidden={true}
+                  importantForAccessibility="no"
+                />
+                <Text style={styles.shiftLabel}>
+                  {user?.shift ?? '1st Shift'}
+                </Text>
+              </View>
             </View>
 
             {/* Context Headline & Subtitle */}
@@ -192,7 +204,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 Today's Tasks
               </Text>
               <Text variant="bodyMedium" style={styles.headerDescription}>
-                Review assigned restroom alerts and open the next task that needs action.
+                Review assigned tasks and open the next job that needs action.
               </Text>
             </View>
 
@@ -205,6 +217,8 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                       name="clipboard-alert-outline"
                       size={18}
                       color="#B5121B"
+                      accessibilityElementsHidden={true}
+                      importantForAccessibility="no"
                     />
                     <Text style={styles.summaryLabel}>Pending</Text>
                   </View>
@@ -219,6 +233,8 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                       name="progress-clock"
                       size={18}
                       color="#C9A227"
+                      accessibilityElementsHidden={true}
+                      importantForAccessibility="no"
                     />
                     <Text style={styles.summaryLabel}>In Progress</Text>
                   </View>
@@ -244,8 +260,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                       <View style={styles.shiftPill}>
                         <MaterialCommunityIcons
                           name="clock-time-four-outline"
-                          size={13}
+                          size={12}
                           color="#666666"
+                          accessibilityElementsHidden={true}
+                          importantForAccessibility="no"
                         />
                         <Text style={styles.shiftPillText}>
                           {`${priorityTask.shift ?? '1st'} Shift`}
@@ -255,8 +273,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                     <View style={styles.priorityAlertTag}>
                       <MaterialCommunityIcons
                         name="alert-decagram"
-                        size={14}
+                        size={13}
                         color="#B5121B"
+                        accessibilityElementsHidden={true}
+                        importantForAccessibility="no"
                       />
                       <Text style={styles.priorityAlertTagText}>
                         {getTaskPriority(priorityTask) === 'critical' ? 'CRITICAL' : 'HIGH PRIORITY'}
@@ -302,43 +322,16 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
               </Card>
             ) : null}
 
-            {/* Filter Pills */}
-            <View style={styles.filterRow}>
-              {(
-                [
-                  { id: 'all', label: 'All' },
-                  { id: 'active', label: 'Active' },
-                  { id: 'acknowledged', label: 'Acknowledged' },
-                ] as const
-              ).map((filter) => {
-                const isActive = activeFilter === filter.id;
-                return (
-                  <TouchableOpacity
-                    key={filter.id}
-                    onPress={() => setActiveFilter(filter.id)}
-                    style={[
-                      styles.filterPill,
-                      isActive ? styles.filterPillActive : styles.filterPillInactive,
-                    ]}
-                    activeOpacity={0.7}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
-                    accessibilityLabel={`Filter by ${filter.label} tasks`}
-                  >
-                    <Text
-                      style={[
-                        styles.filterPillText,
-                        isActive
-                          ? styles.filterPillTextActive
-                          : styles.filterPillTextInactive,
-                      ]}
-                    >
-                      {filter.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            {/* Segmented Filter Control */}
+            <SegmentedFilterControl<InboxFilter>
+              items={[
+                { key: 'all', label: 'All' },
+                { key: 'active', label: 'Active' },
+                { key: 'acknowledged', label: 'Acknowledged' },
+              ]}
+              activeKey={activeFilter}
+              onChange={setActiveFilter}
+            />
           </View>
         }
         ListEmptyComponent={loading ? <LoadingCards /> : <EmptyState />}
@@ -359,8 +352,8 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
               <View style={styles.cardStatusRow}>
                 <View style={styles.badgeRow}>
                   <OperationBadge
-                    label={formatTaskStatus(item.status)}
-                    tone={statusTone(item.status)}
+                    label={getTaskDisplayStatus(item)}
+                    tone={getTaskDisplayTone(item)}
                   />
                   {item.triggerType === 'hardware_failure' ? (
                     <OperationBadge
@@ -408,7 +401,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
               </View>
 
               <View style={{ marginTop: 10 }}>
-                <AssigneeAvatarCluster task={item} />
+                <AssigneeAvatarCluster task={item} currentUserId={user?.uid} />
               </View>
             </Card.Content>
 
@@ -432,12 +425,14 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   },
                 }}
                 icon={
-                  item.status === 'acknowledged'
+                  item.status === 'acknowledged' ||
+                  (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
                     ? 'camera-outline'
                     : 'clipboard-check-outline'
                 }
               >
-                {item.status === 'acknowledged'
+                {item.status === 'acknowledged' ||
+                (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
                   ? 'Resume Task & Open Camera'
                   : 'Acknowledge & Start'}
               </Button>
@@ -488,31 +483,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   onDutyPill: {
-    minHeight: 32,
-    borderRadius: 999,
-    paddingHorizontal: 12,
+    minHeight: 26,
+    borderRadius: KLIR_RADII.tag,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    backgroundColor: UI_COLORS.softGreen,
+    gap: 6,
+    backgroundColor: '#F0FDF4',
     borderWidth: 1,
     borderColor: '#BBF7D0',
   },
   onDutyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: UI_COLORS.success,
   },
   onDutyText: {
-    color: UI_COLORS.success,
+    color: UI_COLORS.successText,
     fontWeight: '800',
-    fontSize: 13,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
   shiftLabel: {
-    color: UI_COLORS.muted,
+    color: '#475569',
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: 11,
   },
   headerTitle: {
     color: UI_COLORS.text,
@@ -528,7 +526,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -536,7 +534,7 @@ const styles = StyleSheet.create({
   },
   summaryCardAlt: {
     flex: 1,
-    borderRadius: 18,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -563,10 +561,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   urgentCard: {
-    borderRadius: 20,
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1.5,
-    borderColor: '#FDE68A',
+    borderRadius: KLIR_RADII.card,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderLeftWidth: 4,
+    borderLeftColor: UI_COLORS.danger,
     ...sharedShadow,
   },
   urgentContent: {
@@ -581,14 +581,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 3,
-    borderRadius: 6,
+    borderRadius: KLIR_RADII.sm,
     backgroundColor: '#FEE2E2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
   },
   priorityAlertTagText: {
-    fontSize: 11,
-    fontWeight: '900',
+    fontSize: 10,
+    fontWeight: '800',
     color: '#B5121B',
     letterSpacing: 0.5,
   },
@@ -610,7 +612,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   urgentActionButton: {
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: '#B5121B',
     marginTop: 4,
   },
@@ -620,9 +622,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   filterPill: {
-    minHeight: 38,
-    paddingHorizontal: 16,
-    borderRadius: 999,
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: KLIR_RADII.chip,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -636,7 +638,7 @@ const styles = StyleSheet.create({
     borderColor: '#E5E5E5',
   },
   filterPillText: {
-    fontSize: 13,
+    fontSize: 12,
   },
   filterPillTextActive: {
     color: '#FFFFFF',
@@ -647,7 +649,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   taskCard: {
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -672,12 +674,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   relativeTimeBadge: {
+    minHeight: 22,
+    borderRadius: KLIR_RADII.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   relativeTimeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: UI_COLORS.muted,
   },
@@ -714,7 +723,7 @@ const styles = StyleSheet.create({
   },
   taskActionButton: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.primary,
   },
   actionButtonContent: {
@@ -727,7 +736,7 @@ const styles = StyleSheet.create({
     height: 138,
     padding: 16,
     gap: 14,
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -735,31 +744,34 @@ const styles = StyleSheet.create({
   loadingLineShort: {
     width: '34%',
     height: 18,
-    borderRadius: 9,
+    borderRadius: 6,
     backgroundColor: '#E5E7EB',
   },
   loadingLineWide: {
     width: '80%',
     height: 24,
-    borderRadius: 12,
+    borderRadius: 6,
     backgroundColor: '#E5E7EB',
   },
   titleWrapper: {
     gap: 4,
   },
   shiftPill: {
+    minHeight: 26,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 999,
-    backgroundColor: '#F3F4F6',
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   shiftPillText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#666666',
+    color: '#475569',
   },
   taskCardContent: {
     padding: 16,

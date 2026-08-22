@@ -177,15 +177,15 @@ describe('Supervisor Screens Integration Suite', () => {
       });
 
       // Active tasks today: task-active-1, task-unassigned-2 -> 2
-      expect(screen.getByText('Total active tasks today')).toBeTruthy();
+      expect(screen.getByText('Active Tasks')).toBeTruthy();
       expect(screen.getByText('2')).toBeTruthy();
 
       // Personnel breakdown: 1 available (Juan), 1 on task (Maria), 1 offline (Pedro)
-      expect(screen.getByText('Maintenance personnel')).toBeTruthy();
+      expect(screen.getByText('Team Availability')).toBeTruthy();
       expect(screen.getByText('1 available, 1 on task, 1 offline')).toBeTruthy();
 
       // Unassigned tasks: task-unassigned-2 -> 1
-      expect(screen.getByText('Unassigned tasks')).toBeTruthy();
+      expect(screen.getByText('Unassigned')).toBeTruthy();
       expect(screen.getByText('1')).toBeTruthy();
     });
 
@@ -198,19 +198,19 @@ describe('Supervisor Screens Integration Suite', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Manage Tasks')).toBeTruthy();
+        expect(screen.getByText('Tasks')).toBeTruthy();
       });
 
-      fireEvent.press(screen.getByText('Manage Tasks'));
+      fireEvent.press(screen.getByText('Tasks'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('SupervisorTasks');
 
-      fireEvent.press(screen.getByText('Team Availability'));
+      fireEvent.press(screen.getByText('Team'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('TeamAvailability');
 
-      fireEvent.press(screen.getByText('Review Completed Tasks'));
+      fireEvent.press(screen.getByText('Completed Tasks'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('CompletedReviews');
 
-      fireEvent.press(screen.getByText('Operations Audit & Export Log'));
+      fireEvent.press(screen.getByText('Reports & Export'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('SupervisorReports');
     });
   });
@@ -282,7 +282,7 @@ describe('Supervisor Screens Integration Suite', () => {
       fireEvent.changeText(reasonInput, 'Priority reassignment to available technician');
 
       // Submit reassignment
-      const reassignButton = screen.getByText('Reassign');
+      const reassignButton = screen.getByText('Reassign Task');
       fireEvent.press(reassignButton);
 
       await waitFor(() => {
@@ -336,10 +336,10 @@ describe('Supervisor Screens Integration Suite', () => {
         expect(screen.getByText('Checklist')).toBeTruthy();
       });
 
-      expect(screen.getByText('Biometric verified')).toBeTruthy();
-      expect(screen.getByText('Remarks: Replaced gasket and calibrated flow rate.')).toBeTruthy();
+      expect(screen.getByText('Biometric Verified')).toBeTruthy();
+      expect(screen.getByText('Notes: Replaced gasket and calibrated flow rate.')).toBeTruthy();
       expect(screen.getByText('Response time: 1 min 30 sec')).toBeTruthy();
-      expect(screen.getByText('Work duration: 5 min 0 sec')).toBeTruthy();
+      expect(screen.getByText('Duration: 5 min 0 sec')).toBeTruthy();
 
       // Open Flag Dialog
       fireEvent.press(screen.getByText('Flag for Re-inspection'));
@@ -383,10 +383,10 @@ describe('Supervisor Screens Integration Suite', () => {
         expect(screen.getByText('Tasks Completed')).toBeTruthy();
       });
 
-      expect(screen.getByText('Avg Resolution SLA')).toBeTruthy();
-      expect(screen.getByText('Photo Evidence')).toBeTruthy();
+      expect(screen.getByText('Avg Resolution Time')).toBeTruthy();
+      expect(screen.getByText('Photo Proof')).toBeTruthy();
       expect(screen.getByText('Biometric Verified')).toBeTruthy();
-      expect(screen.getByText('Export Operations CSV')).toBeTruthy();
+      expect(screen.getByText('Export CSV Report')).toBeTruthy();
       expect(screen.getByText('Export CSV')).toBeTruthy();
     });
   });

@@ -156,10 +156,16 @@ All styles are defined centrally in [`components/MaintenanceUI.tsx`](file:///c:/
 | `labelUpper` | `11px / 14px` | `700` | `+0.8px` | Uppercase section badges, tag headers |
 | `button` | `15px / 20px` | `700` | `+0.3px` | CTA button labels |
 
-### 4.3 Spacing Grid & Elevation
+### 4.3 Spacing Grid, Radii & Elevation
 
 * **Base Unit**: 4dp (`xs: 4`, `sm: 8`, `md: 12`, `lg: 16`, `xl: 20`, `xxl: 24`, `xxxl: 32`).
-* **Card Border Radius**: `14dp` for cards, `20dp` for modal sheets, `999dp` for pill badges.
+* **Border Radius System (`KLIR_RADII`)**:
+  * `tag`: `6dp` for operational status tags, metadata badges, and state indicators.
+  * `chip`: `8dp` for interactive chips, avatar pills, and filter buttons.
+  * `input`: `10dp` for form inputs.
+  * `card`: `14dp` for primary action cards and container surfaces.
+  * `sheet`: `20dp` for modal bottom sheets.
+  * *Strict Rule*: Ubiquitous 999dp full-round pills are prohibited for status and metadata to maintain high-precision industrial data scannability.
 * **Shared Shadow (`sharedShadow`)**:
   ```ts
   export const sharedShadow = {
@@ -257,7 +263,7 @@ Hardware failure alerts detected by IoT sensors trigger across three synchronize
 ### Testing via QA Simulator
 Technicians and testers can trigger hardware alerts without physical hardware:
 1. Tap avatar `JL` in the top right header.
-2. Under **SYSTEM SIMULATOR**, tap `Test Hardware Alert 🚨`.
+2. Under **SYSTEM SIMULATOR**, tap `Test Hardware Alert`.
 3. The modal dismisses, firing both the in-app push banner and the Inbox priority card.
 
 ---

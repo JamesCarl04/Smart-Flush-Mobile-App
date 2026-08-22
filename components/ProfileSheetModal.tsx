@@ -11,7 +11,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Divider } from 'react-native-paper';
 
-import { KLIR_COLORS, MetaPill, sharedShadow } from './MaintenanceUI';
+import { KLIR_COLORS, KLIR_RADII, MetaPill, sharedShadow } from './MaintenanceUI';
 import { TasksContext } from '../contexts/TasksContext';
 import { useAuth } from '../hooks/useAuth';
 import { useOfflineSync } from '../hooks/useOfflineSync';
@@ -41,7 +41,7 @@ export function ProfileSheetModal({
     const fakeTask = tasksCtx?.simulateHardwareFailureAlert?.();
     if (fakeTask) {
       emitLocalNotification({
-        title: '🚨 Hardware Failure: Restroom 2 • toilet-01',
+        title: 'Hardware Failure: Restroom 2 • toilet-01',
         body: 'Continuous water running detected in flush valve (Critical Flow Leak).',
         taskId: fakeTask.id,
       });
@@ -220,7 +220,7 @@ export function ProfileSheetModal({
                   </View>
                   <View style={styles.simulateTextBox}>
                     <Text style={styles.simulateTitle}>
-                      Test Hardware Alert 🚨
+                      Test Hardware Alert
                     </Text>
                     <Text style={styles.simulateSubtitle}>
                       Fires top push banner & creates urgent priority card
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     top: 16,
     right: 20,
     padding: 6,
-    borderRadius: 999,
+    borderRadius: 16,
     backgroundColor: KLIR_COLORS.canvas,
   },
   profileHeader: {
@@ -406,14 +406,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',
-    borderRadius: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: KLIR_COLORS.danger,
+    borderRadius: KLIR_RADII.card,
     padding: 12,
     gap: 12,
   },
   simulateIconBox: {
     width: 38,
     height: 38,
-    borderRadius: 10,
+    borderRadius: KLIR_RADII.chip,
     backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
@@ -451,7 +453,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     height: 50,
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: KLIR_COLORS.primary,
     ...sharedShadow,
   },

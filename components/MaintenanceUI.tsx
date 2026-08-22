@@ -1,9 +1,15 @@
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
-import { formatTaskComponent, isHardwareFailureComponent } from '../lib/tasks';
+import { formatTaskComponent, isBroadcastTask, isHardwareFailureComponent } from '../lib/tasks';
 import type { Task, TaskTriggerType } from '../types';
+
+export const INTER_FONT = Platform.select({
+  ios: 'Inter',
+  android: 'Inter',
+  default: 'Inter',
+});
 
 /**
  * SDCA Mobile Foundation Design Tokens
@@ -85,6 +91,7 @@ export const KLIR_SPACING = {
 
 export const KLIR_TYPOGRAPHY = {
   h1: {
+    fontFamily: INTER_FONT,
     fontSize: 28,
     lineHeight: 34,
     fontWeight: '800' as const,
@@ -92,6 +99,7 @@ export const KLIR_TYPOGRAPHY = {
     letterSpacing: -0.5,
   },
   h2: {
+    fontFamily: INTER_FONT,
     fontSize: 22,
     lineHeight: 28,
     fontWeight: '700' as const,
@@ -99,36 +107,42 @@ export const KLIR_TYPOGRAPHY = {
     letterSpacing: -0.3,
   },
   h3: {
+    fontFamily: INTER_FONT,
     fontSize: 18,
     lineHeight: 24,
     fontWeight: '700' as const,
     color: KLIR_COLORS.charcoal,
   },
   title: {
+    fontFamily: INTER_FONT,
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '600' as const,
     color: KLIR_COLORS.charcoal,
   },
   body: {
+    fontFamily: INTER_FONT,
     fontSize: 15,
     lineHeight: 22,
     fontWeight: '400' as const,
     color: KLIR_COLORS.slate,
   },
   bodyMuted: {
+    fontFamily: INTER_FONT,
     fontSize: 14,
     lineHeight: 20,
     fontWeight: '400' as const,
     color: KLIR_COLORS.slateMuted,
   },
   caption: {
+    fontFamily: INTER_FONT,
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '500' as const,
     color: KLIR_COLORS.slateMuted,
   },
   labelUpper: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '700' as const,
@@ -137,6 +151,7 @@ export const KLIR_TYPOGRAPHY = {
     color: KLIR_COLORS.charcoal,
   },
   badgeText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '700' as const,
@@ -144,6 +159,7 @@ export const KLIR_TYPOGRAPHY = {
     textTransform: 'uppercase' as const,
   },
   button: {
+    fontFamily: INTER_FONT,
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '700' as const,
@@ -254,7 +270,7 @@ export function hardwareUrgencyTone(
   };
 }
 
-export function statusTone(status: Task['status']): {
+export function statusTone(status: Task['status'] | 'broadcast' | 'Team Broadcast'): {
   backgroundColor: string;
   color: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -275,6 +291,14 @@ export function statusTone(status: Task['status']): {
     };
   }
 
+  if (status === 'broadcast' || status === 'Team Broadcast') {
+    return {
+      backgroundColor: '#EFF6FF',
+      color: '#1D4ED8',
+      icon: 'bullhorn-outline',
+    };
+  }
+
   if (status === 'reassignment_needed' || status === 'unassigned') {
     return {
       backgroundColor: UI_COLORS.softRed,
@@ -288,6 +312,20 @@ export function statusTone(status: Task['status']): {
     color: UI_COLORS.warning,
     icon: 'clock-alert-outline',
   };
+}
+
+export function getTaskDisplayTone(task: Task | null | undefined): {
+  backgroundColor: string;
+  color: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+} {
+  if (!task) return statusTone('assigned');
+  if (task.status === 'completed') return statusTone('completed');
+  if (task.status === 'acknowledged') return statusTone('acknowledged');
+  if (task.status === 'reassignment_needed') return statusTone('reassignment_needed');
+  if (task.status === 'flagged') return statusTone('flagged');
+  if (isBroadcastTask(task)) return statusTone('broadcast');
+  return statusTone(task.status);
 }
 
 export type TaskPriorityLevel = 'standard' | 'high' | 'critical';
@@ -404,6 +442,16 @@ export function urgencyTone(
   };
 }
 
+export const KLIR_RADII = {
+  xs: 2,
+  sm: 4,
+  tag: 6,
+  chip: 8,
+  input: 10,
+  card: 14,
+  sheet: 20,
+} as const;
+
 export function OperationBadge({
   label,
   tone,
@@ -421,15 +469,23 @@ export function OperationBadge({
         styles.badge,
         {
           backgroundColor: tone.backgroundColor,
-          borderColor: `${tone.color}25`,
+          borderColor: `${tone.color}35`,
         },
       ]}
     >
-      <MaterialCommunityIcons name={tone.icon} size={14} color={tone.color} />
+      <MaterialCommunityIcons
+        name={tone.icon}
+        size={13}
+        color={tone.color}
+        accessibilityElementsHidden={true}
+        importantForAccessibility="no"
+      />
       <Text style={[styles.badgeText, { color: tone.color }]}>{label}</Text>
     </View>
   );
 }
+
+export const OperationTag = OperationBadge;
 
 export function MetaPill({
   icon,
@@ -442,10 +498,95 @@ export function MetaPill({
     <View style={styles.metaPill}>
       <MaterialCommunityIcons
         name={icon}
-        size={14}
+        size={13}
         color={KLIR_COLORS.slateMuted}
+        accessibilityElementsHidden={true}
+        importantForAccessibility="no"
       />
       <Text style={styles.metaPillText}>{label}</Text>
+    </View>
+  );
+}
+
+export const MetaTag = MetaPill;
+
+export function SquadCapacityPillBar({
+  available,
+  onTask,
+  offline,
+  loading = false,
+}: {
+  available: number;
+  onTask: number;
+  offline: number;
+  loading?: boolean;
+}): React.JSX.Element {
+  return (
+    <View style={styles.capacityBarContainer}>
+      <View style={[styles.capacitySegment, styles.capacitySegmentAvailable]}>
+        <Text style={styles.capacitySegmentText}>
+          {loading ? '—' : available} Available
+        </Text>
+      </View>
+      <View style={styles.capacityDivider} />
+      <View style={[styles.capacitySegment, styles.capacitySegmentOnTask]}>
+        <Text style={styles.capacitySegmentText}>
+          {loading ? '—' : onTask} On Task
+        </Text>
+      </View>
+      <View style={styles.capacityDivider} />
+      <View style={[styles.capacitySegment, styles.capacitySegmentOffline]}>
+        <Text style={styles.capacitySegmentText}>
+          {loading ? '—' : offline} Offline
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+export interface SegmentedFilterItem<T extends string = string> {
+  key: T;
+  label: string;
+  count?: number;
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+}
+
+export function SegmentedFilterControl<T extends string>({
+  items,
+  activeKey,
+  onChange,
+  style,
+}: {
+  items: Array<SegmentedFilterItem<T>>;
+  activeKey: T;
+  onChange: (key: T) => void;
+  style?: object;
+}): React.JSX.Element {
+  return (
+    <View style={[styles.segmentedTrack, style]}>
+      {items.map((item) => {
+        const isActive = item.key === activeKey;
+        return (
+          <View
+            key={item.key}
+            style={[styles.segmentedItem, isActive && styles.segmentedItemActive]}
+          >
+            <Text
+              onPress={() => onChange(item.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              accessibilityLabel={`${item.label}${typeof item.count === 'number' ? ` (${item.count})` : ''}`}
+              style={[
+                styles.segmentedItemText,
+                isActive ? styles.segmentedItemTextActive : styles.segmentedItemTextInactive,
+              ]}
+            >
+              {item.label}
+              {typeof item.count === 'number' ? ` (${item.count})` : ''}
+            </Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -466,6 +607,8 @@ export function EmptyOperationState({
           name={icon}
           size={28}
           color={KLIR_COLORS.primary}
+          accessibilityElementsHidden={true}
+          importantForAccessibility="no"
         />
       </View>
       <Text variant="titleMedium" style={styles.emptyTitle}>
@@ -488,42 +631,117 @@ export const sharedShadow = {
 
 const styles = StyleSheet.create({
   badge: {
-    minHeight: 28,
-    borderRadius: 999,
+    minHeight: 26,
+    borderRadius: 20,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 4,
     alignSelf: 'flex-start',
     borderWidth: 1,
   },
   badgeText: {
     ...KLIR_TYPOGRAPHY.badgeText,
+    fontSize: 11,
+    lineHeight: 14,
   },
   metaPill: {
-    minHeight: 30,
-    borderRadius: 999,
+    minHeight: 26,
+    borderRadius: 20,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: KLIR_COLORS.softGray,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: KLIR_COLORS.slateBorder,
+    borderColor: '#E2E8F0',
   },
   metaPillText: {
-    color: KLIR_COLORS.slate,
-    fontSize: 12,
-    lineHeight: 16,
+    color: '#334155',
+    fontSize: 11,
+    lineHeight: 15,
     fontWeight: '600',
+  },
+  capacityBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 9999,
+    overflow: 'hidden',
+    minHeight: 36,
+    width: '100%',
+    marginTop: 6,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#64748B',
+  },
+  capacitySegment: {
+    flex: 1,
+    minHeight: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  capacitySegmentAvailable: {
+    backgroundColor: '#2E7D32',
+  },
+  capacitySegmentOnTask: {
+    backgroundColor: '#E05A36',
+  },
+  capacitySegmentOffline: {
+    backgroundColor: '#788896',
+  },
+  capacityDivider: {
+    width: 1.5,
+    height: '100%',
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+  },
+  capacitySegmentText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: 0.1,
+  },
+  segmentedTrack: {
+    flexDirection: 'row',
+    backgroundColor: '#EBECEF',
+    borderRadius: 10,
+    padding: 3,
+    gap: 4,
+  },
+  segmentedItem: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 7,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  segmentedItemActive: {
+    backgroundColor: KLIR_COLORS.primary,
+    ...sharedShadow,
+  },
+  segmentedItemText: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  segmentedItemTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+  segmentedItemTextInactive: {
+    color: KLIR_COLORS.slateMuted,
   },
   emptyCard: {
     marginTop: 10,
     padding: 22,
     gap: 10,
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: KLIR_COLORS.slateBorder,
     backgroundColor: KLIR_COLORS.cardSurface,
@@ -531,9 +749,9 @@ const styles = StyleSheet.create({
     ...sharedShadow,
   },
   emptyIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: KLIR_COLORS.primarySurface,
@@ -561,7 +779,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.chip,
     borderWidth: 1,
   },
   avatarPillPending: {
@@ -580,9 +798,9 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   avatarCircle: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 24,
+    height: 24,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: KLIR_COLORS.primarySoft,
@@ -594,8 +812,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#16A34A',
   },
   avatarText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
     color: KLIR_COLORS.primaryDark,
   },
   avatarTextAck: {
@@ -608,9 +826,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -3,
     right: -5,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 13,
+    height: 13,
+    borderRadius: 4,
     backgroundColor: '#16A34A',
     alignItems: 'center',
     justifyContent: 'center',
@@ -628,7 +846,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 10,
     paddingVertical: 5,
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.chip,
     backgroundColor: '#EFF6FF',
     borderWidth: 1,
     borderColor: '#BFDBFE',
@@ -638,12 +856,118 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1D4ED8',
   },
+  mobilizationContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: KLIR_RADII.chip,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 8,
+    gap: 6,
+  },
+  mobilizationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  mobilizationTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  mobilizationTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1D4ED8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  mobilizationChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    alignItems: 'center',
+  },
+  responderChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: KLIR_RADII.tag,
+    borderWidth: 1,
+  },
+  responderChipAck: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+  },
+  responderChipDone: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  responderAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  responderAvatarAck: {
+    backgroundColor: '#DBEAFE',
+  },
+  responderAvatarDone: {
+    backgroundColor: '#DCFCE7',
+  },
+  responderAvatarText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  responderAvatarTextAck: {
+    color: '#1D4ED8',
+  },
+  responderAvatarTextDone: {
+    color: '#15803D',
+  },
+  responderName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: KLIR_COLORS.charcoal,
+  },
+  pendingSelfChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  pendingSelfAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pendingSelfAvatarText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  pendingSelfText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
 });
 
 export interface AssigneeAvatarClusterProps {
   task: Task;
   people?: Array<{ id: string; displayName?: string; email?: string | null }>;
   showNames?: boolean;
+  currentUserId?: string | null;
 }
 
 function getInitials(name?: string): string {
@@ -657,6 +981,7 @@ export function AssigneeAvatarCluster({
   task,
   people = [],
   showNames = true,
+  currentUserId,
 }: AssigneeAvatarClusterProps): React.JSX.Element | null {
   const assignedIds =
     task.assignedToIds && task.assignedToIds.length > 0
@@ -668,18 +993,124 @@ export function AssigneeAvatarCluster({
   const isBroadcast = assignedIds.length === 0;
 
   if (isBroadcast) {
-    const ackCount = task.acknowledgedBy ? Object.keys(task.acknowledgedBy).length : 0;
+    const responderUids = Array.from(
+      new Set([
+        ...Object.keys(task.acknowledgedBy ?? {}),
+        ...Object.keys(task.submissions ?? {}),
+        ...Object.keys(task.completedByMap ?? {}),
+        ...(task.assignedTo &&
+        (task.status === 'acknowledged' || task.status === 'completed')
+          ? [task.assignedTo]
+          : []),
+      ]),
+    );
+    const responderCount = responderUids.length;
+    const isSelfAck = currentUserId
+      ? Boolean(
+          task.acknowledgedBy?.[currentUserId] ||
+            task.submissions?.[currentUserId] ||
+            task.completedByMap?.[currentUserId] ||
+            (task.assignedTo === currentUserId &&
+              (task.status === 'acknowledged' || task.status === 'completed')),
+        )
+      : false;
+
     return (
-      <View
-        style={styles.broadcastPill}
-        accessible={true}
-        accessibilityRole="summary"
-        accessibilityLabel={`Broadcast to all team. ${ackCount} acknowledged`}
-      >
-        <MaterialCommunityIcons name="bullhorn-outline" size={14} color="#1D4ED8" />
-        <Text style={styles.broadcastText}>
-          {ackCount > 0 ? `Team Broadcast (${ackCount} Acknowledged)` : 'All Team (Broadcast)'}
-        </Text>
+      <View style={styles.mobilizationContainer}>
+        {/* Roster Header Banner */}
+        <View style={styles.mobilizationHeader}>
+          <View style={styles.mobilizationTitleRow}>
+            <MaterialCommunityIcons
+              name="bullhorn-outline"
+              size={14}
+              color="#1D4ED8"
+              accessibilityElementsHidden={true}
+              importantForAccessibility="no"
+            />
+            <Text style={styles.mobilizationTitle}>
+              {responderCount > 0
+                ? `All-Team Incident • ${responderCount} Responded`
+                : 'All-Team Broadcast • Awaiting Responders'}
+            </Text>
+          </View>
+        </View>
+
+        {/* Responders Row */}
+        <View style={styles.mobilizationChipsRow}>
+          {responderUids.map((uid) => {
+            const person = people.find((p) => p.id === uid || p.email === uid);
+            const displayName =
+              uid === currentUserId
+                ? 'You'
+                : person?.displayName ||
+                  person?.email ||
+                  (uid === task.assignedTo ? 'Assigned Tech' : 'Technician');
+            const initials = getInitials(
+              displayName === 'You' ? person?.displayName || 'You' : displayName,
+            );
+            const isDone = Boolean(
+              task.submissions?.[uid] || task.completedByMap?.[uid],
+            );
+
+            return (
+              <View
+                key={uid}
+                style={[
+                  styles.responderChip,
+                  isDone ? styles.responderChipDone : styles.responderChipAck,
+                ]}
+                accessible={true}
+                accessibilityRole="summary"
+                accessibilityLabel={`${displayName}: ${isDone ? 'Completed' : 'Acknowledged & Responding'}`}
+              >
+                <View
+                  style={[
+                    styles.responderAvatar,
+                    isDone
+                      ? styles.responderAvatarDone
+                      : styles.responderAvatarAck,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.responderAvatarText,
+                      isDone
+                        ? styles.responderAvatarTextDone
+                        : styles.responderAvatarTextAck,
+                    ]}
+                  >
+                    {initials}
+                  </Text>
+                </View>
+                <Text style={styles.responderName} numberOfLines={1}>
+                  {displayName.split(' ')[0]}
+                </Text>
+                <MaterialCommunityIcons
+                  name={isDone ? 'check-all' : 'check'}
+                  size={11}
+                  color={isDone ? '#15803D' : '#1D4ED8'}
+                  style={{ marginLeft: 2 }}
+                />
+              </View>
+            );
+          })}
+
+          {/* Self pending indicator if current user is not yet in responder list and task is not completed */}
+          {!isSelfAck && task.status !== 'completed' && (
+            <View style={styles.pendingSelfChip}>
+              <View style={styles.pendingSelfAvatar}>
+                <Text style={styles.pendingSelfAvatarText}>ME</Text>
+              </View>
+              <Text style={styles.pendingSelfText}>You (Pending)</Text>
+              <MaterialCommunityIcons
+                name="clock-outline"
+                size={11}
+                color="#64748B"
+                style={{ marginLeft: 2 }}
+              />
+            </View>
+          )}
+        </View>
       </View>
     );
   }
@@ -688,20 +1119,24 @@ export function AssigneeAvatarCluster({
     <View style={styles.avatarClusterRow}>
       {assignedIds.map((uid) => {
         const person = people.find((p) => p.id === uid || p.email === uid);
-        const displayName = person?.displayName || person?.email || (uid === task.assignedTo ? 'Assigned Tech' : uid);
+        const displayName =
+          person?.displayName ||
+          person?.email ||
+          (uid === task.assignedTo ? 'Assigned Tech' : uid);
         const initials = getInitials(displayName);
 
         const hasAcknowledged = Boolean(
           task.acknowledgedBy?.[uid] ||
-          (task.status === 'acknowledged' && task.assignedTo === uid) ||
-          task.completedByMap?.[uid] ||
-          task.submissions?.[uid]
+            (task.status === 'acknowledged' && task.assignedTo === uid) ||
+            task.completedByMap?.[uid] ||
+            task.submissions?.[uid],
         );
 
         const hasSubmitted = Boolean(
           task.submissions?.[uid] ||
-          task.completedByMap?.[uid] ||
-          (task.status === 'completed' && (task.completedBy === uid || task.assignedTo === uid))
+            task.completedByMap?.[uid] ||
+            (task.status === 'completed' &&
+              (task.completedBy === uid || task.assignedTo === uid)),
         );
 
         const statusLabel = hasSubmitted

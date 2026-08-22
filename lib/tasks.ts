@@ -27,6 +27,8 @@ type TaskDocumentShape = {
   status?: unknown;
   assignedTo?: unknown;
   assignedToIds?: unknown;
+  isBroadcast?: unknown;
+  assignmentType?: unknown;
   createdAt?: FirestoreDateValue;
   assignedAt?: FirestoreDateValue;
   acknowledgedAt?: FirestoreDateValue;
@@ -138,6 +140,59 @@ export function isTaskTriggerType(value: unknown): value is TaskTriggerType {
     value === 'flush_count' ||
     value === 'uv_complete'
   );
+}
+
+export function isBroadcastTask(task: Task | null | undefined): boolean {
+  if (!task) {
+    return false;
+  }
+  if (
+    task.isBroadcast === true ||
+    task.assignmentType === 'broadcast' ||
+    task.assignedTo === 'broadcast' ||
+    task.assignedTo === 'all'
+  ) {
+    return true;
+  }
+  const assignedIds =
+    task.assignedToIds && task.assignedToIds.length > 0
+      ? task.assignedToIds
+      : task.assignedTo
+        ? [task.assignedTo]
+        : [];
+  if (
+    assignedIds.length === 0 &&
+    task.status !== 'unassigned' &&
+    task.status !== 'reassignment_needed'
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function getTaskDisplayStatus(task: Task | null | undefined): string {
+  if (!task) {
+    return 'Standard';
+  }
+  if (task.status === 'completed') {
+    return 'Completed';
+  }
+  if (task.status === 'acknowledged') {
+    return 'Acknowledged';
+  }
+  if (task.status === 'reassignment_needed') {
+    return 'Reassignment needed';
+  }
+  if (task.status === 'flagged') {
+    return 'Flagged';
+  }
+  if (isBroadcastTask(task)) {
+    return 'Team Broadcast';
+  }
+  if (task.status === 'unassigned') {
+    return 'Unassigned';
+  }
+  return 'Assigned';
 }
 
 export function formatTaskStatus(status: TaskStatus): string {
@@ -412,6 +467,17 @@ export function parseTaskDocument(
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
     assignedToIds,
+    isBroadcast:
+      data.isBroadcast === true ||
+      data.assignmentType === 'broadcast' ||
+      data.assignedTo === 'all' ||
+      data.assignedTo === 'broadcast',
+    assignmentType:
+      data.assignmentType === 'broadcast' || data.isBroadcast === true
+        ? 'broadcast'
+        : data.assignmentType === 'team'
+          ? 'team'
+          : 'individual',
     status,
     createdAt,
     assignedAt: toDate(data.assignedAt),

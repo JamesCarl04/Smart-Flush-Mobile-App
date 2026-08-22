@@ -124,7 +124,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       component: 'flush_valve',
       triggerType: 'hardware_failure',
       status: 'assigned',
-      message: '🚨 CRITICAL HARDWARE ALERT: Continuous water running detected in flush valve (Critical Flow Leak).',
+      message: 'CRITICAL HARDWARE ALERT: Continuous water running detected in flush valve (Critical Flow Leak).',
       assignedTo: user?.uid ?? null,
       createdAt: new Date(),
       assignedAt: new Date(),

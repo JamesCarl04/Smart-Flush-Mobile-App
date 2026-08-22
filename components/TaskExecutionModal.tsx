@@ -26,7 +26,7 @@ import {
 } from 'react-native-paper';
 
 import * as ImagePicker from '../lib/native-image-picker';
-import { KLIR_COLORS, UI_COLORS, sharedShadow } from './MaintenanceUI';
+import { KLIR_COLORS, KLIR_RADII, UI_COLORS, sharedShadow } from './MaintenanceUI';
 import { KlirButton } from './KlirButton';
 import {
   completeTaskOnline,
@@ -1064,15 +1064,16 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   countBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    minHeight: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
     backgroundColor: '#FEF9E7',
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   countBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
     color: '#B45309',
   },

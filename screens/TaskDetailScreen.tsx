@@ -20,10 +20,12 @@ import {
 
 import {
   AssigneeAvatarCluster,
+  KLIR_RADII,
   MetaPill,
   OperationBadge,
   UI_COLORS,
   getComponentMeta,
+  getTaskDisplayTone,
   sharedShadow,
   statusTone,
   taskTriggerTone,
@@ -45,6 +47,7 @@ import {
   formatTaskComponent,
   formatTaskStatus,
   formatTaskTrigger,
+  getTaskDisplayStatus,
 } from '../lib/tasks';
 import { acknowledgeTask, fetchTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
@@ -682,7 +685,7 @@ export function TaskDetailScreen({
                       ? 'Completed'
                       : task.status === 'acknowledged'
                         ? 'In Progress'
-                        : formatTaskStatus(task.status)
+                        : getTaskDisplayStatus(task)
                   }
                   tone={
                     task.status === 'completed'
@@ -697,7 +700,7 @@ export function TaskDetailScreen({
                             color: '#C9A227',
                             icon: 'progress-clock',
                           }
-                        : statusTone(task.status)
+                        : getTaskDisplayTone(task)
                   }
                 />
                 <View style={styles.shiftPill}>
@@ -727,9 +730,11 @@ export function TaskDetailScreen({
                 <View style={styles.instructionCallout}>
                   <MaterialCommunityIcons
                     name="clipboard-text-outline"
-                    size={18}
-                    color={UI_COLORS.primary}
+                    size={16}
+                    color="#B45309"
                     style={styles.instructionIcon}
+                    accessibilityElementsHidden={true}
+                    importantForAccessibility="no"
                   />
                   <View style={styles.instructionTextWrapper}>
                     <Text style={styles.instructionLabel}>INSTRUCTION</Text>
@@ -756,7 +761,11 @@ export function TaskDetailScreen({
               </View>
 
               <View style={{ marginTop: 12 }}>
-                <AssigneeAvatarCluster task={task} showNames={true} />
+                <AssigneeAvatarCluster
+                  task={task}
+                  showNames={true}
+                  currentUserId={currentUserId()}
+                />
               </View>
 
               {/* Direct Action Button */}
@@ -1256,10 +1265,12 @@ const styles = StyleSheet.create({
   instructionCallout: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#FEF9E7',
+    backgroundColor: '#FFFBEB',
     borderWidth: 1,
     borderColor: '#FDE68A',
-    borderRadius: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: '#D97706',
+    borderRadius: KLIR_RADII.chip,
     padding: 12,
     gap: 10,
   },
@@ -1289,7 +1300,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   actionButton: {
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.primary,
     marginTop: 4,
   },
@@ -1310,20 +1321,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   shiftPill: {
+    minHeight: 26,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: UI_COLORS.softGray,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
+    borderColor: '#E2E8F0',
   },
   shiftPillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
-    color: UI_COLORS.muted,
+    color: '#475569',
   },
   headerHeadline: {
     fontSize: 22,
@@ -1345,7 +1357,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   stepperCard: {
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -1382,7 +1394,7 @@ const styles = StyleSheet.create({
   stepperDot: {
     width: 22,
     height: 22,
-    borderRadius: 11,
+    borderRadius: 6,
     backgroundColor: '#E5E5E5',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1419,7 +1431,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   detailCard: {
-    borderRadius: 20,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.surface,
     borderWidth: 1,
     borderColor: UI_COLORS.border,
@@ -1447,17 +1459,18 @@ const styles = StyleSheet.create({
     lineHeight: 20,
   },
   progressIndicatorBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
+    minHeight: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
     backgroundColor: '#FEF9E7',
     borderWidth: 1,
     borderColor: '#FDE68A',
   },
   progressIndicatorText: {
-    color: '#C9A227',
+    color: '#B45309',
     fontWeight: '800',
-    fontSize: 12,
+    fontSize: 11,
   },
   progressBar: {
     height: 6,
@@ -1517,7 +1530,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   primaryAction: {
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: '#B5121B',
   },
   primaryActionContent: {
@@ -1529,13 +1542,13 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   secondaryAction: {
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     borderColor: UI_COLORS.border,
   },
   checklistItem: {
     gap: 10,
     padding: 12,
-    borderRadius: 16,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.softGray,
   },
   checklistLabel: {
@@ -1569,13 +1582,13 @@ const styles = StyleSheet.create({
   comparisonPhoto: {
     width: '100%',
     height: 140,
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: '#E2E8F0',
   },
   photoPlaceholder: {
     width: '100%',
     height: 140,
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1601,7 +1614,7 @@ const styles = StyleSheet.create({
   summaryStatBox: {
     flex: 1,
     padding: 12,
-    borderRadius: 14,
+    borderRadius: KLIR_RADII.card,
     backgroundColor: UI_COLORS.softGray,
     alignItems: 'center',
     gap: 4,
@@ -1617,18 +1630,21 @@ const styles = StyleSheet.create({
     color: UI_COLORS.text,
   },
   biometricPill: {
+    minHeight: 26,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: UI_COLORS.softGreen,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F0FDF4',
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
   },
   biometricPillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '800',
-    color: UI_COLORS.success,
+    color: UI_COLORS.successText,
   },
   verifiedChip: {
     backgroundColor: UI_COLORS.softGreen,

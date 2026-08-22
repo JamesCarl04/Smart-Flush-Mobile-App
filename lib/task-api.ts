@@ -146,6 +146,13 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     status = 'acknowledged';
   }
 
+  const rawObj = data as Record<string, unknown>;
+  const assignedToIds: string[] = Array.isArray(rawObj.assignedToIds)
+    ? rawObj.assignedToIds
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0)
+    : [];
+
   return {
     id: data.id,
     alertId: stringOrNull(data.alertId),
@@ -171,6 +178,18 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     triggerType: data.triggerType,
     message: data.message,
     assignedTo,
+    assignedToIds,
+    isBroadcast:
+      rawObj.isBroadcast === true ||
+      rawObj.assignmentType === 'broadcast' ||
+      assignedTo === 'all' ||
+      assignedTo === 'broadcast',
+    assignmentType:
+      rawObj.assignmentType === 'broadcast' || rawObj.isBroadcast === true
+        ? 'broadcast'
+        : rawObj.assignmentType === 'team'
+          ? 'team'
+          : 'individual',
     status,
     createdAt,
     assignedAt: millisToDate(data.assignedAt),

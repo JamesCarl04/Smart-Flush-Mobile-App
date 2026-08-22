@@ -105,9 +105,8 @@ describe('Offline Resilience Flow E2E', () => {
     render(<App />);
 
     // Step 1: Open task detail while initial inbox is visible
-    expect(await screen.findByText('GB3 1st Floor PWD Restroom', {}, { timeout: 15000 })).toBeTruthy();
-    const viewDetailBtn = await screen.findByText('View Details', {}, { timeout: 15000 });
-    fireEvent.press(viewDetailBtn);
+    const taskCard = await screen.findByText('GB3 1st Floor PWD Restroom', {}, { timeout: 15000 });
+    fireEvent.press(taskCard);
 
     expect(await screen.findByText('GB3 1st Floor PWD Restroom', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('Take Proof Photo', {}, { timeout: 15000 })).toBeTruthy();
@@ -125,7 +124,7 @@ describe('Offline Resilience Flow E2E', () => {
     const doneButtons = screen.getAllByText('Done');
     doneButtons.forEach((btn) => fireEvent.press(btn));
 
-    const remarksInput = screen.getByTestId('text-input-outlined');
+    const remarksInput = screen.getByTestId('remarks-input');
     fireEvent.changeText(remarksInput, 'Completed full sanitization while offline in basement.');
 
     const takeAfterBtn = screen.getByRole('button', { name: 'Take After Photo' });

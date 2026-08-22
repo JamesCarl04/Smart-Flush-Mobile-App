@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import * as Network from 'expo-network';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -81,6 +82,7 @@ describe('Worker Task Lifecycle Flow E2E', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(Alert, 'alert');
     (Network as any).__setNetworkState(true, true);
     currentTasks = JSON.parse(JSON.stringify(initialTaskApiData));
 
@@ -264,8 +266,15 @@ describe('Worker Task Lifecycle Flow E2E', () => {
       remarks: 'All fixtures disinfected, soap replenished, and floors dried.',
     };
 
-    const historyTab = screen.getByRole('button', { name: 'History' });
-    fireEvent.press(historyTab);
+    // Trigger the Alert.alert 'View History' action to navigate to History tab
+    const alertCalls = (Alert.alert as jest.Mock).mock.calls;
+    if (alertCalls.length > 0) {
+      const buttons = alertCalls[alertCalls.length - 1][2];
+      const viewHistoryBtn = buttons?.find((b: any) => b.text === 'View History');
+      if (viewHistoryBtn?.onPress) {
+        viewHistoryBtn.onPress();
+      }
+    }
 
     expect(await screen.findByText('Completed Work', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('GB3 2nd Floor Male Restroom', {}, { timeout: 15000 })).toBeTruthy();

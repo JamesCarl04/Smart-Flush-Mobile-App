@@ -60,6 +60,8 @@ export interface Task {
   message: string;
   assignedTo: string | null;
   assignedToIds?: string[];
+  isBroadcast?: boolean;
+  assignmentType?: 'broadcast' | 'individual' | 'team';
   status: TaskStatus;
   createdAt: Date;
   assignedAt?: Date | null;
