@@ -36,6 +36,7 @@ import {
 } from '../components/MaintenanceUI';
 import { KlirButton } from '../components/KlirButton';
 import { useAuth } from '../hooks/useAuth';
+import { useSupervisorContext } from '../contexts/SupervisorContext';
 import { db } from '../lib/firebase';
 import { clearAllTasksInFirestore } from '../lib/task-completion';
 import {
@@ -105,119 +106,7 @@ function SupervisorSkeleton(): React.JSX.Element {
 }
 
 function useSupervisorData() {
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [people, setPeople] = useState<MaintenancePerson[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const [nextTasks, nextPeople] = await Promise.all([
-        fetchSupervisorTasks(),
-        fetchMaintenancePersonnel(),
-      ]);
-      setTasks(nextTasks);
-      setPeople(nextPeople);
-      setError(null);
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : 'Unable to load supervisor data.',
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refresh();
-
-    let unsubTasks: (() => void) | undefined;
-    let unsubUsers: (() => void) | undefined;
-
-    try {
-      if (typeof db?.collection === 'function') {
-        const tasksQuery = db.collection('tasks');
-        if (typeof tasksQuery?.onSnapshot === 'function') {
-          unsubTasks = tasksQuery.onSnapshot(
-            (snapshot) => {
-              if (snapshot && !snapshot.empty) {
-                const parsed = snapshot.docs
-                  .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
-                  .filter((task): task is Task => task !== null)
-                  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-                setTasks(parsed);
-                setLoading(false);
-              } else if (snapshot && snapshot.empty) {
-                setTasks([]);
-                setLoading(false);
-              }
-            },
-            (err) => {
-              console.warn('[SupervisorScreens] tasks onSnapshot error:', err);
-            },
-          );
-        }
-
-        const usersQuery = db.collection('users');
-        if (typeof usersQuery?.onSnapshot === 'function') {
-          unsubUsers = usersQuery.onSnapshot(
-            (snapshot) => {
-              if (snapshot && !snapshot.empty) {
-                const mappedPeople = snapshot.docs
-                  .map((doc) => {
-                    const data = doc.data();
-                    const role = typeof data.role === 'string' ? data.role.toLowerCase() : '';
-                    if (role !== 'maintenance' && role !== 'technician' && role !== 'worker') {
-                      return null;
-                    }
-                    return {
-                      id: doc.id,
-                      displayName:
-                        typeof data.displayName === 'string' && data.displayName.trim()
-                          ? data.displayName.trim()
-                          : data.email ?? doc.id,
-                      email: typeof data.email === 'string' ? data.email : null,
-                      isAvailable: data.isAvailable !== false,
-                      currentTaskId: typeof data.currentTaskId === 'string' ? data.currentTaskId : null,
-                      shift: typeof data.shift === 'string' ? data.shift : '1st',
-                      building: typeof data.building === 'string' ? data.building : 'SDCA Annex Building',
-                      supervisorUid: typeof data.supervisorUid === 'string' ? data.supervisorUid : null,
-                    } as MaintenancePerson;
-                  })
-                  .filter((person): person is MaintenancePerson => person !== null);
-                setPeople(mappedPeople);
-              }
-            },
-            (err) => {
-              console.warn('[SupervisorScreens] users onSnapshot error:', err);
-            },
-          );
-        }
-      }
-    } catch (err) {
-      console.warn('[SupervisorScreens] Failed to bind onSnapshot listeners:', err);
-    }
-
-    const timer = setInterval(() => void refresh(), 10000);
-    return () => {
-      if (typeof unsubTasks === 'function') {
-        unsubTasks();
-      }
-      if (typeof unsubUsers === 'function') {
-        unsubUsers();
-      }
-      clearInterval(timer);
-    };
-  }, [refresh]);
-
-  return {
-    tasks,
-    people,
-    loading,
-    error,
-    refresh,
-    clearError: () => setError(null),
-  };
+  return useSupervisorContext();
 }
 
 export function SupervisorDashboardScreen({

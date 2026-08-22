@@ -290,13 +290,33 @@ export function statusTone(status: Task['status']): {
   };
 }
 
-export function urgencyTone(status: Task['status']): {
+export type TaskPriorityLevel = 'standard' | 'high' | 'critical';
+
+export function getTaskPriority(task: Task | null | undefined): TaskPriorityLevel {
+  if (!task) return 'standard';
+
+  if (
+    task.triggerType === 'hardware_failure' ||
+    task.triggerType === 'maintenance' ||
+    task.status === 'reassignment_needed'
+  ) {
+    return 'critical';
+  }
+
+  if (task.triggerType === 'flush_count' || task.triggerType === 'uv_complete') {
+    return 'high';
+  }
+
+  return 'standard';
+}
+
+export function taskPriorityTone(priority: TaskPriorityLevel): {
   label: string;
   backgroundColor: string;
   color: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
 } {
-  if (status === 'reassignment_needed' || status === 'unassigned') {
+  if (priority === 'critical') {
     return {
       label: 'Critical',
       backgroundColor: UI_COLORS.softRed,
@@ -305,12 +325,38 @@ export function urgencyTone(status: Task['status']): {
     };
   }
 
-  if (status === 'assigned') {
+  if (priority === 'high') {
     return {
-      label: 'High',
+      label: 'High Priority',
       backgroundColor: UI_COLORS.softOrange,
       color: '#C2410C',
       icon: 'alert-circle-outline',
+    };
+  }
+
+  return {
+    label: 'Standard',
+    backgroundColor: UI_COLORS.softBlue,
+    color: UI_COLORS.info,
+    icon: 'clipboard-text-outline',
+  };
+}
+
+export function urgencyTone(
+  status: Task['status'],
+  triggerType?: TaskTriggerType | null,
+): {
+  label: string;
+  backgroundColor: string;
+  color: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+} {
+  if (status === 'completed') {
+    return {
+      label: 'Completed',
+      backgroundColor: UI_COLORS.softGreen,
+      color: UI_COLORS.success,
+      icon: 'shield-check-outline',
     };
   }
 
@@ -323,11 +369,38 @@ export function urgencyTone(status: Task['status']): {
     };
   }
 
+  if (
+    status === 'reassignment_needed' ||
+    status === 'unassigned' ||
+    triggerType === 'hardware_failure' ||
+    triggerType === 'maintenance'
+  ) {
+    return {
+      label: 'Critical',
+      backgroundColor: UI_COLORS.softRed,
+      color: UI_COLORS.danger,
+      icon: 'alert-decagram',
+    };
+  }
+
+  if (
+    status === 'assigned' ||
+    triggerType === 'flush_count' ||
+    triggerType === 'uv_complete'
+  ) {
+    return {
+      label: 'High',
+      backgroundColor: UI_COLORS.softOrange,
+      color: '#C2410C',
+      icon: 'alert-circle-outline',
+    };
+  }
+
   return {
-    label: 'Completed',
-    backgroundColor: UI_COLORS.softGreen,
-    color: UI_COLORS.success,
-    icon: 'shield-check-outline',
+    label: 'Standard',
+    backgroundColor: UI_COLORS.softBlue,
+    color: UI_COLORS.info,
+    icon: 'clipboard-text-outline',
   };
 }
 

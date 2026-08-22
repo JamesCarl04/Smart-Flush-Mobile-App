@@ -11,7 +11,9 @@ export type TaskStatus =
 export type TaskTriggerType =
   | 'manual'
   | 'hardware_failure'
-  | 'maintenance';
+  | 'maintenance'
+  | 'flush_count'
+  | 'uv_complete';
 
 export type UserRole = 'maintenance' | 'supervisor';
 export type ChecklistValue = 'unchecked' | 'done' | 'na';

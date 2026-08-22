@@ -1,8 +1,10 @@
 import {
   COMPONENT_ICONS,
   getComponentMeta,
+  getTaskPriority,
   hardwareUrgencyTone,
   statusTone,
+  taskPriorityTone,
   taskTriggerTone,
   urgencyTone,
   UI_COLORS,
@@ -248,6 +250,26 @@ describe('MaintenanceUI helper functions', () => {
         color: UI_COLORS.success,
         icon: 'shield-check-outline',
       });
+    });
+  });
+
+  describe('getTaskPriority and taskPriorityTone', () => {
+    it('should identify standard tasks for manual dispatch', () => {
+      const mockTask: any = { triggerType: 'manual', status: 'assigned', component: 'floor' };
+      expect(getTaskPriority(mockTask)).toBe('standard');
+      expect(taskPriorityTone('standard').label).toBe('Standard');
+    });
+
+    it('should identify high priority tasks for flush count thresholds', () => {
+      const mockTask: any = { triggerType: 'flush_count', status: 'assigned', component: 'flush_valve' };
+      expect(getTaskPriority(mockTask)).toBe('high');
+      expect(taskPriorityTone('high').label).toBe('High Priority');
+    });
+
+    it('should identify critical tasks for hardware failure', () => {
+      const mockTask: any = { triggerType: 'hardware_failure', status: 'assigned', component: 'pump' };
+      expect(getTaskPriority(mockTask)).toBe('critical');
+      expect(taskPriorityTone('critical').label).toBe('Critical');
     });
   });
 });

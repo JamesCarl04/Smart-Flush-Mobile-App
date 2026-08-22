@@ -10,8 +10,10 @@ import {
   OperationBadge,
   UI_COLORS,
   getComponentMeta,
+  getTaskPriority,
   sharedShadow,
   statusTone,
+  taskPriorityTone,
   taskTriggerTone,
   urgencyTone,
 } from '../components/MaintenanceUI';
@@ -93,10 +95,9 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     (task) => task.status === 'acknowledged',
   ).length;
 
-  const urgentTask =
-    inboxTasks.find((task) => task.status === 'reassignment_needed') ??
-    inboxTasks.find((task) => task.status === 'unassigned') ??
-    inboxTasks.find((task) => task.status === 'assigned') ??
+  const priorityTask =
+    inboxTasks.find((task) => getTaskPriority(task) === 'critical') ??
+    inboxTasks.find((task) => getTaskPriority(task) === 'high') ??
     null;
 
   const [activeFilter, setActiveFilter] = useState<InboxFilter>('all');
@@ -115,12 +116,12 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             )
           : inboxTasks.filter((task) => task.status === activeFilter);
 
-    if (urgentTask && activeFilter !== 'acknowledged') {
-      return baseTasks.filter((task) => task.id !== urgentTask.id);
+    if (priorityTask && activeFilter !== 'acknowledged') {
+      return baseTasks.filter((task) => task.id !== priorityTask.id);
     }
 
     return baseTasks;
-  }, [activeFilter, inboxTasks, urgentTask]);
+  }, [activeFilter, inboxTasks, priorityTask]);
 
   const [executingTask, setExecutingTask] = useState<Task | null>(null);
   const [actionInFlightId, setActionInFlightId] = useState<string | null>(null);
@@ -226,18 +227,18 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             </View>
 
             {/* Priority Alert Callout */}
-            {urgentTask ? (
+            {priorityTask && activeFilter !== 'acknowledged' ? (
               <Card
                 mode="contained"
                 style={styles.urgentCard}
-                onPress={() => void handleStartTask(urgentTask)}
+                onPress={() => openTaskDetail(priorityTask.id)}
               >
                 <Card.Content style={styles.urgentContent}>
                   <View style={styles.urgentHeaderRow}>
                     <View style={styles.badgeRow}>
                       <OperationBadge
-                        label={urgencyTone(urgentTask.status).label}
-                        tone={urgencyTone(urgentTask.status)}
+                        label={taskPriorityTone(getTaskPriority(priorityTask)).label}
+                        tone={taskPriorityTone(getTaskPriority(priorityTask))}
                       />
                       <View style={styles.shiftPill}>
                         <MaterialCommunityIcons
@@ -246,7 +247,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                           color="#666666"
                         />
                         <Text style={styles.shiftPillText}>
-                          {`${urgentTask.shift ?? '1st'} Shift`}
+                          {`${priorityTask.shift ?? '1st'} Shift`}
                         </Text>
                       </View>
                     </View>
@@ -256,34 +257,36 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                         size={14}
                         color="#B5121B"
                       />
-                      <Text style={styles.priorityAlertTagText}>PRIORITY</Text>
+                      <Text style={styles.priorityAlertTagText}>
+                        {getTaskPriority(priorityTask) === 'critical' ? 'CRITICAL' : 'HIGH PRIORITY'}
+                      </Text>
                     </View>
                   </View>
 
                   <Text variant="titleLarge" style={styles.urgentTitle}>
-                    {getRestroomLabel(urgentTask)}
+                    {getRestroomLabel(priorityTask)}
                   </Text>
                   <Text variant="bodyMedium" style={styles.urgentLocationBreadcrumb}>
-                    {`${urgentTask.floor} • ${urgentTask.location} • ${urgentTask.building}`}
+                    {`${priorityTask.floor} • ${priorityTask.location} • ${priorityTask.building}`}
                   </Text>
                   <Text variant="bodyMedium" style={styles.urgentMessage}>
-                    {urgentTask.message}
+                    {priorityTask.message}
                   </Text>
 
                   <View style={styles.metaRow}>
                     <MetaPill
-                      icon={getComponentMeta(urgentTask.component).icon}
-                      label={getComponentMeta(urgentTask.component).label}
+                      icon={getComponentMeta(priorityTask.component).icon}
+                      label={getComponentMeta(priorityTask.component).label}
                     />
                     <MetaPill
                       icon="clock-outline"
-                      label={formatRelativeTime(urgentTask.createdAt)}
+                      label={formatRelativeTime(priorityTask.createdAt)}
                     />
                   </View>
 
                   <Button
                     mode="contained"
-                    onPress={() => openTaskDetail(urgentTask.id)}
+                    onPress={() => openTaskDetail(priorityTask.id)}
                     contentStyle={styles.actionButtonContent}
                     style={styles.urgentActionButton}
                     icon="arrow-right"

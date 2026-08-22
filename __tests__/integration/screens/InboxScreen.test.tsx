@@ -19,7 +19,7 @@ const mockInboxTasks: Task[] = [
     floor: '2F',
     building: 'GB3 Building',
     shift: '1st',
-    triggerType: 'hardware_failure',
+    triggerType: 'manual',
     message: 'Continuous water running detected in flush valve',
     assignedTo: 'user-tech-1',
     status: 'assigned',

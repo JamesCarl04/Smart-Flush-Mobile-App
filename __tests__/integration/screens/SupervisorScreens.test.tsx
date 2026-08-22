@@ -10,12 +10,21 @@ import {
   CompletedReviewsScreen,
   CompletedReviewDetailScreen,
 } from '../../../screens/SupervisorScreens';
+import { SupervisorProvider } from '../../../contexts/SupervisorContext';
 import * as supervisorApi from '../../../lib/supervisor-api';
 import * as useAuthHook from '../../../hooks/useAuth';
 import type { Task } from '../../../types';
 
 jest.mock('../../../lib/supervisor-api');
 jest.mock('../../../hooks/useAuth');
+
+const renderWithSupervisor = (ui: React.ReactElement) => {
+  return render(
+    <PaperProvider>
+      <SupervisorProvider>{ui}</SupervisorProvider>
+    </PaperProvider>,
+  );
+};
 
 const mockPersonnel: supervisorApi.MaintenancePerson[] = [
   {
@@ -155,13 +164,11 @@ describe('Supervisor Screens Integration Suite', () => {
 
   describe('SupervisorDashboardScreen', () => {
     it('displays active tasks today, staff counts (available, on task, offline), and unassigned tasks', async () => {
-      render(
-        <PaperProvider>
-          <SupervisorDashboardScreen
-            navigation={mockNavigation}
-            route={{ key: 'SupervisorDashboard', name: 'SupervisorDashboard' }}
-          />
-        </PaperProvider>,
+      renderWithSupervisor(
+        <SupervisorDashboardScreen
+          navigation={mockNavigation}
+          route={{ key: 'SupervisorDashboard', name: 'SupervisorDashboard' }}
+        />,
       );
 
       await waitFor(() => {
@@ -182,13 +189,11 @@ describe('Supervisor Screens Integration Suite', () => {
     });
 
     it('navigates to management screens on button presses', async () => {
-      render(
-        <PaperProvider>
-          <SupervisorDashboardScreen
-            navigation={mockNavigation}
-            route={{ key: 'SupervisorDashboard', name: 'SupervisorDashboard' }}
-          />
-        </PaperProvider>,
+      renderWithSupervisor(
+        <SupervisorDashboardScreen
+          navigation={mockNavigation}
+          route={{ key: 'SupervisorDashboard', name: 'SupervisorDashboard' }}
+        />,
       );
 
       await waitFor(() => {
@@ -208,11 +213,7 @@ describe('Supervisor Screens Integration Suite', () => {
 
   describe('TeamAvailabilityScreen', () => {
     it('displays staff list with status tags and active task descriptions', async () => {
-      render(
-        <PaperProvider>
-          <TeamAvailabilityScreen />
-        </PaperProvider>,
-      );
+      renderWithSupervisor(<TeamAvailabilityScreen />);
 
       await waitFor(() => {
         expect(screen.getByText('Juan Cruz')).toBeTruthy();
@@ -229,13 +230,11 @@ describe('Supervisor Screens Integration Suite', () => {
 
   describe('SupervisorTasksScreen & SupervisorTaskDetailScreen', () => {
     it('lists active tasks and opens task detail on press', async () => {
-      render(
-        <PaperProvider>
-          <SupervisorTasksScreen
-            navigation={mockNavigation}
-            route={{ key: 'SupervisorTasks', name: 'SupervisorTasks' }}
-          />
-        </PaperProvider>,
+      renderWithSupervisor(
+        <SupervisorTasksScreen
+          navigation={mockNavigation}
+          route={{ key: 'SupervisorTasks', name: 'SupervisorTasks' }}
+        />,
       );
 
       await waitFor(() => {
@@ -253,17 +252,15 @@ describe('Supervisor Screens Integration Suite', () => {
     });
 
     it('submits reassignment for an unassigned or assigned task', async () => {
-      render(
-        <PaperProvider>
-          <SupervisorTaskDetailScreen
-            navigation={mockNavigation}
-            route={{
-              key: 'SupervisorTaskDetail',
-              name: 'SupervisorTaskDetail',
-              params: { taskId: 'task-unassigned-2' },
-            }}
-          />
-        </PaperProvider>,
+      renderWithSupervisor(
+        <SupervisorTaskDetailScreen
+          navigation={mockNavigation}
+          route={{
+            key: 'SupervisorTaskDetail',
+            name: 'SupervisorTaskDetail',
+            params: { taskId: 'task-unassigned-2' },
+          }}
+        />,
       );
 
       await waitFor(() => {
@@ -301,13 +298,11 @@ describe('Supervisor Screens Integration Suite', () => {
 
   describe('CompletedReviewsScreen & CompletedReviewDetailScreen', () => {
     it('lists today completed tasks and opens detail view', async () => {
-      render(
-        <PaperProvider>
-          <CompletedReviewsScreen
-            navigation={mockNavigation}
-            route={{ key: 'CompletedReviews', name: 'CompletedReviews' }}
-          />
-        </PaperProvider>,
+      renderWithSupervisor(
+        <CompletedReviewsScreen
+          navigation={mockNavigation}
+          route={{ key: 'CompletedReviews', name: 'CompletedReviews' }}
+        />,
       );
 
       await waitFor(() => {
@@ -322,17 +317,15 @@ describe('Supervisor Screens Integration Suite', () => {
     });
 
     it('displays completion details, checklist, proof metrics, and allows flagging task', async () => {
-      render(
-        <PaperProvider>
-          <CompletedReviewDetailScreen
-            navigation={mockNavigation}
-            route={{
-              key: 'CompletedReviewDetail',
-              name: 'CompletedReviewDetail',
-              params: { taskId: 'task-completed-3' },
-            }}
-          />
-        </PaperProvider>,
+      renderWithSupervisor(
+        <CompletedReviewDetailScreen
+          navigation={mockNavigation}
+          route={{
+            key: 'CompletedReviewDetail',
+            name: 'CompletedReviewDetail',
+            params: { taskId: 'task-completed-3' },
+          }}
+        />,
       );
 
       await waitFor(() => {
