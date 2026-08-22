@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider } from './contexts/AuthContext';
 import { OfflineSyncProvider } from './contexts/OfflineSyncContext';
+import { SupervisorProvider } from './contexts/SupervisorContext';
 import { TasksProvider } from './contexts/TasksContext';
 import { useAuth } from './hooks/useAuth';
 import {
@@ -165,9 +166,11 @@ function Providers(): React.JSX.Element {
         <AuthProvider>
           <OfflineSyncProvider>
             <TasksProvider>
-              <NotificationLifecycle />
-              <AppNavigator />
-              <StatusBar style="dark" />
+              <SupervisorProvider>
+                <NotificationLifecycle />
+                <AppNavigator />
+                <StatusBar style="dark" />
+              </SupervisorProvider>
             </TasksProvider>
           </OfflineSyncProvider>
         </AuthProvider>

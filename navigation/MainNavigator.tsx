@@ -101,44 +101,40 @@ function TaskStackNavigator(): React.JSX.Element {
   );
 }
 
-import { SupervisorProvider } from '../contexts/SupervisorContext';
-
 function SupervisorStackNavigator(): React.JSX.Element {
   return (
-    <SupervisorProvider>
-      <SupervisorStack.Navigator screenOptions={sharedHeaderOptions}>
-        <SupervisorStack.Screen
-          name="SupervisorDashboard"
-          component={SupervisorDashboardScreen}
-          options={{ title: 'Supervisor Dashboard' }}
-        />
-        <SupervisorStack.Screen
-          name="TeamAvailability"
-          component={TeamAvailabilityScreen}
-          options={{ title: 'Team Availability' }}
-        />
-        <SupervisorStack.Screen
-          name="SupervisorTasks"
-          component={SupervisorTasksScreen}
-          options={{ title: 'All Tasks' }}
-        />
-        <SupervisorStack.Screen
-          name="SupervisorTaskDetail"
-          component={SupervisorTaskDetailScreen}
-          options={{ title: 'Task Review', headerRight: () => null }}
-        />
-        <SupervisorStack.Screen
-          name="CompletedReviews"
-          component={CompletedReviewsScreen}
-          options={{ title: 'Completed Reviews' }}
-        />
-        <SupervisorStack.Screen
-          name="CompletedReviewDetail"
-          component={CompletedReviewDetailScreen}
-          options={{ title: 'Review Details', headerRight: () => null }}
-        />
-      </SupervisorStack.Navigator>
-    </SupervisorProvider>
+    <SupervisorStack.Navigator screenOptions={sharedHeaderOptions}>
+      <SupervisorStack.Screen
+        name="SupervisorDashboard"
+        component={SupervisorDashboardScreen}
+        options={{ title: 'Supervisor Dashboard' }}
+      />
+      <SupervisorStack.Screen
+        name="TeamAvailability"
+        component={TeamAvailabilityScreen}
+        options={{ title: 'Team Availability' }}
+      />
+      <SupervisorStack.Screen
+        name="SupervisorTasks"
+        component={SupervisorTasksScreen}
+        options={{ title: 'All Tasks' }}
+      />
+      <SupervisorStack.Screen
+        name="SupervisorTaskDetail"
+        component={SupervisorTaskDetailScreen}
+        options={{ title: 'Task Review', headerRight: () => null }}
+      />
+      <SupervisorStack.Screen
+        name="CompletedReviews"
+        component={CompletedReviewsScreen}
+        options={{ title: 'Completed Reviews' }}
+      />
+      <SupervisorStack.Screen
+        name="CompletedReviewDetail"
+        component={CompletedReviewDetailScreen}
+        options={{ title: 'Review Details', headerRight: () => null }}
+      />
+    </SupervisorStack.Navigator>
   );
 }
 

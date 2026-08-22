@@ -77,7 +77,9 @@ export function isTaskTriggerType(value: unknown): value is TaskTriggerType {
   return (
     value === 'manual' ||
     value === 'hardware_failure' ||
-    value === 'maintenance'
+    value === 'maintenance' ||
+    value === 'flush_count' ||
+    value === 'uv_complete'
   );
 }
 
