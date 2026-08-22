@@ -548,4 +548,228 @@ const styles = StyleSheet.create({
     color: KLIR_COLORS.slateMuted,
     lineHeight: 22,
   },
+  // Assignee Avatar Cluster Styles
+  avatarClusterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  avatarPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  avatarPillPending: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#CBD5E1',
+  },
+  avatarPillAck: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#86EFAC',
+  },
+  avatarPillSubmitted: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#22C55E',
+  },
+  avatarCircleWrapper: {
+    position: 'relative',
+  },
+  avatarCircle: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: KLIR_COLORS.primarySoft,
+  },
+  avatarCircleAck: {
+    backgroundColor: '#DCFCE7',
+  },
+  avatarCircleSubmitted: {
+    backgroundColor: '#16A34A',
+  },
+  avatarText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: KLIR_COLORS.primaryDark,
+  },
+  avatarTextAck: {
+    color: '#15803D',
+  },
+  avatarTextSubmitted: {
+    color: '#FFFFFF',
+  },
+  checkBadge: {
+    position: 'absolute',
+    top: -3,
+    right: -5,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF',
+  },
+  avatarLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: KLIR_COLORS.charcoal,
+  },
+  broadcastPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  broadcastText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
 });
+
+export interface AssigneeAvatarClusterProps {
+  task: Task;
+  people?: Array<{ id: string; displayName?: string; email?: string | null }>;
+  showNames?: boolean;
+}
+
+function getInitials(name?: string): string {
+  if (!name) return 'OP';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+export function AssigneeAvatarCluster({
+  task,
+  people = [],
+  showNames = true,
+}: AssigneeAvatarClusterProps): React.JSX.Element | null {
+  const assignedIds =
+    task.assignedToIds && task.assignedToIds.length > 0
+      ? task.assignedToIds
+      : task.assignedTo
+        ? [task.assignedTo]
+        : [];
+
+  const isBroadcast = assignedIds.length === 0;
+
+  if (isBroadcast) {
+    const ackCount = task.acknowledgedBy ? Object.keys(task.acknowledgedBy).length : 0;
+    return (
+      <View
+        style={styles.broadcastPill}
+        accessible={true}
+        accessibilityRole="summary"
+        accessibilityLabel={`Broadcast to all team. ${ackCount} acknowledged`}
+      >
+        <MaterialCommunityIcons name="bullhorn-outline" size={14} color="#1D4ED8" />
+        <Text style={styles.broadcastText}>
+          {ackCount > 0 ? `Team Broadcast (${ackCount} Acknowledged)` : 'All Team (Broadcast)'}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.avatarClusterRow}>
+      {assignedIds.map((uid) => {
+        const person = people.find((p) => p.id === uid || p.email === uid);
+        const displayName = person?.displayName || person?.email || (uid === task.assignedTo ? 'Assigned Tech' : uid);
+        const initials = getInitials(displayName);
+
+        const hasAcknowledged = Boolean(
+          task.acknowledgedBy?.[uid] ||
+          (task.status === 'acknowledged' && task.assignedTo === uid) ||
+          task.completedByMap?.[uid] ||
+          task.submissions?.[uid]
+        );
+
+        const hasSubmitted = Boolean(
+          task.submissions?.[uid] ||
+          task.completedByMap?.[uid] ||
+          (task.status === 'completed' && (task.completedBy === uid || task.assignedTo === uid))
+        );
+
+        const statusLabel = hasSubmitted
+          ? 'Submitted'
+          : hasAcknowledged
+            ? 'Acknowledged'
+            : 'Pending';
+
+        return (
+          <View
+            key={uid}
+            style={[
+              styles.avatarPill,
+              hasSubmitted
+                ? styles.avatarPillSubmitted
+                : hasAcknowledged
+                  ? styles.avatarPillAck
+                  : styles.avatarPillPending,
+            ]}
+            accessible={true}
+            accessibilityRole="summary"
+            accessibilityLabel={`${displayName}: ${statusLabel}`}
+          >
+            <View style={styles.avatarCircleWrapper}>
+              <View
+                style={[
+                  styles.avatarCircle,
+                  hasSubmitted
+                    ? styles.avatarCircleSubmitted
+                    : hasAcknowledged
+                      ? styles.avatarCircleAck
+                      : null,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.avatarText,
+                    hasSubmitted
+                      ? styles.avatarTextSubmitted
+                      : hasAcknowledged
+                        ? styles.avatarTextAck
+                        : null,
+                  ]}
+                >
+                  {initials}
+                </Text>
+              </View>
+              {hasAcknowledged && (
+                <View style={styles.checkBadge}>
+                  <MaterialCommunityIcons
+                    name={hasSubmitted ? 'check-all' : 'check'}
+                    size={9}
+                    color="#FFFFFF"
+                  />
+                </View>
+              )}
+            </View>
+
+            {showNames && (
+              <Text style={styles.avatarLabel} numberOfLines={1}>
+                {displayName.split(' ')[0]}
+                {hasSubmitted ? ' (Done)' : hasAcknowledged ? ' (Ack)' : ''}
+              </Text>
+            )}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+

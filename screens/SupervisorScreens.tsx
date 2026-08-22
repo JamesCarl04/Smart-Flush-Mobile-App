@@ -5,6 +5,7 @@ import {
   Image,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -24,6 +25,7 @@ import {
 } from 'react-native-paper';
 
 import {
+  AssigneeAvatarCluster,
   EmptyOperationState,
   KLIR_COLORS,
   KLIR_SPACING,
@@ -60,6 +62,10 @@ type TaskDetailProps = NativeStackScreenProps<
 type ReviewDetailProps = NativeStackScreenProps<
   SupervisorStackParamList,
   'CompletedReviewDetail'
+>;
+type ReportsProps = NativeStackScreenProps<
+  SupervisorStackParamList,
+  'SupervisorReports'
 >;
 
 function formatDate(date?: Date | null): string {
@@ -338,6 +344,18 @@ export function SupervisorDashboardScreen({
             onPress={() => navigation.navigate('CompletedReviews')}
           >
             Review Completed Tasks
+          </Button>
+
+          <Button
+            mode="outlined"
+            textColor={KLIR_COLORS.charcoal}
+            icon="file-chart-outline"
+            style={[styles.secondaryActionButton, sharedShadow]}
+            contentStyle={styles.actionButtonContent}
+            labelStyle={styles.secondaryButtonLabel}
+            onPress={() => navigation.navigate('SupervisorReports')}
+          >
+            Operations Audit & Export Log
           </Button>
 
           <Button
@@ -786,6 +804,23 @@ export function CompletedReviewDetailScreen({
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Multi-technician submission selection
+  const submissionUids = useMemo(() => {
+    if (!task?.submissions) return [];
+    return Object.keys(task.submissions);
+  }, [task]);
+
+  const [selectedTechUid, setSelectedTechUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (
+      submissionUids.length > 0 &&
+      (!selectedTechUid || !submissionUids.includes(selectedTechUid))
+    ) {
+      setSelectedTechUid(submissionUids[0]);
+    }
+  }, [submissionUids, selectedTechUid]);
+
   if (!task) {
     return (
       <View style={styles.screen}>
@@ -798,7 +833,26 @@ export function CompletedReviewDetailScreen({
     );
   }
 
+  const activeSubmission =
+    selectedTechUid && task.submissions
+      ? task.submissions[selectedTechUid]
+      : null;
+
+  const displayBeforePhoto =
+    activeSubmission?.beforePhotoUrl ?? task.beforePhotoUrl;
+  const displayBeforeCapturedAt =
+    activeSubmission?.beforePhotoCapturedAt ?? task.beforePhotoCapturedAt;
+  const displayAfterPhoto =
+    activeSubmission?.afterPhotoUrl ?? task.afterPhotoUrl;
+  const displayAfterCapturedAt =
+    activeSubmission?.afterPhotoCapturedAt ?? task.afterPhotoCapturedAt;
+  const displayChecklist = activeSubmission?.checklist ?? task.checklist;
+  const displayRemarks = activeSubmission?.remarks ?? task.remarks;
+  const displayBiometric =
+    activeSubmission?.biometricVerified ?? task.biometricVerified;
+
   const computedWorkDuration =
+    activeSubmission?.workDuration ??
     task.workDuration ??
     (task.completedAt && task.acknowledgedAt
       ? Math.max(
@@ -833,27 +887,122 @@ export function CompletedReviewDetailScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
+        {/* Task Overview Card */}
+        <Card mode="elevated" style={[styles.personCard, sharedShadow]}>
+          <Card.Content style={styles.cardContent}>
+            <View style={styles.rowBetween}>
+              <Text variant="titleMedium" style={styles.taskLocationLarge}>
+                {task.location}
+              </Text>
+              <View
+                style={[
+                  styles.teamBadge,
+                  { backgroundColor: KLIR_COLORS.softGreen },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.teamBadgeText,
+                    { color: KLIR_COLORS.successText },
+                  ]}
+                >
+                  ✓ Completed
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.taskLocationSub}>
+              {task.component} • {task.floor}, {task.building}
+            </Text>
+            <View style={{ marginVertical: 4 }}>
+              <AssigneeAvatarCluster
+                task={task}
+                people={people}
+                showNames={true}
+              />
+            </View>
+          </Card.Content>
+        </Card>
+
+        {/* Multi-Technician Submission Tabs (if multiple submissions) */}
+        {submissionUids.length > 1 ? (
+          <View style={styles.techTabsCard}>
+            <Text variant="labelLarge" style={styles.techTabsTitle}>
+              Submissions by Team Members ({submissionUids.length}):
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.techTabsRow}
+            >
+              {submissionUids.map((uid) => {
+                const isSelected = selectedTechUid === uid;
+                const techName =
+                  task.submissions?.[uid]?.technicianName ||
+                  getAssigneeName(uid, people);
+                return (
+                  <TouchableOpacity
+                    key={uid}
+                    onPress={() => setSelectedTechUid(uid)}
+                    style={[
+                      styles.techTabPill,
+                      isSelected && styles.techTabPillActive,
+                    ]}
+                    accessible={true}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: isSelected }}
+                    accessibilityLabel={`View submission from ${techName}`}
+                  >
+                    <MaterialCommunityIcons
+                      name="account-check"
+                      size={14}
+                      color={isSelected ? '#FFFFFF' : KLIR_COLORS.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.techTabPillText,
+                        isSelected && styles.techTabPillTextActive,
+                      ]}
+                    >
+                      {techName}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
         {/* Before / After Photo Row */}
         <View style={styles.photoRow}>
-          {task.beforePhotoUrl ? (
+          {displayBeforePhoto ? (
             <Image
-              source={{ uri: task.beforePhotoUrl }}
+              source={{ uri: displayBeforePhoto }}
               style={styles.photo}
+              accessibilityLabel="Before maintenance photo proof"
             />
           ) : (
             <View style={styles.photoPlaceholder}>
-              <MaterialCommunityIcons name="camera-off" size={24} color={KLIR_COLORS.slateLight} />
+              <MaterialCommunityIcons
+                name="camera-off"
+                size={24}
+                color={KLIR_COLORS.slateLight}
+              />
               <Text style={styles.photoPlaceholderText}>No Before Photo</Text>
             </View>
           )}
-          {task.afterPhotoUrl ? (
+          {displayAfterPhoto ? (
             <Image
-              source={{ uri: task.afterPhotoUrl }}
+              source={{ uri: displayAfterPhoto }}
               style={styles.photo}
+              accessibilityLabel="After maintenance photo proof"
             />
           ) : (
             <View style={styles.photoPlaceholder}>
-              <MaterialCommunityIcons name="camera-off" size={24} color={KLIR_COLORS.slateLight} />
+              <MaterialCommunityIcons
+                name="camera-off"
+                size={24}
+                color={KLIR_COLORS.slateLight}
+              />
               <Text style={styles.photoPlaceholderText}>No After Photo</Text>
             </View>
           )}
@@ -863,10 +1012,12 @@ export function CompletedReviewDetailScreen({
         <Card mode="elevated" style={[styles.personCard, sharedShadow]}>
           <Card.Content style={styles.cardContent}>
             <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-              Checklist
+              {activeSubmission
+                ? `Checklist (${activeSubmission.technicianName})`
+                : 'Checklist'}
             </Text>
             {CHECKLIST_LABELS.map((item) => {
-              const val = task.checklist?.[item.key];
+              const val = displayChecklist?.[item.key];
               const symbol = val === 'done' ? '✓' : val === 'na' ? 'N/A' : '—';
               return (
                 <Text key={item.key} style={styles.checklistItemText}>
@@ -875,7 +1026,7 @@ export function CompletedReviewDetailScreen({
               );
             })}
             <Text style={styles.metricText}>
-              Remarks: {task.remarks || 'None'}
+              Remarks: {displayRemarks || 'None'}
             </Text>
             <Text style={styles.metricText}>
               Response time: {formatDuration(computedResponseTime)}
@@ -884,9 +1035,12 @@ export function CompletedReviewDetailScreen({
               Work duration: {formatDuration(computedWorkDuration)}
             </Text>
             <Text style={styles.metricText}>
-              Completed by: {getAssigneeName(task.completedBy ?? task.assignedTo, people)}
+              Submitted by:{' '}
+              {activeSubmission
+                ? activeSubmission.technicianName
+                : getAssigneeName(task.completedBy ?? task.assignedTo, people)}
             </Text>
-            {task.biometricVerified ? (
+            {displayBiometric ? (
               <Chip icon="fingerprint" style={styles.biometricChip}>
                 Biometric verified
               </Chip>
@@ -917,7 +1071,10 @@ export function CompletedReviewDetailScreen({
             />
           </Dialog.Content>
           <Dialog.Actions>
-            <Button onPress={() => setVisible(false)} textColor={KLIR_COLORS.slateMuted}>
+            <Button
+              onPress={() => setVisible(false)}
+              textColor={KLIR_COLORS.slateMuted}
+            >
               Cancel
             </Button>
             <Button
@@ -949,6 +1106,373 @@ export function CompletedReviewDetailScreen({
       <Snackbar visible={message !== null} onDismiss={() => setMessage(null)}>
         {message ?? ''}
       </Snackbar>
+    </View>
+  );
+}
+
+type ReportTimeframe = 'today' | 'week' | 'month' | 'year' | 'all';
+
+export function SupervisorReportsScreen({
+  navigation,
+}: ReportsProps): React.JSX.Element {
+  const { tasks, people, loading, refresh } = useSupervisorData();
+  const [timeframe, setTimeframe] = useState<ReportTimeframe>('today');
+  const [exporting, setExporting] = useState(false);
+
+  const completedTasks = useMemo(() => {
+    return tasks.filter((t) => t.status === 'completed');
+  }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      now.getDate(),
+    );
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    return completedTasks.filter((t) => {
+      const taskDate = t.completedAt ?? t.createdAt;
+      switch (timeframe) {
+        case 'today':
+          return taskDate >= startOfToday;
+        case 'week':
+          return taskDate >= startOfWeek;
+        case 'month':
+          return taskDate >= startOfMonth;
+        case 'year':
+          return taskDate >= startOfYear;
+        case 'all':
+        default:
+          return true;
+      }
+    });
+  }, [completedTasks, timeframe]);
+
+  const metrics = useMemo(() => {
+    const total = filteredTasks.length;
+    let totalDurationSeconds = 0;
+    let photoPairsCount = 0;
+    let biometricCount = 0;
+
+    for (const t of filteredTasks) {
+      if (t.workDuration) totalDurationSeconds += t.workDuration;
+      if (t.beforePhotoUrl && t.afterPhotoUrl) photoPairsCount += 1;
+      if (t.biometricVerified) biometricCount += 1;
+    }
+
+    const avgDurationSeconds =
+      total > 0 ? Math.round(totalDurationSeconds / total) : 0;
+    const biometricPct =
+      total > 0 ? Math.round((biometricCount / total) * 100) : 0;
+
+    return {
+      total,
+      avgDuration: formatDuration(avgDurationSeconds),
+      photoPairsCount,
+      biometricPct: `${biometricPct}%`,
+    };
+  }, [filteredTasks]);
+
+  const handleExportCSV = async (): Promise<void> => {
+    if (filteredTasks.length === 0) {
+      Alert.alert(
+        'No Records',
+        'There are no completed tasks in this timeframe to export.',
+      );
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const headers = [
+        'Task ID',
+        'Restroom / Location',
+        'Floor',
+        'Building',
+        'Component',
+        'Trigger Type',
+        'Technician(s)',
+        'Created At',
+        'Completed At',
+        'Work Duration (Seconds)',
+        'Biometric Verified',
+        'Remarks',
+      ];
+
+      const rows = filteredTasks.map((t) => {
+        const assignee = getAssigneeName(
+          t.completedBy ?? t.assignedTo,
+          people,
+        );
+        const createdAtStr = t.createdAt.toISOString();
+        const completedAtStr = t.completedAt
+          ? t.completedAt.toISOString()
+          : 'N/A';
+        const remarksClean = `"${(t.remarks || '').replace(/"/g, '""')}"`;
+        const locClean = `"${(t.location || t.restroomName || '').replace(/"/g, '""')}"`;
+
+        return [
+          t.id,
+          locClean,
+          t.floor,
+          t.building,
+          t.component,
+          t.triggerType,
+          `"${assignee.replace(/"/g, '""')}"`,
+          createdAtStr,
+          completedAtStr,
+          t.workDuration ?? 0,
+          t.biometricVerified ? 'Yes' : 'No',
+          remarksClean,
+        ].join(',');
+      });
+
+      const csvContent = [headers.join(','), ...rows].join('\n');
+
+      await Share.share({
+        title: `Smart Flush Operations Log - ${timeframe.toUpperCase()}`,
+        message: csvContent,
+      });
+    } catch {
+      Alert.alert('Export Failed', 'Unable to share CSV report.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const timeframeTabs: Array<{ id: ReportTimeframe; label: string }> = [
+    { id: 'today', label: 'Today' },
+    { id: 'week', label: 'This Week' },
+    { id: 'month', label: 'This Month' },
+    { id: 'year', label: 'This Year' },
+    { id: 'all', label: 'All Time' },
+  ];
+
+  return (
+    <View style={styles.screen}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={loading}
+            onRefresh={() => void refresh()}
+            colors={[KLIR_COLORS.primary]}
+          />
+        }
+      >
+        {/* Timeframe Filter Tabs */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.timeframeScrollRow}
+        >
+          {timeframeTabs.map((tab) => {
+            const isSelected = timeframe === tab.id;
+            return (
+              <TouchableOpacity
+                key={tab.id}
+                onPress={() => setTimeframe(tab.id)}
+                style={[
+                  styles.timeframePill,
+                  isSelected && styles.timeframePillActive,
+                ]}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isSelected }}
+                accessibilityLabel={`View report for ${tab.label}`}
+              >
+                <Text
+                  style={[
+                    styles.timeframePillText,
+                    isSelected && styles.timeframePillTextActive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {/* Analytics Summary KPI Cards */}
+        <View style={styles.metricsGrid}>
+          <Card
+            mode="contained"
+            style={[styles.metricTile, styles.standardMetricTile, sharedShadow]}
+          >
+            <Card.Content style={styles.metricTileContent}>
+              <Text variant="labelMedium" style={styles.metricLabel}>
+                Tasks Completed
+              </Text>
+              <Text variant="displaySmall" style={styles.metricBigNumber}>
+                {metrics.total}
+              </Text>
+              <Text style={styles.metricFooterText}>Resolved in timeframe</Text>
+            </Card.Content>
+          </Card>
+
+          <Card
+            mode="contained"
+            style={[styles.metricTile, styles.standardMetricTile, sharedShadow]}
+          >
+            <Card.Content style={styles.metricTileContent}>
+              <Text variant="labelMedium" style={styles.metricLabel}>
+                Avg Resolution SLA
+              </Text>
+              <Text variant="displaySmall" style={styles.metricBigNumber}>
+                {metrics.avgDuration}
+              </Text>
+              <Text style={styles.metricFooterText}>From ack to done</Text>
+            </Card.Content>
+          </Card>
+
+          <Card
+            mode="contained"
+            style={[styles.metricTile, styles.standardMetricTile, sharedShadow]}
+          >
+            <Card.Content style={styles.metricTileContent}>
+              <Text variant="labelMedium" style={styles.metricLabel}>
+                Photo Evidence
+              </Text>
+              <Text variant="displaySmall" style={styles.metricBigNumber}>
+                {metrics.photoPairsCount}
+              </Text>
+              <Text style={styles.metricFooterText}>Before/After pairs</Text>
+            </Card.Content>
+          </Card>
+
+          <Card
+            mode="contained"
+            style={[styles.metricTile, styles.standardMetricTile, sharedShadow]}
+          >
+            <Card.Content style={styles.metricTileContent}>
+              <Text variant="labelMedium" style={styles.metricLabel}>
+                Biometric Verified
+              </Text>
+              <Text variant="displaySmall" style={styles.metricBigNumber}>
+                {metrics.biometricPct}
+              </Text>
+              <Text style={styles.metricFooterText}>Identity authenticated</Text>
+            </Card.Content>
+          </Card>
+        </View>
+
+        {/* Export Action Card */}
+        <Card mode="elevated" style={[styles.personCard, sharedShadow]}>
+          <Card.Content style={styles.cardContent}>
+            <View style={styles.rowBetween}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                  Export Operations CSV
+                </Text>
+                <Text style={styles.metricFooterText}>
+                  Generate compliance audit spreadsheet for{' '}
+                  {
+                    timeframeTabs.find((t) => t.id === timeframe)?.label
+                  }
+                </Text>
+              </View>
+              <Button
+                mode="contained"
+                buttonColor={KLIR_COLORS.primary}
+                textColor="#FFFFFF"
+                icon="file-download-outline"
+                loading={exporting}
+                disabled={exporting || filteredTasks.length === 0}
+                onPress={() => void handleExportCSV()}
+                style={sharedShadow}
+              >
+                Export CSV
+              </Button>
+            </View>
+          </Card.Content>
+        </Card>
+
+        {/* Submissions Log Feed */}
+        <Text style={styles.sectionHeaderTitle}>
+          Completed Submissions Feed ({filteredTasks.length})
+        </Text>
+
+        {filteredTasks.length === 0 ? (
+          <EmptyOperationState
+            icon="clipboard-text-outline"
+            title="No records found"
+            body={`No completed tasks recorded for ${timeframeTabs.find((t) => t.id === timeframe)?.label.toLowerCase()}.`}
+          />
+        ) : (
+          filteredTasks.map((item) => (
+            <Card
+              key={item.id}
+              mode="elevated"
+              style={[styles.taskCard, sharedShadow]}
+              onPress={() =>
+                navigation.navigate('CompletedReviewDetail', {
+                  taskId: item.id,
+                })
+              }
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.location}, ${item.floor}. Completed by ${getAssigneeName(item.completedBy ?? item.assignedTo, people)}`}
+            >
+              <Card.Content style={styles.cardContent}>
+                <View style={styles.rowBetween}>
+                  <Text variant="titleMedium" style={styles.taskLocationTitle}>
+                    {item.location}
+                  </Text>
+                  <View
+                    style={[
+                      styles.teamBadge,
+                      { backgroundColor: KLIR_COLORS.softGreen },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.teamBadgeText,
+                        { color: KLIR_COLORS.successText },
+                      ]}
+                    >
+                      ✓ Completed
+                    </Text>
+                  </View>
+                </View>
+                <Text variant="bodyMedium" style={styles.taskComponentText}>
+                  {item.component} • {item.floor}, {item.building}
+                </Text>
+                <View style={{ marginVertical: 4 }}>
+                  <AssigneeAvatarCluster
+                    task={item}
+                    people={people}
+                    showNames={true}
+                  />
+                </View>
+                <View style={styles.rowBetween}>
+                  <Text variant="bodySmall" style={styles.taskAssigneeText}>
+                    Completed: {formatDate(item.completedAt)}
+                  </Text>
+                  <Text
+                    variant="bodySmall"
+                    style={{
+                      color: KLIR_COLORS.slateMuted,
+                      fontWeight: '600',
+                    }}
+                  >
+                    SLA: {formatDuration(item.workDuration ?? 0)}
+                  </Text>
+                </View>
+              </Card.Content>
+            </Card>
+          ))
+        )}
+      </ScrollView>
     </View>
   );
 }
@@ -1276,6 +1800,81 @@ const styles = StyleSheet.create({
   flagButton: {
     marginTop: 8,
     borderRadius: 12,
+  },
+
+  // Multi-Technician Tabs
+  techTabsCard: {
+    backgroundColor: KLIR_COLORS.cardSurface,
+    borderRadius: 16,
+    padding: KLIR_SPACING.md,
+    borderWidth: 1,
+    borderColor: KLIR_COLORS.slateBorder,
+    gap: 8,
+  },
+  techTabsTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: KLIR_COLORS.charcoal,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  techTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  techTabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    minHeight: 40,
+  },
+  techTabPillActive: {
+    backgroundColor: KLIR_COLORS.primary,
+    borderColor: KLIR_COLORS.primary,
+  },
+  techTabPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: KLIR_COLORS.charcoal,
+  },
+  techTabPillTextActive: {
+    color: '#FFFFFF',
+  },
+
+  // Reports Timeframe Filter
+  timeframeScrollRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  timeframePill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: KLIR_COLORS.cardSurface,
+    borderWidth: 1,
+    borderColor: KLIR_COLORS.slateBorder,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  timeframePillActive: {
+    backgroundColor: KLIR_COLORS.primary,
+    borderColor: KLIR_COLORS.primary,
+  },
+  timeframePillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: KLIR_COLORS.slate,
+  },
+  timeframePillTextActive: {
+    color: '#FFFFFF',
   },
 
   // Skeletons

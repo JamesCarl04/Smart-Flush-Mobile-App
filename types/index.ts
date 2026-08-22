@@ -31,6 +31,20 @@ export interface TaskChecklist {
   disinfectUVLights: ChecklistValue;
 }
 
+export interface TaskSubmission {
+  technicianUid: string;
+  technicianName: string;
+  checklist: TaskChecklist;
+  beforePhotoUrl?: string | null;
+  beforePhotoCapturedAt?: Date | null;
+  afterPhotoUrl?: string | null;
+  afterPhotoCapturedAt?: Date | null;
+  remarks?: string;
+  workDuration?: number | null;
+  completedAt: Date;
+  biometricVerified?: boolean;
+}
+
 export interface Task {
   id: string;
   alertId?: string | null;
@@ -45,11 +59,15 @@ export interface Task {
   triggerType: TaskTriggerType;
   message: string;
   assignedTo: string | null;
+  assignedToIds?: string[];
   status: TaskStatus;
   createdAt: Date;
   assignedAt?: Date | null;
   acknowledgedAt?: Date | null;
   completedAt?: Date | null;
+  acknowledgedBy?: Record<string, Date>;
+  completedByMap?: Record<string, Date>;
+  submissions?: Record<string, TaskSubmission>;
   responseTime?: number | null;
   workDuration?: number | null;
   totalTime?: number | null;
@@ -122,6 +140,7 @@ export type SupervisorStackParamList = {
   SupervisorTaskDetail: { taskId: string };
   CompletedReviews: undefined;
   CompletedReviewDetail: { taskId: string };
+  SupervisorReports: undefined;
 };
 
 export type MainTabParamList = {

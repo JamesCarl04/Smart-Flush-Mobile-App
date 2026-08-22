@@ -19,6 +19,7 @@ import {
 } from 'react-native-paper';
 
 import {
+  AssigneeAvatarCluster,
   MetaPill,
   OperationBadge,
   UI_COLORS,
@@ -752,6 +753,10 @@ export function TaskDetailScreen({
                   icon="calendar-clock"
                   label={formatDate(task.createdAt)}
                 />
+              </View>
+
+              <View style={{ marginTop: 12 }}>
+                <AssigneeAvatarCluster task={task} showNames={true} />
               </View>
 
               {/* Direct Action Button */}

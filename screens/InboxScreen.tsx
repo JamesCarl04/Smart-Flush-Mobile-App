@@ -5,6 +5,7 @@ import { useContext, useMemo, useState } from 'react';
 import { Button, Card, Snackbar, Text } from 'react-native-paper';
 
 import {
+  AssigneeAvatarCluster,
   EmptyOperationState,
   MetaPill,
   OperationBadge,
@@ -284,6 +285,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                     />
                   </View>
 
+                  <View style={{ marginTop: 10 }}>
+                    <AssigneeAvatarCluster task={priorityTask} />
+                  </View>
+
                   <Button
                     mode="contained"
                     onPress={() => openTaskDetail(priorityTask.id)}
@@ -400,6 +405,10 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 {item.type === 'cleaning' ? (
                   <MetaPill icon="broom" label="Cleaning" />
                 ) : null}
+              </View>
+
+              <View style={{ marginTop: 10 }}>
+                <AssigneeAvatarCluster task={item} />
               </View>
             </Card.Content>
 

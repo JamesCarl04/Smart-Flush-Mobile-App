@@ -111,6 +111,20 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   const totalTime = secondsBetween(input.createdAt, input.completedAt);
 
   try {
+    const submissionPayload = {
+      technicianUid: input.completedBy,
+      technicianName: auth.currentUser?.displayName ?? input.completedBy,
+      checklist: input.checklist,
+      beforePhotoUrl,
+      beforePhotoCapturedAt: firestore.Timestamp.fromDate(input.beforePhotoCapturedAt),
+      afterPhotoUrl,
+      afterPhotoCapturedAt: firestore.Timestamp.fromDate(input.afterPhotoCapturedAt),
+      remarks: input.remarks,
+      workDuration,
+      completedAt: firestore.Timestamp.fromDate(input.completedAt),
+      biometricVerified: input.biometricVerified,
+    };
+
     await db.collection('tasks').doc(input.taskId).update({
       checklist: input.checklist,
       remarks: input.remarks,
@@ -124,6 +138,7 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       completedAt: firestore.Timestamp.fromDate(input.completedAt),
       completedBy: input.completedBy,
       [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt),
+      [`submissions.${input.completedBy}`]: submissionPayload,
       assignedTo: input.completedBy,
       workDuration,
       totalTime,

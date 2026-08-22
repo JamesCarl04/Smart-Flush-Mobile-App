@@ -13,6 +13,7 @@ import {
   CompletedReviewDetailScreen,
   CompletedReviewsScreen,
   SupervisorDashboardScreen,
+  SupervisorReportsScreen,
   SupervisorTaskDetailScreen,
   SupervisorTasksScreen,
   TeamAvailabilityScreen,
@@ -133,6 +134,11 @@ function SupervisorStackNavigator(): React.JSX.Element {
         name="CompletedReviewDetail"
         component={CompletedReviewDetailScreen}
         options={{ title: 'Review Details', headerRight: () => null }}
+      />
+      <SupervisorStack.Screen
+        name="SupervisorReports"
+        component={SupervisorReportsScreen}
+        options={{ title: 'Operations Audit Log' }}
       />
     </SupervisorStack.Navigator>
   );

@@ -9,6 +9,7 @@ import {
   SupervisorTaskDetailScreen,
   CompletedReviewsScreen,
   CompletedReviewDetailScreen,
+  SupervisorReportsScreen,
 } from '../../../screens/SupervisorScreens';
 import { SupervisorProvider } from '../../../contexts/SupervisorContext';
 import * as supervisorApi from '../../../lib/supervisor-api';
@@ -208,6 +209,9 @@ describe('Supervisor Screens Integration Suite', () => {
 
       fireEvent.press(screen.getByText('Review Completed Tasks'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('CompletedReviews');
+
+      fireEvent.press(screen.getByText('Operations Audit & Export Log'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('SupervisorReports');
     });
   });
 
@@ -360,6 +364,30 @@ describe('Supervisor Screens Integration Suite', () => {
       await waitFor(() => {
         expect(screen.getByText('Task flagged for re-inspection.')).toBeTruthy();
       });
+    });
+  });
+
+  describe('SupervisorReportsScreen', () => {
+    it('renders audit KPI cards and completed submissions feed', async () => {
+      renderWithSupervisor(
+        <SupervisorReportsScreen
+          navigation={mockNavigation}
+          route={{
+            key: 'SupervisorReports',
+            name: 'SupervisorReports',
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Tasks Completed')).toBeTruthy();
+      });
+
+      expect(screen.getByText('Avg Resolution SLA')).toBeTruthy();
+      expect(screen.getByText('Photo Evidence')).toBeTruthy();
+      expect(screen.getByText('Biometric Verified')).toBeTruthy();
+      expect(screen.getByText('Export Operations CSV')).toBeTruthy();
+      expect(screen.getByText('Export CSV')).toBeTruthy();
     });
   });
 });

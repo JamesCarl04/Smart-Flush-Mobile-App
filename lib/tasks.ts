@@ -5,6 +5,7 @@ import type {
   Task,
   TaskChecklist,
   TaskStatus,
+  TaskSubmission,
   TaskTriggerType,
 } from '../types';
 
@@ -25,10 +26,14 @@ type TaskDocumentShape = {
   message?: unknown;
   status?: unknown;
   assignedTo?: unknown;
+  assignedToIds?: unknown;
   createdAt?: FirestoreDateValue;
   assignedAt?: FirestoreDateValue;
   acknowledgedAt?: FirestoreDateValue;
   completedAt?: FirestoreDateValue;
+  acknowledgedBy?: unknown;
+  completedBy?: unknown;
+  submissions?: unknown;
   responseTime?: unknown;
   workDuration?: unknown;
   totalTime?: unknown;
@@ -40,11 +45,63 @@ type TaskDocumentShape = {
   afterPhotoCapturedAt?: FirestoreDateValue;
   biometricVerified?: unknown;
   offlineSynced?: unknown;
-  completedBy?: unknown;
   reassignCount?: unknown;
   supervisorUid?: unknown;
   createdBy?: unknown;
 };
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      value
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0),
+    ),
+  );
+}
+
+function parseTimestampMap(value: unknown): Record<string, Date> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  const result: Record<string, Date> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    const parsedDate = toDate(raw as FirestoreDateValue);
+    if (parsedDate) {
+      result[key] = parsedDate;
+    }
+  }
+  return result;
+}
+
+function parseSubmissions(value: unknown): Record<string, TaskSubmission> {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  const result: Record<string, TaskSubmission> = {};
+  for (const [uid, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const sub = raw as Record<string, unknown>;
+    const completedAt = toDate(sub.completedAt as FirestoreDateValue) ?? new Date();
+    result[uid] = {
+      technicianUid: typeof sub.technicianUid === 'string' ? sub.technicianUid : uid,
+      technicianName: typeof sub.technicianName === 'string' ? sub.technicianName : 'Technician',
+      checklist: parseChecklist(sub.checklist),
+      beforePhotoUrl: stringOrNull(sub.beforePhotoUrl),
+      beforePhotoCapturedAt: toDate(sub.beforePhotoCapturedAt as FirestoreDateValue),
+      afterPhotoUrl: stringOrNull(sub.afterPhotoUrl),
+      afterPhotoCapturedAt: toDate(sub.afterPhotoCapturedAt as FirestoreDateValue),
+      remarks: typeof sub.remarks === 'string' ? sub.remarks : '',
+      workDuration: numberOrNull(sub.workDuration),
+      completedAt,
+      biometricVerified: sub.biometricVerified === true,
+    };
+  }
+  return result;
+}
 
 function toDate(value: FirestoreDateValue): Date | null {
   if (!value) {
@@ -306,9 +363,19 @@ export function parseTaskDocument(
 
   const completedBy = extractUserUid(data.completedBy);
   const completedAt = toDate(data.completedAt);
+  const acknowledgedBy = parseTimestampMap(data.acknowledgedBy);
+  const completedByMap = parseTimestampMap(data.completedBy);
+  const submissions = parseSubmissions(data.submissions);
+  const assignedToIds = stringArray(data.assignedToIds);
+
   let status = data.status;
-  if (completedAt || completedBy) {
-    status = 'completed';
+  if (completedAt || completedBy || Object.keys(submissions).length > 0) {
+    // If all assigned technicians have submitted, mark completed
+    if (assignedToIds.length > 0 && assignedToIds.every((uid) => Boolean(submissions[uid] || completedByMap[uid]))) {
+      status = 'completed';
+    } else if (completedAt || completedBy) {
+      status = 'completed';
+    }
   }
 
   return {
@@ -344,11 +411,15 @@ export function parseTaskDocument(
     triggerType: data.triggerType,
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
+    assignedToIds,
     status,
     createdAt,
     assignedAt: toDate(data.assignedAt),
     acknowledgedAt: toDate(data.acknowledgedAt),
     completedAt,
+    acknowledgedBy,
+    completedByMap,
+    submissions,
     responseTime: numberOrNull(data.responseTime),
     workDuration: numberOrNull(data.workDuration),
     totalTime: numberOrNull(data.totalTime),
