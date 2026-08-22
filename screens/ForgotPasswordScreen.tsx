@@ -26,8 +26,17 @@ import type { AuthStackParamList } from '../types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
 function getResetErrorMessage(error: unknown): string {
-  if (error instanceof FirebaseError && error.code === 'auth/invalid-email') {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : null;
+
+  if (code === 'auth/invalid-email') {
     return 'Enter a valid email address before requesting a password reset.';
+  }
+
+  if (code === 'auth/user-not-found') {
+    return 'No account was found for that email address.';
   }
 
   return 'We could not send the reset email right now. Please try again.';

@@ -1,12 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { updateDoc } from 'firebase/firestore';
 import * as Network from 'expo-network';
 import * as ImagePicker from '../../lib/native-image-picker';
 
 import App from '../../App';
-import { mockAuthModule } from '../../jest.setup';
+import { mockAuthModule, mockFirestoreDoc } from '../../jest.setup';
 import { readOfflineCompletions, syncOfflineCompletions } from '../../lib/task-completion';
 
 describe('Offline Resilience Flow E2E', () => {
@@ -147,7 +146,7 @@ describe('Offline Resilience Flow E2E', () => {
     expect(queuedTasks[0].offlineSynced).toBe(false);
 
     // Firestore update should NOT have happened yet because network was offline
-    expect(updateDoc).not.toHaveBeenCalled();
+    expect(mockFirestoreDoc.update).not.toHaveBeenCalled();
 
     // Step 4: Network comes back online
     (Network as any).__setNetworkState(true, true);
@@ -157,8 +156,7 @@ describe('Offline Resilience Flow E2E', () => {
     expect(syncedCount).toBe(1);
 
     // Verify Firestore status updated to 'completed' with offlineSynced: true
-    expect(updateDoc).toHaveBeenCalledWith(
-      expect.objectContaining({ path: 'tasks/task-offline-888' }),
+    expect(mockFirestoreDoc.update).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'completed',
         offlineSynced: true,

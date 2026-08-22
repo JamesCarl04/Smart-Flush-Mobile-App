@@ -259,6 +259,19 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+function extractUserUid(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+  if (typeof value === 'object' && value !== null) {
+    const keys = Object.keys(value as Record<string, unknown>);
+    if (keys.length > 0 && typeof keys[0] === 'string' && keys[0].trim()) {
+      return keys[0].trim();
+    }
+  }
+  return null;
+}
+
 function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
@@ -287,6 +300,13 @@ export function parseTaskDocument(
 
   if (!createdAt) {
     return null;
+  }
+
+  const completedBy = extractUserUid(data.completedBy);
+  const completedAt = toDate(data.completedAt);
+  let status = data.status;
+  if (completedAt || completedBy) {
+    status = 'completed';
   }
 
   return {
@@ -322,11 +342,11 @@ export function parseTaskDocument(
     triggerType: data.triggerType,
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
-    status: data.status,
+    status,
     createdAt,
     assignedAt: toDate(data.assignedAt),
     acknowledgedAt: toDate(data.acknowledgedAt),
-    completedAt: toDate(data.completedAt),
+    completedAt,
     responseTime: numberOrNull(data.responseTime),
     workDuration: numberOrNull(data.workDuration),
     totalTime: numberOrNull(data.totalTime),
@@ -338,7 +358,7 @@ export function parseTaskDocument(
     afterPhotoCapturedAt: toDate(data.afterPhotoCapturedAt),
     biometricVerified: data.biometricVerified === true,
     offlineSynced: data.offlineSynced === true,
-    completedBy: stringOrNull(data.completedBy),
+    completedBy,
     reassignCount: numberOrNull(data.reassignCount) ?? 0,
     supervisorUid: stringOrNull(data.supervisorUid),
     createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',

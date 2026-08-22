@@ -102,8 +102,8 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   const [activeFilter, setActiveFilter] = useState<InboxFilter>('all');
   const [refreshing, setRefreshing] = useState(false);
 
-  const visibleTasks = useMemo(
-    () =>
+  const visibleTasks = useMemo(() => {
+    const baseTasks =
       activeFilter === 'all'
         ? inboxTasks
         : activeFilter === 'active'
@@ -113,9 +113,14 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 task.status === 'unassigned' ||
                 task.status === 'reassignment_needed',
             )
-          : inboxTasks.filter((task) => task.status === activeFilter),
-    [activeFilter, inboxTasks],
-  );
+          : inboxTasks.filter((task) => task.status === activeFilter);
+
+    if (urgentTask && activeFilter !== 'acknowledged') {
+      return baseTasks.filter((task) => task.id !== urgentTask.id);
+    }
+
+    return baseTasks;
+  }, [activeFilter, inboxTasks, urgentTask]);
 
   const [executingTask, setExecutingTask] = useState<Task | null>(null);
   const [actionInFlightId, setActionInFlightId] = useState<string | null>(null);

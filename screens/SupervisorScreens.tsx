@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   FlatList,
   Image,
   RefreshControl,
@@ -35,6 +36,8 @@ import {
 } from '../components/MaintenanceUI';
 import { KlirButton } from '../components/KlirButton';
 import { useAuth } from '../hooks/useAuth';
+import { db } from '../lib/firebase';
+import { clearAllTasksInFirestore } from '../lib/task-completion';
 import {
   fetchMaintenancePersonnel,
   fetchSupervisorTasks,
@@ -42,7 +45,7 @@ import {
   reassignTask,
   type MaintenancePerson,
 } from '../lib/supervisor-api';
-import { CHECKLIST_LABELS, formatTaskComponent, formatTaskStatus } from '../lib/tasks';
+import { CHECKLIST_LABELS, formatTaskComponent, formatTaskStatus, parseTaskDocument } from '../lib/tasks';
 import type { SupervisorStackParamList, Task } from '../types';
 
 type DashboardProps = NativeStackScreenProps<
@@ -127,8 +130,84 @@ function useSupervisorData() {
 
   useEffect(() => {
     void refresh();
+
+    let unsubTasks: (() => void) | undefined;
+    let unsubUsers: (() => void) | undefined;
+
+    try {
+      if (typeof db?.collection === 'function') {
+        const tasksQuery = db.collection('tasks');
+        if (typeof tasksQuery?.onSnapshot === 'function') {
+          unsubTasks = tasksQuery.onSnapshot(
+            (snapshot) => {
+              if (snapshot && !snapshot.empty) {
+                const parsed = snapshot.docs
+                  .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
+                  .filter((task): task is Task => task !== null)
+                  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                setTasks(parsed);
+                setLoading(false);
+              } else if (snapshot && snapshot.empty) {
+                setTasks([]);
+                setLoading(false);
+              }
+            },
+            (err) => {
+              console.warn('[SupervisorScreens] tasks onSnapshot error:', err);
+            },
+          );
+        }
+
+        const usersQuery = db.collection('users');
+        if (typeof usersQuery?.onSnapshot === 'function') {
+          unsubUsers = usersQuery.onSnapshot(
+            (snapshot) => {
+              if (snapshot && !snapshot.empty) {
+                const mappedPeople = snapshot.docs
+                  .map((doc) => {
+                    const data = doc.data();
+                    const role = typeof data.role === 'string' ? data.role.toLowerCase() : '';
+                    if (role !== 'maintenance' && role !== 'technician' && role !== 'worker') {
+                      return null;
+                    }
+                    return {
+                      id: doc.id,
+                      displayName:
+                        typeof data.displayName === 'string' && data.displayName.trim()
+                          ? data.displayName.trim()
+                          : data.email ?? doc.id,
+                      email: typeof data.email === 'string' ? data.email : null,
+                      isAvailable: data.isAvailable !== false,
+                      currentTaskId: typeof data.currentTaskId === 'string' ? data.currentTaskId : null,
+                      shift: typeof data.shift === 'string' ? data.shift : '1st',
+                      building: typeof data.building === 'string' ? data.building : 'SDCA Annex Building',
+                      supervisorUid: typeof data.supervisorUid === 'string' ? data.supervisorUid : null,
+                    } as MaintenancePerson;
+                  })
+                  .filter((person): person is MaintenancePerson => person !== null);
+                setPeople(mappedPeople);
+              }
+            },
+            (err) => {
+              console.warn('[SupervisorScreens] users onSnapshot error:', err);
+            },
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[SupervisorScreens] Failed to bind onSnapshot listeners:', err);
+    }
+
     const timer = setInterval(() => void refresh(), 10000);
-    return () => clearInterval(timer);
+    return () => {
+      if (typeof unsubTasks === 'function') {
+        unsubTasks();
+      }
+      if (typeof unsubUsers === 'function') {
+        unsubUsers();
+      }
+      clearInterval(timer);
+    };
   }, [refresh]);
 
   return {
@@ -335,6 +414,37 @@ export function SupervisorDashboardScreen({
           >
             Review Completed Tasks
           </Button>
+
+          <Button
+            mode="text"
+            textColor={KLIR_COLORS.danger}
+            icon="trash-can-outline"
+            style={{ marginTop: 4 }}
+            onPress={() => {
+              Alert.alert(
+                'Wipe All Tasks',
+                'Are you sure you want to permanently delete all task records in Firestore and reset staff availability?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Wipe All Tasks',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        const count = await clearAllTasksInFirestore();
+                        await refresh();
+                        Alert.alert('Success', `Cleaned up ${count} tasks. Staff availability reset.`);
+                      } catch (err) {
+                        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to clear tasks.');
+                      }
+                    },
+                  },
+                ],
+              );
+            }}
+          >
+            Clear All Tasks (Clean Database)
+          </Button>
         </View>
       </ScrollView>
 
@@ -343,6 +453,19 @@ export function SupervisorDashboardScreen({
       </Snackbar>
     </View>
   );
+}
+
+function getAssigneeName(
+  assignedTo: string | null | undefined,
+  people: MaintenancePerson[],
+): string {
+  if (!assignedTo || assignedTo === 'unassigned') {
+    return 'Unassigned';
+  }
+  const person = people.find(
+    (p) => p.id === assignedTo || p.email?.toLowerCase() === assignedTo.toLowerCase(),
+  );
+  return person ? person.displayName : assignedTo;
 }
 
 export function TeamAvailabilityScreen(): React.JSX.Element {
@@ -385,9 +508,17 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
           />
         }
         renderItem={({ item }) => {
-          const task = item.currentTaskId
-            ? tasks.find((candidate) => candidate.id === item.currentTaskId)
-            : null;
+          const activeTask =
+            tasks.find(
+              (candidate) =>
+                candidate.status !== 'completed' &&
+                (candidate.id === item.currentTaskId ||
+                  candidate.assignedTo === item.id ||
+                  candidate.assignedTo === item.email),
+            ) ?? null;
+
+          const isOnTask = activeTask !== null || Boolean(item.currentTaskId);
+          const isAvailable = !isOnTask && item.isAvailable;
 
           return (
             <Card mode="elevated" style={[styles.personCard, sharedShadow]}>
@@ -397,23 +528,29 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
                     {item.displayName}
                   </Text>
                   <Chip
-                    style={{ backgroundColor: statusColor(item) }}
+                    style={{
+                      backgroundColor: isOnTask
+                        ? '#f7d5d2'
+                        : isAvailable
+                          ? '#d8f2db'
+                          : '#fff1bd',
+                    }}
                     textStyle={styles.chipText}
                   >
-                    {item.currentTaskId
+                    {isOnTask
                       ? 'On Task'
-                      : item.isAvailable
+                      : isAvailable
                         ? 'Available'
                         : 'Offline'}
                   </Chip>
                 </View>
                 <Text variant="bodyMedium" style={styles.personBuilding}>
-                  {item.building ?? 'No building set'}
+                  {item.building ?? 'SDCA Annex Building'}
                 </Text>
-                {task ? (
+                {activeTask ? (
                   <View style={styles.activeTaskCallout}>
                     <Text variant="bodySmall" style={styles.calloutText}>
-                      {task.message} - since {formatDate(task.assignedAt ?? task.createdAt)}
+                      Active: {activeTask.location} ({activeTask.deviceId}) - {activeTask.message}
                     </Text>
                   </View>
                 ) : null}
@@ -435,7 +572,7 @@ export function SupervisorTasksScreen({
   SupervisorStackParamList,
   'SupervisorTasks'
 >): React.JSX.Element {
-  const { tasks, loading, error, refresh, clearError } = useSupervisorData();
+  const { tasks, people, loading, error, refresh, clearError } = useSupervisorData();
   const activeTasks = tasks.filter((task) => task.status !== 'completed');
 
   return (
@@ -487,7 +624,7 @@ export function SupervisorTasksScreen({
                   {item.component} - {item.floor}, {item.building}
                 </Text>
                 <Text variant="bodySmall" style={styles.taskAssigneeText}>
-                  Assignee: {item.assignedTo ?? 'Unassigned'}
+                  Assignee: {getAssigneeName(item.assignedTo, people)}
                 </Text>
               </Card.Content>
             </Card>
@@ -631,15 +768,17 @@ export function CompletedReviewsScreen({
   SupervisorStackParamList,
   'CompletedReviews'
 >): React.JSX.Element {
-  const { tasks, loading, error, refresh, clearError } = useSupervisorData();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const { tasks, people, loading, error, refresh, clearError } = useSupervisorData();
 
-  const completed = tasks.filter(
-    (task) =>
-      task.status === 'completed' &&
-      (task.completedAt ?? task.createdAt) >= today,
-  );
+  const completed = useMemo(() => {
+    return tasks
+      .filter((task) => task.status === 'completed')
+      .sort((a, b) => {
+        const timeA = (a.completedAt ?? a.createdAt).getTime();
+        const timeB = (b.completedAt ?? b.createdAt).getTime();
+        return timeB - timeA;
+      });
+  }, [tasks]);
 
   return (
     <View style={styles.screen}>
@@ -661,8 +800,8 @@ export function CompletedReviewsScreen({
           ListEmptyComponent={
             <EmptyOperationState
               icon="check-all"
-              title="No completed reviews today"
-              body="Completed tasks from today will appear here for supervisor sign-off."
+              title="No completed reviews yet"
+              body="Completed tasks with proof photos and checklist will appear here for supervisor review."
             />
           }
           renderItem={({ item }) => (
@@ -674,12 +813,32 @@ export function CompletedReviewsScreen({
               }
             >
               <Card.Content style={styles.cardContent}>
-                <Text variant="titleMedium" style={styles.taskLocationTitle}>
-                  {item.location}
-                </Text>
+                <View style={styles.rowBetween}>
+                  <Text variant="titleMedium" style={styles.taskLocationTitle}>
+                    {item.location}
+                  </Text>
+                  <Chip
+                    style={{ backgroundColor: KLIR_COLORS.softGreen }}
+                    textStyle={[styles.chipText, { color: KLIR_COLORS.successText }]}
+                  >
+                    Completed
+                  </Chip>
+                </View>
                 <Text style={styles.taskDurationLine}>
-                  {formatDate(item.completedAt)} - {formatDuration(item.workDuration)}
+                  {formatDate(item.completedAt ?? item.createdAt)} • {formatDuration(item.workDuration)}
                 </Text>
+                <Text variant="bodySmall" style={styles.taskAssigneeText}>
+                  Completed by: {getAssigneeName(item.completedBy ?? item.assignedTo, people)}
+                </Text>
+                {item.beforePhotoUrl && item.afterPhotoUrl ? (
+                  <View style={styles.teamPillRow}>
+                    <View style={[styles.teamBadge, { backgroundColor: '#E0F2FE' }]}>
+                      <Text style={[styles.teamBadgeText, { color: '#0369A1' }]}>
+                        📷 Before & After Proof Attached
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
               </Card.Content>
             </Card>
           )}
@@ -696,7 +855,7 @@ export function CompletedReviewDetailScreen({
   route,
 }: ReviewDetailProps): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks } = useSupervisorData();
+  const { tasks, people } = useSupervisorData();
   const task = tasks.find((candidate) => candidate.id === route.params.taskId);
   const [reason, setReason] = useState('Requires re-inspection');
   const [visible, setVisible] = useState(false);
@@ -713,6 +872,35 @@ export function CompletedReviewDetailScreen({
       </View>
     );
   }
+
+  const computedWorkDuration =
+    task.workDuration ??
+    (task.completedAt && task.acknowledgedAt
+      ? Math.max(
+          0,
+          Math.round(
+            (task.completedAt.getTime() - task.acknowledgedAt.getTime()) / 1000,
+          ),
+        )
+      : task.completedAt && task.createdAt
+        ? Math.max(
+            0,
+            Math.round(
+              (task.completedAt.getTime() - task.createdAt.getTime()) / 1000,
+            ),
+          )
+        : null);
+
+  const computedResponseTime =
+    task.responseTime ??
+    (task.acknowledgedAt && task.createdAt
+      ? Math.max(
+          0,
+          Math.round(
+            (task.acknowledgedAt.getTime() - task.createdAt.getTime()) / 1000,
+          ),
+        )
+      : null);
 
   return (
     <View style={styles.screen}>
@@ -752,25 +940,26 @@ export function CompletedReviewDetailScreen({
             <Text variant="titleMedium" style={styles.cardHeaderTitle}>
               Checklist
             </Text>
-            {CHECKLIST_LABELS.map((item) => (
-              <Text key={item.key} style={styles.checklistItemText}>
-                {task.checklist?.[item.key] === 'na'
-                  ? 'N/A'
-                  : '✓'}{' '}
-                {item.label}
-              </Text>
-            ))}
+            {CHECKLIST_LABELS.map((item) => {
+              const val = task.checklist?.[item.key];
+              const symbol = val === 'done' ? '✓' : val === 'na' ? 'N/A' : '—';
+              return (
+                <Text key={item.key} style={styles.checklistItemText}>
+                  {symbol} {item.label}
+                </Text>
+              );
+            })}
             <Text style={styles.metricText}>
               Remarks: {task.remarks || 'None'}
             </Text>
             <Text style={styles.metricText}>
-              Response time: {formatDuration(task.responseTime)}
+              Response time: {formatDuration(computedResponseTime)}
             </Text>
             <Text style={styles.metricText}>
-              Work duration: {formatDuration(task.workDuration)}
+              Work duration: {formatDuration(computedWorkDuration)}
             </Text>
             <Text style={styles.metricText}>
-              Completed by: {task.completedBy ?? 'Unknown'}
+              Completed by: {getAssigneeName(task.completedBy ?? task.assignedTo, people)}
             </Text>
             {task.biometricVerified ? (
               <Chip icon="fingerprint" style={styles.biometricChip}>

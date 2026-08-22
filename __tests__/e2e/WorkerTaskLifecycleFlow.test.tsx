@@ -1,12 +1,11 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react-native';
-import { updateDoc } from 'firebase/firestore';
 import * as Network from 'expo-network';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as ImagePicker from '../../lib/native-image-picker';
 
 import App from '../../App';
-import { mockAuthModule } from '../../jest.setup';
+import { mockAuthModule, mockFirestoreDoc } from '../../jest.setup';
 
 jest.mock('../../lib/native-image-picker', () => ({
   requestCameraPermissionsAsync: jest.fn().mockResolvedValue({
@@ -242,8 +241,7 @@ describe('Worker Task Lifecycle Flow E2E', () => {
     // Verify Firestore task update called
     await waitFor(
       () => {
-        expect(updateDoc).toHaveBeenCalledWith(
-          expect.objectContaining({ path: 'tasks/task-restroom-101' }),
+        expect(mockFirestoreDoc.update).toHaveBeenCalledWith(
           expect.objectContaining({
             status: 'completed',
             remarks: 'All fixtures disinfected, soap replenished, and floors dried.',

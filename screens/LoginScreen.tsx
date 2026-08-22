@@ -27,22 +27,33 @@ import type { AuthStackParamList } from '../types';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 function getLoginErrorMessage(error: unknown): string {
-  if (error instanceof FirebaseError) {
-    if (error.code === 'auth/wrong-password') {
-      return 'Incorrect password. Please try again.';
-    }
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : null;
 
-    if (error.code === 'auth/user-not-found') {
-      return 'No account was found for that email address.';
-    }
+  if (code === 'auth/wrong-password') {
+    return 'Incorrect password. Please try again.';
+  }
 
-    if (error.code === 'auth/too-many-requests') {
-      return 'Too many login attempts. Please try again later.';
-    }
+  if (code === 'auth/user-not-found') {
+    return 'No account was found for that email address.';
+  }
 
-    if (error.code === 'auth/invalid-credential') {
-      return 'The email or password you entered is invalid.';
-    }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many login attempts. Please try again later.';
+  }
+
+  if (code === 'auth/invalid-credential') {
+    return 'The email or password you entered is invalid.';
+  }
+
+  if (code === 'auth/invalid-email') {
+    return 'Please enter a valid email address.';
+  }
+
+  if (code === 'auth/network-request-failed') {
+    return 'Network connection failed. Please check your internet connection and try again.';
   }
 
   return 'Unable to sign in right now. Please try again.';

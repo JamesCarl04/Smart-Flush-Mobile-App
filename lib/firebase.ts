@@ -1,7 +1,7 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import { getFirestore, type Firestore } from 'firebase/firestore';
-import { getStorage, type FirebaseStorage } from 'firebase/storage';
+import firestore, { type FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import { getAuth, type FirebaseAuthTypes } from '@react-native-firebase/auth';
+import { getStorage, type FirebaseStorageTypes } from '@react-native-firebase/storage';
 
 import { getRequiredConfigValue, runtimeConfig } from './config';
 
@@ -39,8 +39,7 @@ const app: FirebaseApp = hasExistingApp
   : initializeApp(firebaseConfig);
 
 const auth: FirebaseAuthTypes.Module = getAuth();
-
-const db: Firestore = getFirestore(app);
-const storage: FirebaseStorage = getStorage(app);
+const db: FirebaseFirestoreTypes.Module = firestore();
+const storage: FirebaseStorageTypes.Module = getStorage();
 
 export { app, auth, db, storage };

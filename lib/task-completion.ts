@@ -1,14 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Network from 'expo-network';
-import {
-  doc,
-  getDoc,
-  serverTimestamp,
-  Timestamp,
-  updateDoc,
-} from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-
+import firestore from '@react-native-firebase/firestore';
 import { auth, db, storage } from './firebase';
 import type { TaskChecklist } from '../types';
 
@@ -59,17 +51,13 @@ function unknownTimestampToDate(value: unknown): Date | null {
     return value;
   }
 
-  if (value instanceof Timestamp) {
-    return value.toDate();
-  }
-
   if (
     typeof value === 'object' &&
     value !== null &&
     'toDate' in value &&
-    typeof value.toDate === 'function'
+    typeof (value as { toDate: () => Date }).toDate === 'function'
   ) {
-    return value.toDate();
+    return (value as { toDate: () => Date }).toDate();
   }
 
   return null;
@@ -80,51 +68,18 @@ export async function isOnlineAsync(): Promise<boolean> {
   return state.isConnected === true && state.isInternetReachable !== false;
 }
 
-async function uriToBlob(uri: string): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.onload = function () {
-        if (xhr.response instanceof Blob) {
-          resolve(xhr.response);
-        } else {
-          fetch(uri)
-            .then((res) => res.blob())
-            .then(resolve)
-            .catch(reject);
-        }
-      };
-      xhr.onerror = function () {
-        fetch(uri)
-          .then((res) => res.blob())
-          .then(resolve)
-          .catch(reject);
-      };
-      xhr.responseType = 'blob';
-      xhr.open('GET', uri, true);
-      xhr.send(null);
-    } catch {
-      fetch(uri)
-        .then((res) => res.blob())
-        .then(resolve)
-        .catch(reject);
-    }
-  });
-}
-
 export async function uploadTaskPhoto(
   taskId: string,
   uri: string,
   kind: 'before' | 'after',
   capturedAt: Date,
 ): Promise<string> {
-  let blob: Blob | null = null;
   try {
-    blob = await uriToBlob(uri);
     const timestamp = capturedAt.getTime();
-    const photoRef = ref(storage, `tasks/${taskId}/${kind}_${timestamp}.jpg`);
-    await uploadBytes(photoRef, blob, { contentType: 'image/jpeg' });
-    return await getDownloadURL(photoRef);
+    const photoRef = storage.ref(`tasks/${taskId}/${kind}_${timestamp}.jpg`);
+    const cleanUri = uri.startsWith('file://') ? uri : `file://${uri}`;
+    await photoRef.putFile(cleanUri);
+    return await photoRef.getDownloadURL();
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
     const code = err?.code ?? 'storage/unknown';
@@ -134,14 +89,6 @@ export async function uploadTaskPhoto(
       message,
     );
     throw new Error(`Photo upload failed (${code}): ${message}`);
-  } finally {
-    if (blob && typeof (blob as any).close === 'function') {
-      try {
-        (blob as any).close();
-      } catch {
-        // Safe ignore
-      }
-    }
   }
 }
 
@@ -164,18 +111,20 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   const totalTime = secondsBetween(input.createdAt, input.completedAt);
 
   try {
-    await updateDoc(doc(db, 'tasks', input.taskId), {
+    await db.collection('tasks').doc(input.taskId).update({
       checklist: input.checklist,
       remarks: input.remarks,
       beforePhotoUrl,
-      beforePhotoCapturedAt: Timestamp.fromDate(input.beforePhotoCapturedAt),
+      beforePhotoCapturedAt: firestore.Timestamp.fromDate(input.beforePhotoCapturedAt),
       afterPhotoUrl,
-      afterPhotoCapturedAt: Timestamp.fromDate(input.afterPhotoCapturedAt),
+      afterPhotoCapturedAt: firestore.Timestamp.fromDate(input.afterPhotoCapturedAt),
       biometricVerified: input.biometricVerified,
       offlineSynced: false,
       status: 'completed',
-      completedAt: Timestamp.fromDate(input.completedAt),
+      completedAt: firestore.Timestamp.fromDate(input.completedAt),
       completedBy: input.completedBy,
+      [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt),
+      assignedTo: input.completedBy,
       workDuration,
       totalTime,
     });
@@ -191,10 +140,10 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   }
 
   try {
-    await updateDoc(doc(db, 'maintenancePersonnel', input.completedBy), {
+    await db.collection('users').doc(input.completedBy).update({
       isAvailable: true,
       currentTaskId: null,
-      lastTaskCompletedAt: serverTimestamp(),
+      lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
     });
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
@@ -273,31 +222,33 @@ export async function syncOfflineCompletions(
         ),
       ]);
 
-      const taskRef = doc(db, 'tasks', item.taskId);
-      const taskSnapshot = await getDoc(taskRef);
+      const taskDocRef = db.collection('tasks').doc(item.taskId);
+      const taskSnapshot = await taskDocRef.get();
       const taskData = taskSnapshot.data() as Record<string, unknown> | undefined;
       const createdAt = unknownTimestampToDate(taskData?.createdAt);
 
-      await updateDoc(taskRef, {
+      await taskDocRef.update({
         checklist: item.checklist,
         remarks: item.remarks,
         beforePhotoUrl,
-        beforePhotoCapturedAt: Timestamp.fromDate(completedAt),
+        beforePhotoCapturedAt: firestore.Timestamp.fromDate(completedAt),
         afterPhotoUrl,
-        afterPhotoCapturedAt: Timestamp.fromDate(completedAt),
+        afterPhotoCapturedAt: firestore.Timestamp.fromDate(completedAt),
         biometricVerified: item.biometricVerified,
         offlineSynced: true,
         status: 'completed',
-        completedAt: Timestamp.fromDate(completedAt),
+        completedAt: firestore.Timestamp.fromDate(completedAt),
         completedBy: item.completedBy,
+        [`completedBy.${item.completedBy}`]: firestore.Timestamp.fromDate(completedAt),
+        assignedTo: item.completedBy,
         workDuration: secondsBetween(acknowledgedAt, completedAt),
         totalTime: secondsBetween(createdAt, completedAt),
       });
 
-      await updateDoc(doc(db, 'maintenancePersonnel', item.completedBy), {
+      await db.collection('users').doc(item.completedBy).update({
         isAvailable: true,
         currentTaskId: null,
-        lastTaskCompletedAt: serverTimestamp(),
+        lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
       });
 
       synced += 1;
@@ -318,4 +269,33 @@ export function currentUserId(): string {
   }
 
   return uid;
+}
+
+export async function clearAllTasksInFirestore(): Promise<number> {
+  const snapshot = await db.collection('tasks').get();
+  let count = 0;
+  if (snapshot && !snapshot.empty) {
+    const batch = db.batch();
+    for (const doc of snapshot.docs) {
+      batch.delete(doc.ref);
+      count += 1;
+    }
+    await batch.commit();
+  }
+
+  try {
+    const userSnap = await db.collection('users').get();
+    if (userSnap && !userSnap.empty) {
+      for (const doc of userSnap.docs) {
+        await doc.ref.update({
+          isAvailable: true,
+          currentTaskId: null,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('[clearAllTasksInFirestore] Failed to reset user availability:', err);
+  }
+
+  return count;
 }

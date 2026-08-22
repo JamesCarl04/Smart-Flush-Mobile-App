@@ -1,8 +1,10 @@
 import { apiFetch } from './api';
+import { db } from './firebase';
 import {
   EMPTY_CHECKLIST,
   isTaskStatus,
   isTaskTriggerType,
+  parseTaskDocument,
 } from './tasks';
 import type { Task, TaskChecklist } from '../types';
 
@@ -55,6 +57,33 @@ function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
 }
 
+function extractUserUid(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+  if (typeof value === 'object' && value !== null) {
+    const keys = Object.keys(value as Record<string, unknown>);
+    if (keys.length > 0 && typeof keys[0] === 'string' && keys[0].trim()) {
+      return keys[0].trim();
+    }
+  }
+  return null;
+}
+
+function extractAssignedTo(data: TaskApiData): string | null {
+  if (typeof data.assignedTo === 'string' && data.assignedTo.trim()) {
+    return data.assignedTo.trim();
+  }
+  const rawObj = data as Record<string, unknown>;
+  if (Array.isArray(rawObj.assignedToIds)) {
+    const ids = rawObj.assignedToIds;
+    if (ids.length > 0 && typeof ids[0] === 'string' && ids[0].trim()) {
+      return ids[0].trim();
+    }
+  }
+  return null;
+}
+
 function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
@@ -95,13 +124,26 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     return null;
   }
 
-  if (!isTaskStatus(data.status)) {
-    return null;
-  }
-
   const createdAt = millisToDate(data.createdAt);
   if (!createdAt) {
     return null;
+  }
+
+  const completedAt = millisToDate(data.completedAt);
+  const completedBy = extractUserUid(data.completedBy);
+  const assignedTo = extractAssignedTo(data);
+  const acknowledgedAt = millisToDate(data.acknowledgedAt);
+
+  let rawStatus: unknown = data.status;
+  if (rawStatus === 'pending') {
+    rawStatus = assignedTo ? 'assigned' : 'unassigned';
+  }
+
+  let status = isTaskStatus(rawStatus) ? rawStatus : 'unassigned';
+  if (completedAt || completedBy) {
+    status = 'completed';
+  } else if (acknowledgedAt && status !== 'completed') {
+    status = 'acknowledged';
   }
 
   return {
@@ -128,12 +170,12 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     shift: data.shift === '2nd' ? '2nd' : '1st',
     triggerType: data.triggerType,
     message: data.message,
-    assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
-    status: data.status,
+    assignedTo,
+    status,
     createdAt,
     assignedAt: millisToDate(data.assignedAt),
-    acknowledgedAt: millisToDate(data.acknowledgedAt),
-    completedAt: millisToDate(data.completedAt),
+    acknowledgedAt,
+    completedAt,
     responseTime: numberOrNull(data.responseTime),
     workDuration: numberOrNull(data.workDuration),
     totalTime: numberOrNull(data.totalTime),
@@ -145,7 +187,7 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     afterPhotoCapturedAt: millisToDate(data.afterPhotoCapturedAt),
     biometricVerified: data.biometricVerified === true,
     offlineSynced: data.offlineSynced === true,
-    completedBy: stringOrNull(data.completedBy),
+    completedBy,
     reassignCount: numberOrNull(data.reassignCount) ?? 0,
     supervisorUid: stringOrNull(data.supervisorUid),
     createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',
@@ -153,6 +195,21 @@ function parseTaskApiData(data: TaskApiData): Task | null {
 }
 
 export async function fetchTasks(): Promise<Task[]> {
+  try {
+    const snapshot = await db.collection('tasks').get();
+    if (snapshot && !snapshot.empty) {
+      const parsed = snapshot.docs
+        .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
+        .filter((task): task is Task => task !== null)
+        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+      if (parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.warn('[task-api] Direct Firestore fetchTasks failed, falling back to API:', error);
+  }
+
   const response = await apiFetch<TaskApiData[]>('/api/tasks');
 
   if (!response.success || !Array.isArray(response.data)) {
@@ -166,6 +223,22 @@ export async function fetchTasks(): Promise<Task[]> {
 }
 
 export async function fetchTask(taskId: string): Promise<Task> {
+  try {
+    const doc = await db.collection('tasks').doc(taskId).get();
+    const exists =
+      typeof (doc as any).exists === 'function'
+        ? (doc as any).exists()
+        : Boolean((doc as any).exists);
+    if (exists) {
+      const task = parseTaskDocument(doc.id, doc.data() as any);
+      if (task) {
+        return task;
+      }
+    }
+  } catch (error) {
+    console.warn('[task-api] Direct Firestore fetchTask failed, falling back to API:', error);
+  }
+
   const response = await apiFetch<TaskApiData>(
     `/api/tasks/${encodeURIComponent(taskId)}`,
   );

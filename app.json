@@ -26,8 +26,9 @@
     "extra": {
       "firebase": {},
       "eas": {
-        "projectId": "8791e31f-401b-455e-8843-ec18485147e8"
+        "projectId": "f0567b7e-8a50-4d12-846c-970698a001ad"
       }
-    }
+    },
+    "owner": "justpress-team"
   }
 }

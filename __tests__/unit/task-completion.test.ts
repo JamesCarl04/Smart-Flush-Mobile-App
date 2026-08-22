@@ -1,17 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { updateDoc } from 'firebase/firestore';
 
-import { auth } from '../../lib/firebase';
+import { auth, storage } from '../../lib/firebase';
 import {
   completeTaskOnline,
   currentUserId,
   queueOfflineCompletion,
   readOfflineCompletions,
   secondsBetween,
+  uploadTaskPhoto,
   type CompletionBundle,
   type OnlineCompletionInput,
 } from '../../lib/task-completion';
 import { EMPTY_CHECKLIST } from '../../lib/tasks';
+import { mockFirestoreDoc, mockStorageRef } from '../../jest.setup';
 
 describe('task-completion utility', () => {
   beforeEach(async () => {
@@ -168,19 +169,19 @@ describe('task-completion utility', () => {
       });
     });
 
-    it('should complete task online and call updateDoc for task and personnel', async () => {
-      (updateDoc as jest.Mock).mockResolvedValue(undefined);
+    it('should complete task online and call update for task and user documents', async () => {
+      mockFirestoreDoc.update.mockResolvedValue(undefined);
 
       await expect(completeTaskOnline(input)).resolves.toBeUndefined();
-      expect(updateDoc).toHaveBeenCalledTimes(2);
+      expect(mockFirestoreDoc.update).toHaveBeenCalledTimes(2);
     });
 
-    it('should catch, log, and throw error when task updateDoc fails (permission-denied)', async () => {
+    it('should catch, log, and throw error when task update fails (permission-denied)', async () => {
       const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const permError = Object.assign(new Error('Missing or insufficient permissions.'), {
         code: 'permission-denied',
       });
-      (updateDoc as jest.Mock).mockRejectedValueOnce(permError);
+      mockFirestoreDoc.update.mockRejectedValueOnce(permError);
 
       await expect(completeTaskOnline(input)).rejects.toThrow(
         '[Firestore Task Update] Error: Missing or insufficient permissions.',
@@ -194,13 +195,13 @@ describe('task-completion utility', () => {
       errorSpy.mockRestore();
     });
 
-    it('should catch, log, and throw error when personnel updateDoc fails', async () => {
+    it('should catch, log, and throw error when personnel update fails', async () => {
       const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const permError = Object.assign(new Error('Permission denied on personnel doc.'), {
         code: 'permission-denied',
       });
-      // First updateDoc (task) succeeds, second (personnel) fails
-      (updateDoc as jest.Mock)
+      // First update (task) succeeds, second (personnel) fails
+      mockFirestoreDoc.update
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(permError);
 
@@ -211,6 +212,64 @@ describe('task-completion utility', () => {
       expect(errorSpy).toHaveBeenCalledWith(
         expect.stringContaining('[Firestore Task Update] Error: Failed to update personnel document user-tech-1 (permission-denied):'),
         'Permission denied on personnel doc.',
+      );
+
+      errorSpy.mockRestore();
+    });
+  });
+
+  describe('uploadTaskPhoto', () => {
+    const taskId = 'task-photo-test-1';
+    const capturedAt = new Date('2026-08-15T14:30:00.000Z');
+
+    it('should upload photo using native storage putFile and return download URL', async () => {
+      mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
+      mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
+
+      const url = await uploadTaskPhoto(
+        taskId,
+        'file:///cache/photo.jpg',
+        'before',
+        capturedAt,
+      );
+
+      expect(storage.ref).toHaveBeenCalledWith(
+        `tasks/${taskId}/before_${capturedAt.getTime()}.jpg`,
+      );
+      expect(mockStorageRef.putFile).toHaveBeenCalledWith('file:///cache/photo.jpg');
+      expect(url).toBe('https://storage.example.com/uploaded.jpg');
+    });
+
+    it('should prefix uri with file:// if missing', async () => {
+      mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
+      mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
+
+      await uploadTaskPhoto(
+        taskId,
+        '/data/user/0/com.james.klir/cache/photo.jpg',
+        'after',
+        capturedAt,
+      );
+
+      expect(mockStorageRef.putFile).toHaveBeenCalledWith(
+        'file:///data/user/0/com.james.klir/cache/photo.jpg',
+      );
+    });
+
+    it('should catch, log, and throw formatted error when putFile fails', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const storageError = Object.assign(new Error('User does not have permission.'), {
+        code: 'storage/unauthorized',
+      });
+      mockStorageRef.putFile.mockRejectedValueOnce(storageError);
+
+      await expect(
+        uploadTaskPhoto(taskId, 'file:///cache/photo.jpg', 'before', capturedAt),
+      ).rejects.toThrow('Photo upload failed (storage/unauthorized): User does not have permission.');
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[UploadTaskPhoto] Error uploading before photo for task task-photo-test-1 (storage/unauthorized):'),
+        'User does not have permission.',
       );
 
       errorSpy.mockRestore();

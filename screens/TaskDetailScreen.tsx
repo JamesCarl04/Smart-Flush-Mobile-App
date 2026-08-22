@@ -30,6 +30,8 @@ import {
 } from '../components/MaintenanceUI';
 import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import { TaskExecutionModal } from '../components/TaskExecutionModal';
+import firestore from '@react-native-firebase/firestore';
+import { db } from '../lib/firebase';
 import {
   completeTaskOnline,
   currentUserId,
@@ -363,9 +365,26 @@ export function TaskDetailScreen({
 
     setActionInFlight(true);
     try {
-      await acknowledgeTask(task.id);
+      const uid = currentUserId();
       const acknowledgedAt = new Date();
-      setTask({ ...task, status: 'acknowledged', acknowledgedAt });
+
+      try {
+        await db.collection('tasks').doc(task.id).update({
+          status: 'acknowledged',
+          assignedTo: uid,
+          acknowledgedAt: firestore.Timestamp.fromDate(acknowledgedAt),
+          [`acknowledgedBy.${uid}`]: firestore.Timestamp.fromDate(acknowledgedAt),
+        });
+        await db.collection('users').doc(uid).update({
+          isAvailable: false,
+          currentTaskId: task.id,
+        });
+      } catch (firestoreError) {
+        console.warn('Direct Firestore acknowledge update warning:', firestoreError);
+      }
+
+      await acknowledgeTask(task.id);
+      setTask({ ...task, status: 'acknowledged', acknowledgedAt, assignedTo: uid });
       await refreshTasks();
       setSnackbarMessage('Task acknowledged. Proceed to the location.');
     } catch (error) {
@@ -563,8 +582,39 @@ export function TaskDetailScreen({
       }
 
       await refreshTasks();
-      setTask({ ...task, status: 'completed', completedAt, completedBy: uid });
+      setTask({
+        ...task,
+        status: 'completed',
+        completedAt,
+        completedBy: uid,
+        assignedTo: uid,
+        beforePhotoUrl: beforePhotoUri,
+        afterPhotoUrl: afterPhotoUri,
+      });
       setStep('details');
+
+      Alert.alert(
+        'Task Completed',
+        'Work order has been closed and verified. View your completed work in History.',
+        [
+          {
+            text: 'View History',
+            onPress: () => {
+              if (navigation && 'navigate' in navigation) {
+                (navigation as any).navigate('HistoryTab');
+              }
+            },
+          },
+          {
+            text: 'OK',
+            onPress: () => {
+              if (navigation && 'goBack' in navigation) {
+                navigation.goBack();
+              }
+            },
+          },
+        ],
+      );
     } catch (error) {
       setSnackbarMessage(
         error instanceof Error

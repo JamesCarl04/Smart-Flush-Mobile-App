@@ -18,7 +18,7 @@
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "526260279429",
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:526260279429:android:98d069af9c580bdd7831ec",
         "EXPO_PUBLIC_EXPO_PROJECT_ID": "8791e31f-401b-455e-8843-ec18485147e8",
-        "EXPO_PUBLIC_BACKEND_API_BASE_URL": "https://smart-flush-web-app.vercel.app",
+        "EXPO_PUBLIC_BACKEND_API_BASE_URL": "https://kliradmin.vercel.app",
         "GOOGLE_SERVICES_JSON": "./google-services.json"
       }
     },
@@ -35,7 +35,7 @@
         "EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID": "526260279429",
         "EXPO_PUBLIC_FIREBASE_APP_ID": "1:526260279429:android:98d069af9c580bdd7831ec",
         "EXPO_PUBLIC_EXPO_PROJECT_ID": "8791e31f-401b-455e-8843-ec18485147e8",
-        "EXPO_PUBLIC_BACKEND_API_BASE_URL": "https://smart-flush-web-app.vercel.app",
+        "EXPO_PUBLIC_BACKEND_API_BASE_URL": "https://kliradmin.vercel.app",
         "GOOGLE_SERVICES_JSON": "./google-services.json"
       }
     },

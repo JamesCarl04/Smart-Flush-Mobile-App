@@ -7,7 +7,9 @@ import {
 } from 'react';
 
 import { useAuth } from '../hooks/useAuth';
+import { db } from '../lib/firebase';
 import { fetchTasks } from '../lib/task-api';
+import { parseTaskDocument } from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
@@ -53,18 +55,56 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     setErrorMessage(null);
 
     void refreshTasks();
+
+    let unsubscribe: (() => void) | undefined;
+    try {
+      if (typeof db?.collection === 'function') {
+        const query = db.collection('tasks');
+        if (typeof query?.onSnapshot === 'function') {
+          unsubscribe = query.onSnapshot(
+            (snapshot) => {
+              if (snapshot && !snapshot.empty) {
+                const parsed = snapshot.docs
+                  .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
+                  .filter((task): task is Task => task !== null)
+                  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+                setTasks(parsed);
+                setLoading(false);
+                setErrorMessage(null);
+              } else if (snapshot && snapshot.empty) {
+                setTasks([]);
+                setLoading(false);
+              }
+            },
+            (error) => {
+              console.warn('[TasksContext] onSnapshot error, falling back to polling:', error);
+            },
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[TasksContext] Failed to bind onSnapshot listener:', err);
+    }
+
     const intervalId = setInterval(() => {
       void refreshTasks();
     }, 10000);
 
     return () => {
+      if (typeof unsubscribe === 'function') {
+        unsubscribe();
+      }
       clearInterval(intervalId);
     };
   }, [refreshTasks, user]);
 
   const inboxTasks = tasks.filter((task) => task.status !== 'completed');
   const historyTasks = tasks.filter(
-    (task) => task.status === 'completed' && task.completedBy === user?.uid,
+    (task) =>
+      task.status === 'completed' &&
+      (!task.completedBy ||
+        task.completedBy === user?.uid ||
+        task.assignedTo === user?.uid),
   );
   const pendingCount = tasks.filter(
     (task) =>

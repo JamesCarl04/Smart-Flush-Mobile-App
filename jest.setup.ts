@@ -147,6 +147,89 @@ jest.mock('firebase/storage', () => ({
   getDownloadURL: jest.fn().mockResolvedValue('https://storage.example.com/mock-photo.jpg'),
 }));
 
+// 5b. Mock React Native Firebase Storage
+export const mockStorageRef = {
+  putFile: jest.fn().mockResolvedValue({ state: 'success' }),
+  getDownloadURL: jest.fn().mockResolvedValue('https://storage.example.com/mock-photo.jpg'),
+};
+
+export const mockStorageModule = {
+  ref: jest.fn((path?: string) => ({
+    ...mockStorageRef,
+    fullPath: path,
+  })),
+};
+
+jest.mock('@react-native-firebase/storage', () => {
+  const storageFn = () => mockStorageModule;
+  return {
+    __esModule: true,
+    default: storageFn,
+    getStorage: () => mockStorageModule,
+  };
+});
+
+// 5c. Mock React Native Firebase Firestore
+class MockFirestoreTimestamp {
+  date: Date;
+  constructor(date: Date) {
+    this.date = date;
+  }
+  toDate() {
+    return this.date;
+  }
+  static fromDate(date: Date) {
+    return new MockFirestoreTimestamp(date);
+  }
+  static now() {
+    return new MockFirestoreTimestamp(new Date());
+  }
+}
+
+export const mockFirestoreDoc = {
+  update: jest.fn().mockResolvedValue(undefined),
+  get: jest.fn().mockResolvedValue({
+    exists: true,
+    data: () => ({ createdAt: new MockFirestoreTimestamp(new Date('2026-08-15T08:00:00Z')) }),
+  }),
+};
+
+export const mockFirestoreCollection = {
+  doc: jest.fn((_id?: string) => mockFirestoreDoc),
+  get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+  onSnapshot: jest.fn((callback) => {
+    callback({ empty: true, docs: [] });
+    return jest.fn();
+  }),
+};
+
+export const mockFirestoreModule = {
+  collection: jest.fn((_name: string) => mockFirestoreCollection),
+  doc: jest.fn((_path: string) => mockFirestoreDoc),
+  batch: jest.fn(() => ({
+    delete: jest.fn(),
+    update: jest.fn(),
+    set: jest.fn(),
+    commit: jest.fn().mockResolvedValue(undefined),
+  })),
+};
+
+const mockFirestoreExport = Object.assign(() => mockFirestoreModule, {
+  Timestamp: MockFirestoreTimestamp,
+  FieldValue: {
+    serverTimestamp: jest.fn(() => new MockFirestoreTimestamp(new Date())),
+  },
+  getFirestore: () => mockFirestoreModule,
+});
+
+jest.mock('@react-native-firebase/firestore', () => ({
+  __esModule: true,
+  default: mockFirestoreExport,
+  getFirestore: () => mockFirestoreModule,
+  Timestamp: MockFirestoreTimestamp,
+  FieldValue: mockFirestoreExport.FieldValue,
+}));
+
 // 6. Mock Expo Network
 jest.mock('expo-network', () => {
   let isConnected = true;
