@@ -9,7 +9,6 @@ import { captureRef } from 'react-native-view-shot';
 import {
   Button,
   Card,
-  Chip,
   Divider,
   ProgressBar,
   SegmentedButtons,
@@ -18,21 +17,20 @@ import {
   TextInput,
 } from 'react-native-paper';
 
+import { KlirButton } from '../components/KlirButton';
 import {
   AssigneeAvatarCluster,
+  INTER_FONT,
+  KLIR_COLORS,
   KLIR_RADII,
+  KLIR_SPACING,
   MetaPill,
   OperationBadge,
-  UI_COLORS,
+  cardElevation,
   getComponentMeta,
   getTaskDisplayTone,
-  sharedShadow,
-  statusTone,
-  taskTriggerTone,
-  urgencyTone,
 } from '../components/MaintenanceUI';
 import { TaskDetailSkeleton } from '../components/SkeletonScreens';
-import { TaskExecutionModal } from '../components/TaskExecutionModal';
 import firestore from '@react-native-firebase/firestore';
 import { db } from '../lib/firebase';
 import {
@@ -45,8 +43,6 @@ import {
   CHECKLIST_LABELS,
   EMPTY_CHECKLIST,
   formatTaskComponent,
-  formatTaskStatus,
-  formatTaskTrigger,
   getTaskDisplayStatus,
 } from '../lib/tasks';
 import { acknowledgeTask, fetchTask } from '../lib/task-api';
@@ -124,26 +120,6 @@ function formatDate(date: Date | null | undefined): string {
     second: '2-digit',
     hour12: false,
   }).format(date);
-}
-
-
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}): React.JSX.Element {
-  return (
-    <View style={styles.detailRow}>
-      <Text variant="labelLarge" style={styles.detailLabel}>
-        {label}
-      </Text>
-      <Text variant="bodyLarge" style={styles.detailValue}>
-        {value}
-      </Text>
-    </View>
-  );
 }
 
 function LinearWorkflowStepper({
@@ -285,7 +261,6 @@ export function TaskDetailScreen({
   const [biometricVerified, setBiometricVerified] = useState(false);
   const [overlayUri, setOverlayUri] = useState<string | null>(null);
   const [overlayText, setOverlayText] = useState('');
-  const [executionModalVisible, setExecutionModalVisible] = useState(false);
   const overlayRef = useRef<View>(null);
   const initializedTaskIdRef = useRef<string | null>(null);
   const taskId = route.params.taskId;
@@ -672,10 +647,18 @@ export function TaskDetailScreen({
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {/* Unified Hero Action Card */}
+      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+        {/* Linear Stepper Card */}
+        <Card mode="elevated" style={[styles.stepperCard, styles.cardElevation]}>
+          <Card.Content style={styles.stepperCardContent}>
+            <Text style={styles.stepperTitle}>Task Progress</Text>
+            <LinearWorkflowStepper status={task.status} step={step} />
+          </Card.Content>
+        </Card>
+
+        {/* Hero Action Card */}
         {step === 'details' ? (
-          <Card mode="elevated" style={styles.heroCard}>
+          <Card mode="elevated" style={[styles.heroCard, styles.cardElevation]}>
             <Card.Content style={styles.heroContent}>
               {/* Top Row: Single Status Badge + Shift Pill */}
               <View style={styles.headerTopRow}>
@@ -706,8 +689,8 @@ export function TaskDetailScreen({
                 <View style={styles.shiftPill}>
                   <MaterialCommunityIcons
                     name="clock-outline"
-                    size={13}
-                    color={UI_COLORS.muted}
+                    size={12}
+                    color="#475569"
                   />
                   <Text style={styles.shiftPillText}>
                     {`${task.shift ?? '1st'} Shift`}
@@ -720,7 +703,7 @@ export function TaskDetailScreen({
                 {getRestroomLabel(task)}
               </Text>
 
-              {/* Single Breadcrumb Subtitle */}
+              {/* Breadcrumb Subtitle */}
               <Text style={styles.locationBreadcrumb}>
                 {`${task.floor} • ${task.location} • ${task.building}`}
               </Text>
@@ -733,8 +716,6 @@ export function TaskDetailScreen({
                     size={16}
                     color="#B45309"
                     style={styles.instructionIcon}
-                    accessibilityElementsHidden={true}
-                    importantForAccessibility="no"
                   />
                   <View style={styles.instructionTextWrapper}>
                     <Text style={styles.instructionLabel}>INSTRUCTION</Text>
@@ -760,43 +741,34 @@ export function TaskDetailScreen({
                 />
               </View>
 
-              <View style={{ marginTop: 12 }}>
+              <View style={{ marginTop: 4 }}>
                 <AssigneeAvatarCluster
                   task={task}
                   showNames={true}
-                  currentUserId={currentUserId()}
+                  currentUserId={user?.uid ?? currentUserId()}
+                  currentUserName={user?.name}
                 />
               </View>
 
               {/* Direct Action Button */}
               {task.status !== 'completed' ? (
-                <Button
-                  mode="contained"
+                <KlirButton
+                  title={
+                    task.status === 'acknowledged'
+                      ? 'Take Proof Photo'
+                      : 'Acknowledge Task'
+                  }
+                  variant="primary"
                   loading={actionInFlight}
                   disabled={actionInFlight}
                   onPress={() => void handleAction()}
-                  contentStyle={styles.actionButtonContent}
                   style={styles.actionButton}
-                  textColor="#FFFFFF"
-                  labelStyle={styles.actionButtonLabel}
-                  theme={{
-                    colors: {
-                      primary: '#B5121B',
-                      onPrimary: '#FFFFFF',
-                      surfaceDisabled: '#B5121B',
-                      onSurfaceDisabled: '#FFFFFF',
-                    },
-                  }}
                   icon={
                     task.status === 'acknowledged'
                       ? 'camera-outline'
                       : 'clipboard-check-outline'
                   }
-                >
-                  {task.status === 'acknowledged'
-                    ? 'Take Proof Photo'
-                    : 'Acknowledge Task'}
-                </Button>
+                />
               ) : null}
             </Card.Content>
           </Card>
@@ -804,137 +776,153 @@ export function TaskDetailScreen({
 
         {/* Step: Details - Completion Evidence if completed */}
         {step === 'details' && task.status === 'completed' ? (
-              <Card mode="elevated" style={styles.detailCard}>
-                <Card.Content style={styles.sectionContent}>
-                  <View style={styles.sectionHeaderRow}>
-                    <Text variant="titleMedium" style={styles.sectionTitle}>
-                      Completion Evidence
+          <Card mode="elevated" style={[styles.detailCard, styles.cardElevation]}>
+            <Card.Content style={styles.sectionContent}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionTitle}>
+                  Completion Evidence
+                </Text>
+                {task.biometricVerified ? (
+                  <View style={styles.biometricBadge}>
+                    <MaterialCommunityIcons
+                      name="shield-check"
+                      size={13}
+                      color="#16A34A"
+                    />
+                    <Text style={styles.biometricBadgeText}>
+                      Biometric verified
                     </Text>
-                    {task.biometricVerified ? (
-                      <Chip icon="shield-check" style={styles.verifiedChip}>
-                        Biometric verified
-                      </Chip>
-                    ) : null}
                   </View>
+                ) : null}
+              </View>
 
-                  {/* Side-by-Side Photo Container */}
-                  <View style={styles.comparisonContainer}>
-                    <View style={styles.comparisonColumn}>
-                      <View style={styles.comparisonHeader}>
-                        <MaterialCommunityIcons
-                          name="camera"
-                          size={13}
-                          color="#6B7280"
-                        />
-                        <Text style={styles.comparisonLabel}>BEFORE PHOTO</Text>
-                      </View>
-                      {task.beforePhotoUrl ? (
-                        <Image
-                          source={{ uri: task.beforePhotoUrl }}
-                          style={styles.comparisonPhoto}
-                        />
-                      ) : (
-                        <View style={styles.photoPlaceholder}>
-                          <Text style={styles.photoPlaceholderText}>
-                            No photo
-                          </Text>
-                        </View>
-                      )}
-                      {task.beforePhotoCapturedAt ? (
-                        <Text style={styles.photoTimestamp}>
-                          {formatDate(task.beforePhotoCapturedAt)}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    <View style={styles.comparisonDivider}>
-                      <MaterialCommunityIcons
-                        name="arrow-right-bold"
-                        size={16}
-                        color="#94A3B8"
-                      />
-                    </View>
-
-                    <View style={styles.comparisonColumn}>
-                      <View style={styles.comparisonHeader}>
-                        <MaterialCommunityIcons
-                          name="camera-flip"
-                          size={13}
-                          color={UI_COLORS.primary}
-                        />
-                        <Text
-                          style={[
-                            styles.comparisonLabel,
-                            { color: UI_COLORS.primary },
-                          ]}
-                        >
-                          AFTER PHOTO
-                        </Text>
-                      </View>
-                      {task.afterPhotoUrl ? (
-                        <Image
-                          source={{ uri: task.afterPhotoUrl }}
-                          style={styles.comparisonPhoto}
-                        />
-                      ) : (
-                        <View style={styles.photoPlaceholder}>
-                          <Text style={styles.photoPlaceholderText}>
-                            No photo
-                          </Text>
-                        </View>
-                      )}
-                      {task.afterPhotoCapturedAt ? (
-                        <Text style={styles.photoTimestamp}>
-                          {formatDate(task.afterPhotoCapturedAt)}
-                        </Text>
-                      ) : null}
-                    </View>
+              {/* Side-by-Side Photo Container */}
+              <View style={styles.comparisonContainer}>
+                <View style={styles.comparisonColumn}>
+                  <View style={styles.comparisonHeader}>
+                    <MaterialCommunityIcons
+                      name="camera-outline"
+                      size={13}
+                      color="#64748B"
+                    />
+                    <Text style={styles.comparisonLabel}>BEFORE</Text>
                   </View>
-
-                  <Divider />
-
-                  <Text variant="titleSmall" style={styles.subSectionTitle}>
-                    Checklist Verification
-                  </Text>
-                  {CHECKLIST_LABELS.map((item) => (
-                    <View key={item.key} style={styles.completedChecklistRow}>
-                      <MaterialCommunityIcons
-                        name={
-                          task.checklist?.[item.key] === 'na'
-                            ? 'minus-circle-outline'
-                            : 'check-circle'
-                        }
-                        size={18}
-                        color={
-                          task.checklist?.[item.key] === 'na'
-                            ? '#6B7280'
-                            : '#16A34A'
-                        }
+                  {task.beforePhotoUrl ? (
+                    <View style={styles.photoWrapper}>
+                      <Image
+                        source={{ uri: task.beforePhotoUrl }}
+                        style={styles.comparisonPhoto}
                       />
-                      <Text variant="bodyMedium" style={styles.checklistResultText}>
-                        {task.checklist?.[item.key] === 'na' ? 'N/A: ' : '✓ '}
-                        {item.label}
+                      <View style={styles.photoOverlayTag}>
+                        <Text style={styles.photoOverlayText}>Before</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.photoPlaceholder}>
+                      <Text style={styles.photoPlaceholderText}>
+                        No photo
                       </Text>
                     </View>
-                  ))}
+                  )}
+                  {task.beforePhotoCapturedAt ? (
+                    <Text style={styles.photoTimestamp}>
+                      {formatDate(task.beforePhotoCapturedAt)}
+                    </Text>
+                  ) : null}
+                </View>
 
-                  <Divider />
-                  <Text variant="bodyMedium">
-                    Remarks: {task.remarks || 'None'}
-                  </Text>
-                  <Text variant="bodyMedium">
-                    Completed at: {formatDate(task.completedAt)}
-                  </Text>
-                </Card.Content>
-              </Card>
+                <MaterialCommunityIcons
+                  name="arrow-right"
+                  size={16}
+                  color="#94A3B8"
+                />
+
+                <View style={styles.comparisonColumn}>
+                  <View style={styles.comparisonHeader}>
+                    <MaterialCommunityIcons
+                      name="camera-flip-outline"
+                      size={13}
+                      color={KLIR_COLORS.primary}
+                    />
+                    <Text
+                      style={[
+                        styles.comparisonLabel,
+                        { color: KLIR_COLORS.primary },
+                      ]}
+                    >
+                      AFTER
+                    </Text>
+                  </View>
+                  {task.afterPhotoUrl ? (
+                    <View style={styles.photoWrapper}>
+                      <Image
+                        source={{ uri: task.afterPhotoUrl }}
+                        style={styles.comparisonPhoto}
+                      />
+                      <View style={styles.photoOverlayTag}>
+                        <Text style={styles.photoOverlayText}>After</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.photoPlaceholder}>
+                      <Text style={styles.photoPlaceholderText}>
+                        No photo
+                      </Text>
+                    </View>
+                  )}
+                  {task.afterPhotoCapturedAt ? (
+                    <Text style={styles.photoTimestamp}>
+                      {formatDate(task.afterPhotoCapturedAt)}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+
+              <Divider style={{ marginVertical: 4 }} />
+
+              <Text style={styles.subSectionTitle}>
+                Checklist Verification (10 items)
+              </Text>
+              {CHECKLIST_LABELS.map((item) => {
+                const isNa = task.checklist?.[item.key] === 'na';
+                return (
+                  <View key={item.key} style={styles.completedChecklistRow}>
+                    <View
+                      style={[
+                        styles.checklistSymbolBox,
+                        isNa ? styles.checklistSymbolBoxNa : styles.checklistSymbolBoxDone,
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name={isNa ? 'minus' : 'check'}
+                        size={13}
+                        color={isNa ? '#64748B' : '#16A34A'}
+                      />
+                    </View>
+                    <Text style={styles.checklistResultText}>
+                      {isNa ? `[N/A] ${item.label}` : item.label}
+                    </Text>
+                  </View>
+                );
+              })}
+
+              <Divider style={{ marginVertical: 4 }} />
+              <Text style={styles.detailSummaryText}>
+                Remarks: {task.remarks || 'None'}
+              </Text>
+              <Text style={styles.detailSummaryText}>
+                Completed at: {formatDate(task.completedAt)}
+              </Text>
+            </Card.Content>
+          </Card>
         ) : null}
 
         {/* Step: Checklist */}
         {step === 'checklist' ? (
-          <Card mode="elevated" style={styles.detailCard}>
+          <Card mode="elevated" style={[styles.detailCard, styles.cardElevation]}>
             <Card.Content style={styles.sectionContent}>
               <View style={styles.sectionHeaderRow}>
-                <Text variant="titleMedium" style={styles.sectionTitle}>
+                <Text style={styles.sectionTitle}>
                   SDCA F-TGS 203 Checklist
                 </Text>
                 <View style={styles.progressIndicatorBadge}>
@@ -944,13 +932,13 @@ export function TaskDetailScreen({
                 </View>
               </View>
 
-              <Text variant="bodyMedium" style={styles.sectionHint}>
+              <Text style={styles.sectionHint}>
                 Set every item to Done or N/A before taking the after photo.
               </Text>
 
               <ProgressBar
                 progress={checklistProgress}
-                color={UI_COLORS.primary}
+                color={KLIR_COLORS.primary}
                 style={styles.progressBar}
               />
 
@@ -960,17 +948,17 @@ export function TaskDetailScreen({
                   <View style={styles.categoryHeader}>
                     <MaterialCommunityIcons
                       name={category.icon}
-                      size={18}
-                      color={UI_COLORS.primaryStrong}
+                      size={16}
+                      color={KLIR_COLORS.primary}
                     />
-                    <Text variant="titleSmall" style={styles.categoryTitle}>
+                    <Text style={styles.categoryTitle}>
                       {category.title}
                     </Text>
                   </View>
 
                   {category.items.map((item) => (
                     <View key={item.key} style={styles.checklistItem}>
-                      <Text variant="bodyMedium" style={styles.checklistLabel}>
+                      <Text style={styles.checklistLabel}>
                         {item.label}
                       </Text>
                       <SegmentedButtons
@@ -998,7 +986,9 @@ export function TaskDetailScreen({
                 value={remarks}
                 mode="outlined"
                 multiline
-                numberOfLines={4}
+                numberOfLines={3}
+                outlineColor="#CBD5E1"
+                activeOutlineColor={KLIR_COLORS.primary}
                 onChangeText={setRemarks}
                 style={styles.remarksInput}
               />
@@ -1008,20 +998,20 @@ export function TaskDetailScreen({
 
         {/* Step: Summary */}
         {step === 'summary' ? (
-          <Card mode="elevated" style={styles.detailCard}>
+          <Card mode="elevated" style={[styles.detailCard, styles.cardElevation]}>
             <Card.Content style={styles.sectionContent}>
               <View style={styles.sectionHeaderRow}>
-                <Text variant="titleMedium" style={styles.sectionTitle}>
+                <Text style={styles.sectionTitle}>
                   Completion Summary
                 </Text>
                 {biometricVerified ? (
-                  <View style={styles.biometricPill}>
+                  <View style={styles.biometricBadge}>
                     <MaterialCommunityIcons
                       name="shield-check"
-                      size={16}
+                      size={13}
                       color="#16A34A"
                     />
-                    <Text style={styles.biometricPillText}>Verified</Text>
+                    <Text style={styles.biometricBadgeText}>Verified</Text>
                   </View>
                 ) : null}
               </View>
@@ -1031,17 +1021,22 @@ export function TaskDetailScreen({
                 <View style={styles.comparisonColumn}>
                   <View style={styles.comparisonHeader}>
                     <MaterialCommunityIcons
-                      name="camera"
+                      name="camera-outline"
                       size={13}
-                      color="#6B7280"
+                      color="#64748B"
                     />
-                    <Text style={styles.comparisonLabel}>BEFORE PHOTO</Text>
+                    <Text style={styles.comparisonLabel}>BEFORE</Text>
                   </View>
                   {beforePhotoUri ? (
-                    <Image
-                      source={{ uri: beforePhotoUri }}
-                      style={styles.comparisonPhoto}
-                    />
+                    <View style={styles.photoWrapper}>
+                      <Image
+                        source={{ uri: beforePhotoUri }}
+                        style={styles.comparisonPhoto}
+                      />
+                      <View style={styles.photoOverlayTag}>
+                        <Text style={styles.photoOverlayText}>Before</Text>
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.photoPlaceholder}>
                       <Text style={styles.photoPlaceholderText}>No photo</Text>
@@ -1054,32 +1049,35 @@ export function TaskDetailScreen({
                   ) : null}
                 </View>
 
-                <View style={styles.comparisonDivider}>
-                  <MaterialCommunityIcons
-                    name="arrow-right-bold"
-                    size={16}
-                    color="#94A3B8"
-                  />
-                </View>
+                <MaterialCommunityIcons
+                  name="arrow-right"
+                  size={16}
+                  color="#94A3B8"
+                />
 
                 <View style={styles.comparisonColumn}>
                   <View style={styles.comparisonHeader}>
                     <MaterialCommunityIcons
-                      name="camera-flip"
+                      name="camera-flip-outline"
                       size={13}
-                      color={UI_COLORS.primary}
+                      color={KLIR_COLORS.primary}
                     />
                     <Text
-                      style={[styles.comparisonLabel, { color: UI_COLORS.primary }]}
+                      style={[styles.comparisonLabel, { color: KLIR_COLORS.primary }]}
                     >
-                      AFTER PHOTO
+                      AFTER
                     </Text>
                   </View>
                   {afterPhotoUri ? (
-                    <Image
-                      source={{ uri: afterPhotoUri }}
-                      style={styles.comparisonPhoto}
-                    />
+                    <View style={styles.photoWrapper}>
+                      <Image
+                        source={{ uri: afterPhotoUri }}
+                        style={styles.comparisonPhoto}
+                      />
+                      <View style={styles.photoOverlayTag}>
+                        <Text style={styles.photoOverlayText}>After</Text>
+                      </View>
+                    </View>
                   ) : (
                     <View style={styles.photoPlaceholder}>
                       <Text style={styles.photoPlaceholderText}>No photo</Text>
@@ -1116,22 +1114,10 @@ export function TaskDetailScreen({
                 </View>
               </View>
 
-              <Text variant="bodyMedium">
-                Done:{' '}
-                {
-                  CHECKLIST_LABELS.filter(
-                    (item) => checklist[item.key] === 'done',
-                  ).length
-                }
-                {'  '}N/A:{' '}
-                {
-                  CHECKLIST_LABELS.filter(
-                    (item) => checklist[item.key] === 'na',
-                  ).length
-                }
+              <Text style={styles.detailSummaryText}>
+                Remarks: {remarks || 'None'}
               </Text>
-              <Text variant="bodyMedium">Remarks: {remarks || 'None'}</Text>
-              <Text variant="bodyMedium">
+              <Text style={styles.detailSummaryText}>
                 Biometric: {biometricVerified ? 'Verified' : 'Not verified'}
               </Text>
             </Card.Content>
@@ -1143,49 +1129,27 @@ export function TaskDetailScreen({
       {step === 'checklist' || step === 'summary' ? (
         <View style={styles.stickyBottomZone}>
           {step === 'checklist' ? (
-          <Button
-            mode="contained"
-            onPress={() => void captureAfterPhoto()}
-            contentStyle={styles.primaryActionContent}
-            style={styles.primaryAction}
-            textColor="#FFFFFF"
-            labelStyle={styles.primaryActionLabel}
-            theme={{
-              colors: {
-                primary: '#B5121B',
-                onPrimary: '#FFFFFF',
-              },
-            }}
-            icon="camera-flip-outline"
-          >
-            Take After Photo
-          </Button>
-        ) : null}
+            <KlirButton
+              title="Take After Photo"
+              variant="primary"
+              onPress={() => void captureAfterPhoto()}
+              icon="camera-flip-outline"
+              style={styles.primaryAction}
+            />
+          ) : null}
 
-        {step === 'summary' ? (
-          <Button
-            mode="contained"
-            loading={actionInFlight}
-            disabled={actionInFlight}
-            onPress={() => void submitCompletion()}
-            contentStyle={styles.primaryActionContent}
-            style={styles.primaryAction}
-            textColor="#FFFFFF"
-            labelStyle={styles.primaryActionLabel}
-            theme={{
-              colors: {
-                primary: '#B5121B',
-                onPrimary: '#FFFFFF',
-                surfaceDisabled: '#B5121B',
-                onSurfaceDisabled: '#FFFFFF',
-              },
-            }}
-            icon="cloud-upload-outline"
-          >
-            Submit Completion
-          </Button>
-        ) : null}
-      </View>
+          {step === 'summary' ? (
+            <KlirButton
+              title="Submit Completion"
+              variant="primary"
+              loading={actionInFlight}
+              disabled={actionInFlight}
+              onPress={() => void submitCompletion()}
+              icon="cloud-upload-outline"
+              style={styles.primaryAction}
+            />
+          ) : null}
+        </View>
       ) : null}
 
       {/* Hidden offscreen stage for burning timestamp overlay */}
@@ -1213,13 +1177,16 @@ export function TaskDetailScreen({
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: UI_COLORS.background,
+    backgroundColor: '#F8FAFC',
   },
   contentContainer: {
-    padding: 16,
+    padding: KLIR_SPACING.lg,
     paddingBottom: 96,
-    gap: 16,
-    backgroundColor: UI_COLORS.background,
+    gap: KLIR_SPACING.md,
+    backgroundColor: '#F8FAFC',
+  },
+  cardElevation: {
+    ...cardElevation,
   },
   loadingState: {
     flex: 1,
@@ -1227,148 +1194,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 24,
-    backgroundColor: UI_COLORS.background,
+    backgroundColor: '#F8FAFC',
   },
   missingCopy: {
     textAlign: 'center',
-    color: UI_COLORS.muted,
+    color: '#64748B',
   },
-  headerCard: {
-    borderRadius: 20,
-    backgroundColor: UI_COLORS.surface,
-    borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
-  },
-  heroCard: {
-    borderRadius: 22,
-    backgroundColor: UI_COLORS.surface,
-    borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
-  },
-  heroContent: {
-    gap: 12,
-  },
-  locationHeadline: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: UI_COLORS.text,
-    letterSpacing: -0.3,
-  },
-  locationBreadcrumb: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: UI_COLORS.muted,
-    marginTop: -4,
-  },
-  instructionCallout: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: '#FFFBEB',
-    borderWidth: 1,
-    borderColor: '#FDE68A',
-    borderLeftWidth: 4,
-    borderLeftColor: '#D97706',
-    borderRadius: KLIR_RADII.chip,
-    padding: 12,
-    gap: 10,
-  },
-  instructionIcon: {
-    marginTop: 2,
-  },
-  instructionTextWrapper: {
-    flex: 1,
-    gap: 2,
-  },
-  instructionLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#B45309',
-    letterSpacing: 0.5,
-  },
-  instructionText: {
-    fontSize: 13,
-    color: '#92400E',
-    fontWeight: '600',
-    lineHeight: 18,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    alignItems: 'center',
-  },
-  actionButton: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.primary,
-    marginTop: 4,
-  },
-  actionButtonContent: {
-    minHeight: 52,
-  },
-  actionButtonLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  headerContent: {
-    gap: 8,
-  },
-  headerTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  shiftPill: {
-    minHeight: 26,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: KLIR_RADII.tag,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  shiftPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  headerHeadline: {
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '800',
-    color: UI_COLORS.text,
-    letterSpacing: -0.3,
-  },
-  breadcrumbSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600',
-    color: UI_COLORS.muted,
-  },
-  componentTagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 2,
-  },
+
+  // Stepper
   stepperCard: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
+    borderColor: '#EAECF0',
   },
   stepperCardContent: {
+    padding: 16,
     gap: 12,
   },
   stepperTitle: {
-    color: UI_COLORS.text,
-    fontWeight: '900',
+    fontFamily: INTER_FONT,
+    color: '#0F172A',
+    fontWeight: '800',
     fontSize: 15,
   },
   stepperContainer: {
@@ -1395,7 +1242,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 6,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#E2E8F0',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 2,
@@ -1404,7 +1251,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#16A34A',
   },
   stepperDotCurrent: {
-    backgroundColor: '#B5121B',
+    backgroundColor: KLIR_COLORS.primary,
     borderWidth: 2,
     borderColor: '#FEE2E2',
   },
@@ -1414,30 +1261,123 @@ const styles = StyleSheet.create({
     right: '-50%',
     top: 10,
     height: 2,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#E2E8F0',
     zIndex: 1,
   },
   stepperLineDone: {
     backgroundColor: '#16A34A',
   },
   stepperLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '700',
-    color: UI_COLORS.muted,
+    color: '#94A3B8',
     textAlign: 'center',
   },
   stepperLabelActive: {
-    color: UI_COLORS.text,
+    color: '#0F172A',
     fontWeight: '800',
   },
-  detailCard: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+
+  // Hero Card
+  heroCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
+    borderColor: '#EAECF0',
+  },
+  heroContent: {
+    padding: 16,
+    gap: 12,
+  },
+  headerTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  shiftPill: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  shiftPillText: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  locationHeadline: {
+    fontFamily: INTER_FONT,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  locationBreadcrumb: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#64748B',
+    marginTop: -4,
+  },
+  instructionCallout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FEF9E7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  instructionIcon: {
+    marginTop: 2,
+  },
+  instructionTextWrapper: {
+    flex: 1,
+    gap: 2,
+  },
+  instructionLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+    letterSpacing: 0.5,
+  },
+  instructionText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    alignItems: 'center',
+  },
+  actionButton: {
+    borderRadius: 12,
+    marginTop: 4,
+  },
+
+  // Detail & Evidence Cards
+  detailCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#EAECF0',
   },
   sectionContent: {
+    padding: 16,
     gap: 12,
   },
   sectionHeaderRow: {
@@ -1446,20 +1386,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   sectionTitle: {
-    color: UI_COLORS.text,
-    fontWeight: '900',
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
   },
   subSectionTitle: {
-    color: UI_COLORS.text,
+    fontFamily: INTER_FONT,
+    color: '#0F172A',
     fontWeight: '800',
-    marginTop: 4,
+    fontSize: 14,
+    marginTop: 2,
   },
   sectionHint: {
-    color: UI_COLORS.muted,
-    lineHeight: 20,
+    fontFamily: INTER_FONT,
+    color: '#64748B',
+    fontSize: 13,
+    lineHeight: 18,
   },
   progressIndicatorBadge: {
-    minHeight: 26,
+    minHeight: 24,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: KLIR_RADII.tag,
@@ -1468,6 +1414,7 @@ const styles = StyleSheet.create({
     borderColor: '#FDE68A',
   },
   progressIndicatorText: {
+    fontFamily: INTER_FONT,
     color: '#B45309',
     fontWeight: '800',
     fontSize: 11,
@@ -1475,7 +1422,7 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#E2E8F0',
     marginBottom: 4,
   },
   categoryContainer: {
@@ -1489,79 +1436,37 @@ const styles = StyleSheet.create({
     paddingBottom: 2,
   },
   categoryTitle: {
-    color: '#B5121B',
+    fontFamily: INTER_FONT,
+    color: KLIR_COLORS.primary,
     fontWeight: '800',
-    fontSize: 14,
+    fontSize: 13,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  detailRow: {
-    gap: 4,
-  },
-  detailLabel: {
-    color: UI_COLORS.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  detailValue: {
-    color: UI_COLORS.text,
-    fontWeight: '700',
-  },
-  noteText: {
-    color: UI_COLORS.text,
-    fontSize: 17,
-    lineHeight: 25,
-  },
-  stickyBottomZone: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-    paddingBottom: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    borderTopWidth: 1,
-    borderTopColor: UI_COLORS.border,
-    shadowColor: UI_COLORS.charcoal,
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 8,
-  },
-  primaryAction: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: '#B5121B',
-  },
-  primaryActionContent: {
-    minHeight: 52,
-  },
-  primaryActionLabel: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  secondaryAction: {
-    borderRadius: KLIR_RADII.card,
-    borderColor: UI_COLORS.border,
-  },
   checklistItem: {
-    gap: 10,
+    gap: 8,
     padding: 12,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.softGray,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EAECF0',
   },
   checklistLabel: {
-    color: UI_COLORS.text,
-    fontWeight: '800',
+    fontFamily: INTER_FONT,
+    color: '#0F172A',
+    fontWeight: '700',
+    fontSize: 13,
   },
   remarksInput: {
+    backgroundColor: '#FFFFFF',
     marginTop: 4,
   },
+
+  // Comparison Photos
   comparisonContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
     paddingVertical: 4,
   },
   comparisonColumn: {
@@ -1574,80 +1479,115 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   comparisonLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '800',
-    color: UI_COLORS.muted,
+    color: '#64748B',
     letterSpacing: 0.3,
+  },
+  photoWrapper: {
+    width: '100%',
+    height: 130,
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#E2E8F0',
   },
   comparisonPhoto: {
     width: '100%',
-    height: 140,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: '#E2E8F0',
+    height: '100%',
+  },
+  photoOverlayTag: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  photoOverlayText: {
+    fontFamily: INTER_FONT,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   photoPlaceholder: {
     width: '100%',
-    height: 140,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: '#E2E8F0',
+    height: 130,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },
   photoPlaceholderText: {
-    color: UI_COLORS.muted,
-    fontWeight: '700',
+    fontFamily: INTER_FONT,
+    color: '#94A3B8',
+    fontWeight: '600',
+    fontSize: 12,
   },
   photoTimestamp: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
-    color: UI_COLORS.muted,
+    color: '#94A3B8',
     fontWeight: '600',
   },
-  comparisonDivider: {
-    width: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+
+  // Summary Stats
   summaryStatsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   summaryStatBox: {
     flex: 1,
     padding: 12,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.softGray,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EAECF0',
     alignItems: 'center',
-    gap: 4,
+    gap: 2,
   },
   summaryStatLabel: {
-    fontSize: 12,
+    fontFamily: INTER_FONT,
+    fontSize: 11,
     fontWeight: '700',
-    color: UI_COLORS.muted,
+    color: '#64748B',
   },
   summaryStatValue: {
-    fontSize: 22,
+    fontFamily: INTER_FONT,
+    fontSize: 20,
     fontWeight: '900',
-    color: UI_COLORS.text,
+    color: '#0F172A',
   },
-  biometricPill: {
-    minHeight: 26,
+  detailSummaryText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '500',
+  },
+
+  biometricBadge: {
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: KLIR_RADII.tag,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: '#DCFCE7',
     borderWidth: 1,
     borderColor: '#BBF7D0',
   },
-  biometricPillText: {
-    fontSize: 11,
+  biometricBadgeText: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
     fontWeight: '800',
-    color: UI_COLORS.successText,
-  },
-  verifiedChip: {
-    backgroundColor: UI_COLORS.softGreen,
+    color: '#15803D',
   },
   completedChecklistRow: {
     flexDirection: 'row',
@@ -1655,11 +1595,49 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 4,
   },
-  checklistResultText: {
-    flex: 1,
-    color: UI_COLORS.text,
-    fontWeight: '600',
+  checklistSymbolBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  checklistSymbolBoxDone: {
+    backgroundColor: '#DCFCE7',
+  },
+  checklistSymbolBoxNa: {
+    backgroundColor: '#F1F5F9',
+  },
+  checklistResultText: {
+    fontFamily: INTER_FONT,
+    flex: 1,
+    color: '#1E293B',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+
+  // Sticky Bottom Zone
+  stickyBottomZone: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 16,
+    paddingBottom: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderTopWidth: 1,
+    borderTopColor: '#EAECF0',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 8,
+  },
+  primaryAction: {
+    borderRadius: 12,
+  },
+
+  // Offscreen Overlay Stage
   overlayStage: {
     position: 'absolute',
     left: -2000,
@@ -1692,3 +1670,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+

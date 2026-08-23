@@ -1,6 +1,7 @@
 import { apiFetch } from '../../lib/api';
 import {
   acknowledgeTask,
+  acceptRecheckTask,
   completeTask,
   fetchTask,
   fetchTasks,
@@ -147,29 +148,38 @@ describe('task-api utility', () => {
     });
   });
 
-  describe('completeTask', () => {
-    it('should send POST request to /api/tasks/:taskId/complete', async () => {
+  describe('acceptRecheckTask', () => {
+    const input = {
+      taskId: 'task-300',
+      technicianUid: 'tech-1',
+      technicianName: 'Technician Sam',
+    };
+
+    it('should send POST request to /api/tasks/:taskId/accept-recheck with body', async () => {
       mockedApiFetch.mockResolvedValueOnce({
         success: true,
-        data: { taskId: 'task-200' },
+        data: { taskId: 'task-300' },
       });
 
-      await completeTask('task-200');
+      await acceptRecheckTask(input);
 
       expect(mockedApiFetch).toHaveBeenCalledWith(
-        '/api/tasks/task-200/complete',
-        { method: 'POST' },
+        '/api/tasks/task-300/accept-recheck',
+        {
+          method: 'POST',
+          body: JSON.stringify(input),
+        },
       );
     });
 
-    it('should throw an error when complete fails', async () => {
+    it('should throw an error when accept-recheck fails', async () => {
       mockedApiFetch.mockResolvedValueOnce({
         success: false,
-        error: 'Task completion criteria not met',
+        error: 'Task is not in flagged status',
       });
 
-      await expect(completeTask('task-200')).rejects.toThrow(
-        'Task completion criteria not met',
+      await expect(acceptRecheckTask(input)).rejects.toThrow(
+        'Task is not in flagged status',
       );
     });
   });

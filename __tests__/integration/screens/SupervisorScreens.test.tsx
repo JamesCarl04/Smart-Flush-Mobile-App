@@ -16,7 +16,17 @@ import * as supervisorApi from '../../../lib/supervisor-api';
 import * as useAuthHook from '../../../hooks/useAuth';
 import type { Task } from '../../../types';
 
-jest.mock('../../../lib/supervisor-api');
+jest.mock('../../../lib/supervisor-api', () => {
+  const actual = jest.requireActual('../../../lib/supervisor-api');
+  return {
+    ...actual,
+    fetchSupervisorTasks: jest.fn(),
+    fetchMaintenancePersonnel: jest.fn(),
+    reassignTask: jest.fn(),
+    flagTask: jest.fn(),
+    approveTask: jest.fn(),
+  };
+});
 jest.mock('../../../hooks/useAuth');
 
 const renderWithSupervisor = (ui: React.ReactElement) => {
@@ -320,7 +330,10 @@ describe('Supervisor Screens Integration Suite', () => {
       });
     });
 
-    it('displays completion details, checklist, proof metrics, and allows flagging task', async () => {
+    it('displays completion details, checklist, proof metrics, and allows approving and flagging task', async () => {
+      (supervisorApi.approveTask as jest.Mock).mockResolvedValue(undefined);
+      (supervisorApi.flagTask as jest.Mock).mockResolvedValue(undefined);
+
       renderWithSupervisor(
         <CompletedReviewDetailScreen
           navigation={mockNavigation}
@@ -341,23 +354,35 @@ describe('Supervisor Screens Integration Suite', () => {
       expect(screen.getByText('Response time: 1 min 30 sec')).toBeTruthy();
       expect(screen.getByText('Duration: 5 min 0 sec')).toBeTruthy();
 
+      // Test Approve Task
+      fireEvent.press(screen.getByText('Approve Task'));
+      await waitFor(() => {
+        expect(supervisorApi.approveTask).toHaveBeenCalledWith({
+          taskId: 'task-completed-3',
+          supervisorUid: 'sup-user-1',
+          supervisorName: 'Supervisor Chief',
+        });
+      });
+
       // Open Flag Dialog
       fireEvent.press(screen.getByText('Flag for Re-inspection'));
 
       await waitFor(() => {
-        expect(screen.getByText('Flag task')).toBeTruthy();
+        expect(screen.getAllByText('Flag for Re-inspection').length).toBeGreaterThan(0);
       });
 
       const reasonInput = screen.getByDisplayValue('Requires re-inspection');
       fireEvent.changeText(reasonInput, 'Water pressure is still suboptimal.');
 
-      fireEvent.press(screen.getByText('Flag'));
+      fireEvent.press(screen.getByText('Flag Task'));
 
       await waitFor(() => {
         expect(supervisorApi.flagTask).toHaveBeenCalledWith({
           taskId: 'task-completed-3',
           reason: 'Water pressure is still suboptimal.',
           supervisorUid: 'sup-user-1',
+          supervisorName: 'Supervisor Chief',
+          flagPhotoUrls: [],
         });
       });
 
@@ -383,6 +408,7 @@ describe('Supervisor Screens Integration Suite', () => {
         expect(screen.getByText('Tasks Completed')).toBeTruthy();
       });
 
+      expect(screen.getByText('Audit Overview')).toBeTruthy();
       expect(screen.getByText('Avg Resolution Time')).toBeTruthy();
       expect(screen.getByText('Photo Proof')).toBeTruthy();
       expect(screen.getByText('Biometric Verified')).toBeTruthy();

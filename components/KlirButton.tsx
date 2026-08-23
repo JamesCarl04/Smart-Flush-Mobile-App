@@ -116,58 +116,46 @@ export function KlirButton({
           style,
         ]}
       >
-      {loading ? (
-        <View style={styles.contentRow}>
-          <ActivityIndicator size="small" color={textColor} />
-          {labelText ? (
-            <Text
-              style={[
-                styles.text,
-                { color: textColor },
-                styles[`text_${size}`],
-                textStyle,
-              ]}
-            >
-              {labelText}
-            </Text>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.contentRow}>
-          {icon && iconPosition === 'left' ? (
-            <MaterialCommunityIcons
-              name={icon}
-              size={iconSize}
-              color={textColor}
-              style={styles.leftIcon}
-            />
-          ) : null}
+        {loading ? (
+          <View style={styles.contentRow}>
+            <ActivityIndicator size="small" color={textColor} />
+          </View>
+        ) : (
+          <View style={styles.contentRow}>
+            {icon && iconPosition === 'left' ? (
+              <MaterialCommunityIcons
+                name={icon}
+                size={iconSize}
+                color={textColor}
+                style={styles.leftIcon}
+              />
+            ) : null}
 
-          {labelText ? (
-            <Text
-              style={[
-                styles.text,
-                { color: textColor },
-                styles[`text_${size}`],
-                textStyle,
-              ]}
-            >
-              {labelText}
-            </Text>
-          ) : (
-            children
-          )}
+            {labelText ? (
+              <Text
+                style={[
+                  styles.text,
+                  { color: textColor },
+                  styles[`text_${size}`],
+                  textStyle,
+                ]}
+              >
+                {labelText}
+              </Text>
+            ) : (
+              children
+            )}
 
-          {icon && iconPosition === 'right' ? (
-            <MaterialCommunityIcons
-              name={icon}
-              size={iconSize}
-              color={textColor}
-              style={styles.rightIcon}
-            />
-          ) : null}
-        </View>
-      )}
+            {icon && iconPosition === 'right' ? (
+              <MaterialCommunityIcons
+                name={icon}
+                size={iconSize}
+                color={textColor}
+                style={styles.rightIcon}
+              />
+            ) : null}
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );

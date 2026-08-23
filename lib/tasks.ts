@@ -50,6 +50,15 @@ type TaskDocumentShape = {
   reassignCount?: unknown;
   supervisorUid?: unknown;
   createdBy?: unknown;
+  inspectionStatus?: unknown;
+  inspectedBy?: unknown;
+  inspectedByName?: unknown;
+  inspectedAt?: FirestoreDateValue;
+  flagReason?: unknown;
+  flagPhotoUrls?: unknown;
+  recheckCount?: unknown;
+  recheckedBy?: unknown;
+  recheckedAt?: FirestoreDateValue;
 };
 
 function stringArray(value: unknown): string[] {
@@ -128,7 +137,8 @@ export function isTaskStatus(value: unknown): value is TaskStatus {
     value === 'acknowledged' ||
     value === 'completed' ||
     value === 'reassignment_needed' ||
-    value === 'flagged'
+    value === 'flagged' ||
+    value === 'rechecking'
   );
 }
 
@@ -186,6 +196,9 @@ export function getTaskDisplayStatus(task: Task | null | undefined): string {
   if (task.status === 'flagged') {
     return 'Flagged';
   }
+  if (task.status === 'rechecking') {
+    return 'Rechecking';
+  }
   if (isBroadcastTask(task)) {
     return 'Team Broadcast';
   }
@@ -214,6 +227,10 @@ export function formatTaskStatus(status: TaskStatus): string {
 
   if (status === 'flagged') {
     return 'Flagged';
+  }
+
+  if (status === 'rechecking') {
+    return 'Rechecking';
   }
 
   return 'Reassignment needed';
@@ -423,14 +440,24 @@ export function parseTaskDocument(
   const submissions = parseSubmissions(data.submissions);
   const assignedToIds = stringArray(data.assignedToIds);
 
-  let status = data.status;
-  if (completedAt || completedBy || Object.keys(submissions).length > 0) {
+  let status: TaskStatus = 'unassigned';
+  if (data.status === 'flagged') {
+    status = 'flagged';
+  } else if (data.status === 'rechecking') {
+    status = 'rechecking';
+  } else if (data.status === 'reassignment_needed') {
+    status = 'reassignment_needed';
+  } else if (completedAt || completedBy || Object.keys(submissions).length > 0) {
     // If all assigned technicians have submitted, mark completed
     if (assignedToIds.length > 0 && assignedToIds.every((uid) => Boolean(submissions[uid] || completedByMap[uid]))) {
       status = 'completed';
     } else if (completedAt || completedBy) {
       status = 'completed';
+    } else if (typeof data.status === 'string' && isTaskStatus(data.status)) {
+      status = data.status;
     }
+  } else if (typeof data.status === 'string' && isTaskStatus(data.status)) {
+    status = data.status;
   }
 
   return {
@@ -501,5 +528,21 @@ export function parseTaskDocument(
     reassignCount: numberOrNull(data.reassignCount) ?? 0,
     supervisorUid: stringOrNull(data.supervisorUid),
     createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',
+
+    // QA & Supervisor Audit Fields
+    inspectionStatus:
+      data.inspectionStatus === 'approved' ||
+      data.inspectionStatus === 'flagged' ||
+      data.inspectionStatus === 'pending_review'
+        ? data.inspectionStatus
+        : undefined,
+    inspectedBy: stringOrNull(data.inspectedBy),
+    inspectedByName: stringOrNull(data.inspectedByName),
+    inspectedAt: toDate(data.inspectedAt),
+    flagReason: stringOrNull(data.flagReason),
+    flagPhotoUrls: stringArray(data.flagPhotoUrls),
+    recheckCount: numberOrNull(data.recheckCount) ?? 0,
+    recheckedBy: stringOrNull(data.recheckedBy),
+    recheckedAt: toDate(data.recheckedAt),
   };
 }

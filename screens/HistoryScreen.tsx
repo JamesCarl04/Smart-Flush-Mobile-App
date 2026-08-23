@@ -1,20 +1,24 @@
 import { FlatList, Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useMemo, useState } from 'react';
-import { Card, Divider, Snackbar, Text, TextInput } from 'react-native-paper';
+import { useContext, useMemo, useState } from 'react';
+import { Card, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import {
+  AssigneeAvatarCluster,
   EmptyOperationState,
+  INTER_FONT,
+  KLIR_COLORS,
   KLIR_RADII,
+  KLIR_SPACING,
   MetaPill,
   OperationBadge,
-  SegmentedFilterControl,
-  UI_COLORS,
+  cardElevation,
   getComponentMeta,
-  sharedShadow,
+  getInitials,
   statusTone,
 } from '../components/MaintenanceUI';
+import { AuthContext } from '../contexts/AuthContext';
 import { useTasks } from '../hooks/useTasks';
 import { getRestroomLabel } from '../lib/restrooms';
 import { formatTaskComponent, formatTaskStatus } from '../lib/tasks';
@@ -53,27 +57,17 @@ function formatAvgDuration(seconds: number): string {
 
 function EmptyState(): React.JSX.Element {
   return (
-    <View style={styles.seamlessEmptyContainer}>
-      <View style={styles.emptyIconContainer}>
-        <MaterialCommunityIcons
-          name="clipboard-check-multiple-outline"
-          size={32}
-          color={UI_COLORS.primary}
-          accessibilityElementsHidden={true}
-          importantForAccessibility="no"
-        />
-      </View>
-      <Text style={styles.emptyTitle}>
-        No completed tasks yet
-      </Text>
-      <Text style={styles.emptyBody}>
-        Completed restroom work will appear here after proof photos and checklist submissions are closed out.
-      </Text>
-    </View>
+    <EmptyOperationState
+      icon="check-all"
+      title="No completed tasks yet"
+      body="Completed tasks with proof photos and checklists will appear here."
+    />
   );
 }
 
 export function HistoryScreen({ navigation }: Props): React.JSX.Element {
+  const auth = useContext(AuthContext);
+  const user = auth?.user ?? null;
   const { historyTasks, loading, errorMessage, clearError } = useTasks();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRange, setSelectedRange] = useState<HistoryRange>('week');
@@ -129,43 +123,50 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
     return `${rate}%`;
   }, [visibleHistory]);
 
+  const userCleanName = user?.name ? user.name.replace(/\([^)]*\)/g, '').trim() : 'Technician';
+
   return (
     <View style={styles.screen}>
       <FlatList
         data={visibleHistory}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            <View style={styles.titleSection}>
-              <Text variant="headlineSmall" style={styles.headerTitle}>
-                Completed Work
-              </Text>
-              <Text variant="bodyMedium" style={styles.headerDescription}>
-                Search verified restroom jobs and review submitted proof.
-              </Text>
+            {/* Top Section Header Row */}
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionTitleGroup}>
+                <Text style={styles.sectionHeaderTitle}>Completed Work</Text>
+                <Text style={styles.facilitySubtitle}>
+                  {user?.building ? `${user.building} Facility` : 'SDCA Annex Facility'} • {userCleanName}
+                </Text>
+              </View>
             </View>
 
             {/* Shift Performance Summary Header: Standardized 3-card grid */}
             <View style={styles.performanceGrid}>
-              <Card mode="contained" style={styles.metricCard}>
+              <Card mode="contained" style={[styles.metricCard, styles.cardElevation]}>
                 <Card.Content style={styles.metricContent}>
                   <Text style={styles.metricLabel}>Tasks Completed</Text>
                   <Text style={styles.standardMetricValue}>{completedCount}</Text>
+                  <Text style={styles.metricFooterText}>Completed</Text>
                 </Card.Content>
               </Card>
 
-              <Card mode="contained" style={styles.metricCard}>
+              <Card mode="contained" style={[styles.metricCard, styles.cardElevation]}>
                 <Card.Content style={styles.metricContent}>
-                  <Text style={styles.metricLabel}>Avg Turnaround</Text>
+                  <Text style={styles.metricLabel}>Avg Duration</Text>
                   <Text style={styles.standardMetricValue}>{avgTurnaround}</Text>
+                  <Text style={styles.metricFooterText}>Turnaround</Text>
                 </Card.Content>
               </Card>
 
-              <Card mode="contained" style={styles.metricCard}>
+              <Card mode="contained" style={[styles.metricCard, styles.cardElevation]}>
                 <Card.Content style={styles.metricContent}>
                   <Text style={styles.metricLabel}>Compliance</Text>
                   <Text style={styles.standardMetricValue}>{complianceRate}</Text>
+                  <Text style={styles.metricFooterText}>Verified</Text>
                 </Card.Content>
               </Card>
             </View>
@@ -176,31 +177,86 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
               label="Search completed jobs"
               value={searchQuery}
               mode="outlined"
+              outlineColor="#CBD5E1"
+              activeOutlineColor={KLIR_COLORS.primary}
               left={<TextInput.Icon icon="magnify" />}
               onChangeText={setSearchQuery}
               style={styles.searchInput}
             />
 
-            {/* Range Filter Segmented Control */}
-            <SegmentedFilterControl<HistoryRange>
-              items={[
-                { key: 'today', label: 'Today' },
-                { key: 'week', label: '7 days' },
-                { key: 'all', label: 'All' },
-              ]}
-              activeKey={selectedRange}
-              onChange={setSelectedRange}
-            />
+            {/* Range Filter Mobbin Segmented Control */}
+            <View style={styles.segmentedContainer}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, selectedRange === 'today' && styles.segmentBtnActive]}
+                onPress={() => setSelectedRange('today')}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: selectedRange === 'today' }}
+                accessibilityLabel="Today's completed tasks"
+              >
+                <Text
+                  style={[
+                    styles.segmentBtnText,
+                    selectedRange === 'today' && styles.segmentBtnTextActive,
+                  ]}
+                >
+                  Today
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentBtn, selectedRange === 'week' && styles.segmentBtnActive]}
+                onPress={() => setSelectedRange('week')}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: selectedRange === 'week' }}
+                accessibilityLabel="Last 7 days completed tasks"
+              >
+                <Text
+                  style={[
+                    styles.segmentBtnText,
+                    selectedRange === 'week' && styles.segmentBtnTextActive,
+                  ]}
+                >
+                  7 days
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentBtn, selectedRange === 'all' && styles.segmentBtnActive]}
+                onPress={() => setSelectedRange('all')}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: selectedRange === 'all' }}
+                accessibilityLabel="All completed tasks"
+              >
+                <Text
+                  style={[
+                    styles.segmentBtnText,
+                    selectedRange === 'all' && styles.segmentBtnTextActive,
+                  ]}
+                >
+                  All
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Section Heading */}
+            <Text style={styles.sectionHeaderTitle}>Completed Log ({visibleHistory.length})</Text>
           </View>
         }
         ListEmptyComponent={!loading ? <EmptyState /> : null}
         renderItem={({ item }) => (
           <Card
-            mode="contained"
-            style={styles.taskCard}
+            mode="elevated"
+            style={[styles.taskCard, styles.cardElevation]}
             onPress={() =>
               navigation.navigate('TaskDetail', { taskId: item.id })
             }
+            accessible={true}
+            accessibilityRole="button"
+            accessibilityLabel={`${getRestroomLabel(item)}, Completed`}
+            accessibilityHint="Double tap to view before and after proof and 10-point checklist"
           >
             <Card.Content style={styles.cardContent}>
               {/* Header Status & Finished Timestamp */}
@@ -250,12 +306,16 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
               {item.beforePhotoUrl || item.afterPhotoUrl ? (
                 <View style={styles.previewThumbnailContainer}>
                   <View style={styles.previewThumbWrapper}>
-                    <Text style={styles.previewThumbLabel}>BEFORE</Text>
                     {item.beforePhotoUrl ? (
-                      <Image
-                        source={{ uri: item.beforePhotoUrl }}
-                        style={styles.previewThumbnail}
-                      />
+                      <View style={styles.thumbImageFrame}>
+                        <Image
+                          source={{ uri: item.beforePhotoUrl }}
+                          style={styles.previewThumbnail}
+                        />
+                        <View style={styles.thumbOverlayTag}>
+                          <Text style={styles.thumbOverlayText}>Before</Text>
+                        </View>
+                      </View>
                     ) : (
                       <View style={styles.previewThumbEmpty}>
                         <Text style={styles.previewThumbEmptyText}>No photo</Text>
@@ -264,20 +324,22 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                   </View>
 
                   <MaterialCommunityIcons
-                    name="arrow-right-thin"
-                    size={20}
+                    name="arrow-right"
+                    size={16}
                     color="#94A3B8"
                   />
 
                   <View style={styles.previewThumbWrapper}>
-                    <Text style={[styles.previewThumbLabel, { color: UI_COLORS.primary }]}>
-                      AFTER
-                    </Text>
                     {item.afterPhotoUrl ? (
-                      <Image
-                        source={{ uri: item.afterPhotoUrl }}
-                        style={styles.previewThumbnail}
-                      />
+                      <View style={styles.thumbImageFrame}>
+                        <Image
+                          source={{ uri: item.afterPhotoUrl }}
+                          style={styles.previewThumbnail}
+                        />
+                        <View style={styles.thumbOverlayTag}>
+                          <Text style={styles.thumbOverlayText}>After</Text>
+                        </View>
+                      </View>
                     ) : (
                       <View style={styles.previewThumbEmpty}>
                         <Text style={styles.previewThumbEmptyText}>No photo</Text>
@@ -297,6 +359,19 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                   <MetaPill icon="cloud-check-outline" label="Offline synced" />
                 ) : null}
               </View>
+
+              <View style={{ marginTop: 4 }}>
+                <AssigneeAvatarCluster
+                  task={item}
+                  currentUserId={user?.uid}
+                  currentUserName={user?.name}
+                />
+              </View>
+
+              <View style={styles.inspectProofPrompt}>
+                <MaterialCommunityIcons name="magnify" size={14} color={KLIR_COLORS.primary} />
+                <Text style={styles.inspectProofText}>Tap to view checklist & photos →</Text>
+              </View>
             </Card.Content>
           </Card>
         )}
@@ -311,139 +386,138 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: UI_COLORS.background,
+    backgroundColor: '#F8FAFC',
   },
   contentContainer: {
-    padding: 16,
+    padding: KLIR_SPACING.lg,
     paddingBottom: 32,
-    gap: 14,
-    backgroundColor: UI_COLORS.background,
+    gap: KLIR_SPACING.md,
+    backgroundColor: '#F8FAFC',
     flexGrow: 1,
   },
   headerBlock: {
-    gap: 14,
-    marginBottom: 8,
+    gap: 12,
+    marginBottom: 4,
   },
-  titleSection: {
-    gap: 4,
+  cardElevation: {
+    ...cardElevation,
   },
-  headerTitle: {
-    color: UI_COLORS.text,
-    fontWeight: '900',
+
+  // Top Header Row
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 2,
+    marginBottom: 4,
   },
-  headerDescription: {
-    color: UI_COLORS.muted,
-    lineHeight: 22,
+  sectionTitleGroup: {
+    gap: 2,
+    flex: 1,
   },
+  sectionHeaderTitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  facilitySubtitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+
+  // Bento Performance Grid
   performanceGrid: {
     flexDirection: 'row',
     gap: 10,
   },
   metricCard: {
     flex: 1,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
+    borderColor: '#EAECF0',
   },
   metricContent: {
     padding: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 6,
+    gap: 2,
   },
   metricLabel: {
-    color: UI_COLORS.muted,
+    fontFamily: INTER_FONT,
+    color: '#64748B',
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
     textAlign: 'center',
   },
   standardMetricValue: {
-    color: UI_COLORS.text,
-    fontSize: 22,
-    lineHeight: 28,
-    fontWeight: '800',
+    fontFamily: INTER_FONT,
+    color: '#0F172A',
+    fontSize: 20,
+    fontWeight: '900',
     textAlign: 'center',
+    marginVertical: 1,
   },
+  metricFooterText: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+
   searchInput: {
-    backgroundColor: UI_COLORS.surface,
+    backgroundColor: '#FFFFFF',
   },
-  filterRow: {
+
+  // Segmented Range Control
+  segmentedContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 3,
+    gap: 4,
+    marginTop: 2,
   },
-  filterPill: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-    borderRadius: KLIR_RADII.chip,
-    justifyContent: 'center',
+  segmentBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
-  filterPillActive: {
-    backgroundColor: '#B5121B',
-    borderWidth: 0,
+  segmentBtnActive: {
+    backgroundColor: KLIR_COLORS.primary,
   },
-  filterPillInactive: {
+  segmentBtnText: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  segmentBtnTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+
+  // Task Cards
+  taskCard: {
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  filterPillText: {
-    fontSize: 12,
-  },
-  filterPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  filterPillTextInactive: {
-    color: '#222222',
-    fontWeight: '500',
-  },
-  seamlessEmptyContainer: {
-    paddingVertical: 56,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  emptyIconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: UI_COLORS.text,
-    textAlign: 'center',
-  },
-  emptyBody: {
-    fontSize: 14,
-    lineHeight: 22,
-    color: UI_COLORS.muted,
-    textAlign: 'center',
-    maxWidth: 320,
-  },
-  taskCard: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
-    borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
+    borderColor: '#EAECF0',
+    overflow: 'hidden',
   },
   cardContent: {
     padding: 16,
-    gap: 12,
+    gap: 10,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -459,90 +533,131 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   biometricBadge: {
-    minHeight: 26,
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: KLIR_RADII.tag,
-    backgroundColor: '#F0FDF4',
+    backgroundColor: '#DCFCE7',
     borderWidth: 1,
     borderColor: '#BBF7D0',
   },
   biometricBadgeText: {
-    fontSize: 11,
+    fontFamily: INTER_FONT,
+    fontSize: 10,
     fontWeight: '800',
-    color: UI_COLORS.successText,
+    color: '#15803D',
   },
   titleBlock: {
-    gap: 4,
+    gap: 2,
   },
   cardHeadline: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontFamily: INTER_FONT,
+    fontSize: 17,
     fontWeight: '800',
-    color: UI_COLORS.text,
+    color: '#0F172A',
     letterSpacing: -0.2,
   },
   locationBreadcrumb: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
-    color: UI_COLORS.muted,
+    fontWeight: '600',
+    color: '#64748B',
   },
   timeLabel: {
-    fontSize: 12,
-    color: UI_COLORS.muted,
-    fontWeight: '500',
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '600',
+    marginTop: 1,
   },
   noteText: {
-    color: UI_COLORS.text,
-    fontSize: 15,
-    lineHeight: 22,
+    fontFamily: INTER_FONT,
+    color: '#334155',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
   },
+
+  // Photo Preview
   previewThumbnailContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    padding: 10,
-    borderRadius: KLIR_RADII.chip,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+    marginTop: 2,
   },
   previewThumbWrapper: {
     flex: 1,
-    gap: 4,
+    height: 90,
   },
-  previewThumbLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: UI_COLORS.muted,
-    letterSpacing: 0.5,
+  thumbImageFrame: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#E2E8F0',
   },
   previewThumbnail: {
     width: '100%',
-    height: 76,
-    borderRadius: 6,
-    backgroundColor: '#E5E5E5',
+    height: '100%',
+  },
+  thumbOverlayTag: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  thumbOverlayText: {
+    fontFamily: INTER_FONT,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   previewThumbEmpty: {
     width: '100%',
-    height: 76,
-    borderRadius: 6,
-    backgroundColor: '#E5E5E5',
+    height: '100%',
+    borderRadius: 10,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },
   previewThumbEmptyText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
-    color: UI_COLORS.muted,
+    color: '#94A3B8',
     fontWeight: '600',
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
+  },
+  inspectProofPrompt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#F8FAFC',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EAECF0',
+    marginTop: 2,
+  },
+  inspectProofText: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '800',
+    color: KLIR_COLORS.primary,
   },
 });

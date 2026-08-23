@@ -7,6 +7,16 @@ import * as useTasksHook from '../../../hooks/useTasks';
 import type { Task } from '../../../types';
 
 jest.mock('../../../hooks/useTasks');
+jest.mock('react-native-paper', () => {
+  const actual = jest.requireActual('react-native-paper');
+  const React = require('react');
+  const { View, Text } = require('react-native');
+  return {
+    ...actual,
+    Snackbar: ({ children, visible }: any) =>
+      visible ? <View testID="mock-snackbar"><Text>{children}</Text></View> : null,
+  };
+});
 
 const now = new Date();
 const todayCompletedDate = new Date(); // Current timestamp (guaranteed today)

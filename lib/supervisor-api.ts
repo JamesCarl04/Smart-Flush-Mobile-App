@@ -80,6 +80,8 @@ export async function flagTask(input: {
   taskId: string;
   reason: string;
   supervisorUid: string;
+  supervisorName?: string;
+  flagPhotoUrls?: string[];
 }): Promise<void> {
   const response = await apiFetch<never>('/api/supervisor/flag-task', {
     method: 'POST',
@@ -89,3 +91,84 @@ export async function flagTask(input: {
     throw new Error(response.error ?? 'Failed to flag task.');
   }
 }
+
+export async function approveTask(input: {
+  taskId: string;
+  supervisorUid: string;
+  supervisorName?: string;
+}): Promise<void> {
+  const response = await apiFetch<never>('/api/supervisor/approve-task', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!response.success) {
+    throw new Error(response.error ?? 'Failed to approve task.');
+  }
+}
+
+export function normalizeBuildingName(name?: string | null): string {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .replace(/\b(facility|building|bldg)\b/gi, '')
+    .replace(/[^a-z0-9]/gi, '')
+    .trim();
+}
+
+export function isPersonMatchingBuilding(
+  personBuilding?: string | null,
+  supervisorBuilding?: string | null,
+): boolean {
+  if (!supervisorBuilding || !supervisorBuilding.trim()) {
+    return true; // Campus-wide supervisor sees everyone
+  }
+  if (!personBuilding || !personBuilding.trim()) {
+    return true; // General unassigned facility personnel are visible
+  }
+  const normPerson = normalizeBuildingName(personBuilding);
+  const normSup = normalizeBuildingName(supervisorBuilding);
+  if (!normPerson || !normSup) {
+    return true;
+  }
+  return (
+    normPerson === normSup ||
+    normPerson.includes(normSup) ||
+    normSup.includes(normPerson)
+  );
+}
+
+export function getPersonOperationalStatus(
+  person: MaintenancePerson,
+  tasks: Task[],
+): { status: 'available' | 'on_task' | 'offline'; activeTask: Task | null } {
+  const activeTask =
+    tasks.find(
+      (candidate) =>
+        candidate.status !== 'completed' &&
+        (candidate.id === person.currentTaskId ||
+          candidate.assignedTo === person.id ||
+          candidate.assignedTo === person.email ||
+          (candidate.acknowledgedBy && person.id in candidate.acknowledgedBy)),
+    ) ?? null;
+
+  if (activeTask !== null) {
+    return { status: 'on_task', activeTask };
+  }
+
+  // If person has a currentTaskId that has not been completed
+  if (person.currentTaskId) {
+    const isCompleted = tasks.some(
+      (t) => t.id === person.currentTaskId && t.status === 'completed',
+    );
+    if (!isCompleted) {
+      return { status: 'on_task', activeTask: null };
+    }
+  }
+
+  if (person.isAvailable !== false) {
+    return { status: 'available', activeTask: null };
+  }
+
+  return { status: 'offline', activeTask: null };
+}
+

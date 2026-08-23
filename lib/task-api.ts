@@ -295,3 +295,22 @@ export async function completeTask(taskId: string): Promise<void> {
     throw new Error(response.error ?? 'Failed to complete task.');
   }
 }
+
+export async function acceptRecheckTask(input: {
+  taskId: string;
+  technicianUid: string;
+  technicianName?: string;
+}): Promise<void> {
+  const response = await apiFetch<{ taskId?: string }>(
+    `/api/tasks/${encodeURIComponent(input.taskId)}/accept-recheck`,
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+  );
+
+  if (!response.success) {
+    throw new Error(response.error ?? 'Failed to accept recheck task.');
+  }
+}
+

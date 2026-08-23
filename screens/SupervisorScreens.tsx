@@ -36,17 +36,23 @@ import {
   OperationBadge,
   SquadCapacityPillBar,
   getComponentMeta,
+  getInitials,
   sharedShadow,
   statusTone,
 } from '../components/MaintenanceUI';
+import * as ImagePicker from 'expo-image-picker';
+import { ImageViewerModal } from '../components/ImageViewerModal';
 import { KlirButton } from '../components/KlirButton';
 import { useAuth } from '../hooks/useAuth';
 import { useSupervisorContext } from '../contexts/SupervisorContext';
 import { db } from '../lib/firebase';
 import {
+  approveTask,
   fetchMaintenancePersonnel,
   fetchSupervisorTasks,
   flagTask,
+  getPersonOperationalStatus,
+  isPersonMatchingBuilding,
   reassignTask,
   type MaintenancePerson,
 } from '../lib/supervisor-api';
@@ -157,23 +163,22 @@ export function SupervisorDashboardScreen({
     ).length;
   }, [tasks, today]);
 
+  const visiblePeople = useMemo(() => {
+    return people.filter((person) =>
+      isPersonMatchingBuilding(person.building, user?.building),
+    );
+  }, [people, user?.building]);
+
   const staffStats = useMemo(() => {
     let onTaskCount = 0;
     let availableCount = 0;
     let offlineCount = 0;
 
-    for (const person of people) {
-      const hasActiveTask = tasks.some(
-        (task) =>
-          task.status !== 'completed' &&
-          (task.id === person.currentTaskId ||
-            task.assignedTo === person.id ||
-            task.assignedTo === person.email),
-      );
-
-      if (hasActiveTask || Boolean(person.currentTaskId)) {
+    for (const person of visiblePeople) {
+      const { status } = getPersonOperationalStatus(person, tasks);
+      if (status === 'on_task') {
         onTaskCount++;
-      } else if (person.isAvailable) {
+      } else if (status === 'available') {
         availableCount++;
       } else {
         offlineCount++;
@@ -185,7 +190,7 @@ export function SupervisorDashboardScreen({
       available: availableCount,
       offline: offlineCount,
     };
-  }, [people, tasks]);
+  }, [visiblePeople, tasks]);
 
   const isColdLoading = loading && tasks.length === 0;
 
@@ -202,22 +207,17 @@ export function SupervisorDashboardScreen({
           />
         }
       >
-        {/* Command Hub Hero Card */}
-        <View style={[styles.commandHeaderCard, styles.cardElevation]}>
-          <View style={styles.headerTitleGroup}>
+        {/* Top Section Header Row */}
+        <View style={styles.sectionHeaderRow}>
+          <View style={styles.sectionTitleGroup}>
+            <Text style={styles.screenHeaderTitle}>Overview</Text>
             <Text style={styles.facilitySubtitle}>
               {user?.building
                 ? `${user.building} Facility`
-                : 'SDCA Annex Facility'}
-            </Text>
-            <Text style={styles.facilityLeadName}>
-              {user?.name || 'Lead Supervisor'}
+                : 'SDCA Annex Facility'} • Operations
             </Text>
           </View>
         </View>
-
-        {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Overview</Text>
 
         {/* 2-Column Bento KPI Metrics Grid */}
         <View style={styles.metricsGrid}>
@@ -460,54 +460,42 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
   const [filter, setFilter] = useState<'all' | 'available' | 'on_task'>('all');
 
   const visiblePeople = useMemo(() => {
-    return people.filter(
-      (person) => !user?.building || !person.building || person.building === user.building,
+    return people.filter((person) =>
+      isPersonMatchingBuilding(person.building, user?.building),
     );
   }, [people, user?.building]);
 
-  const filteredPeople = useMemo(() => {
-    return visiblePeople.filter((person) => {
-      const activeTask = tasks.find(
-        (candidate) =>
-          candidate.status !== 'completed' &&
-          (candidate.id === person.currentTaskId ||
-            candidate.assignedTo === person.id ||
-            candidate.assignedTo === person.email),
-      );
-      const isOnTask = activeTask !== null || Boolean(person.currentTaskId);
-      const isAvailable = !isOnTask && person.isAvailable;
-
-      if (filter === 'available') return isAvailable;
-      if (filter === 'on_task') return isOnTask;
-      return true;
-    });
-  }, [visiblePeople, tasks, filter]);
+  const personStatusMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { status: 'available' | 'on_task' | 'offline'; activeTask: Task | null }
+    >();
+    for (const person of visiblePeople) {
+      map.set(person.id, getPersonOperationalStatus(person, tasks));
+    }
+    return map;
+  }, [visiblePeople, tasks]);
 
   const availableCount = useMemo(() => {
-    return visiblePeople.filter((person) => {
-      const hasActive = tasks.some(
-        (t) =>
-          t.status !== 'completed' &&
-          (t.id === person.currentTaskId ||
-            t.assignedTo === person.id ||
-            t.assignedTo === person.email),
-      );
-      return !hasActive && !person.currentTaskId && person.isAvailable;
-    }).length;
-  }, [visiblePeople, tasks]);
+    return visiblePeople.filter(
+      (person) => personStatusMap.get(person.id)?.status === 'available',
+    ).length;
+  }, [visiblePeople, personStatusMap]);
 
   const onTaskCount = useMemo(() => {
+    return visiblePeople.filter(
+      (person) => personStatusMap.get(person.id)?.status === 'on_task',
+    ).length;
+  }, [visiblePeople, personStatusMap]);
+
+  const filteredPeople = useMemo(() => {
     return visiblePeople.filter((person) => {
-      const hasActive = tasks.some(
-        (t) =>
-          t.status !== 'completed' &&
-          (t.id === person.currentTaskId ||
-            t.assignedTo === person.id ||
-            t.assignedTo === person.email),
-      );
-      return hasActive || Boolean(person.currentTaskId);
-    }).length;
-  }, [visiblePeople, tasks]);
+      const info = personStatusMap.get(person.id);
+      if (filter === 'available') return info?.status === 'available';
+      if (filter === 'on_task') return info?.status === 'on_task';
+      return true;
+    });
+  }, [visiblePeople, personStatusMap, filter]);
 
   if (loading && visiblePeople.length === 0) {
     return (
@@ -600,25 +588,11 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
           />
         }
         renderItem={({ item }) => {
-          const activeTask =
-            tasks.find(
-              (candidate) =>
-                candidate.status !== 'completed' &&
-                (candidate.id === item.currentTaskId ||
-                  candidate.assignedTo === item.id ||
-                  candidate.assignedTo === item.email),
-            ) ?? null;
-
-          const isOnTask = activeTask !== null || Boolean(item.currentTaskId);
-          const isAvailable = !isOnTask && item.isAvailable;
-          const initials = item.displayName
-            ? item.displayName
-                .split(' ')
-                .map((n) => n[0])
-                .join('')
-                .substring(0, 2)
-                .toUpperCase()
-            : 'OP';
+          const statusInfo = personStatusMap.get(item.id) ?? getPersonOperationalStatus(item, tasks);
+          const activeTask = statusInfo.activeTask;
+          const isOnTask = statusInfo.status === 'on_task';
+          const isAvailable = statusInfo.status === 'available';
+          const initials = getInitials(item.displayName);
 
           return (
             <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
@@ -1037,19 +1011,14 @@ export function SupervisorTaskDetailScreen({
               style={styles.reasonInput}
             />
 
-            <Button
-              mode="contained"
-              buttonColor={KLIR_COLORS.primary}
-              textColor="#FFFFFF"
+            <KlirButton
+              title="Reassign Task"
+              variant="primary"
               loading={submitting}
               disabled={!assignee || submitting}
               onPress={() => void submit()}
               style={[styles.reassignButton, styles.cardElevation]}
-              contentStyle={styles.actionButtonContent}
-              labelStyle={styles.actionButtonLabel}
-            >
-              Reassign Task
-            </Button>
+            />
           </Card.Content>
         </Card>
       </ScrollView>
@@ -1202,8 +1171,12 @@ export function CompletedReviewDetailScreen({
   const { tasks, people } = useSupervisorData();
   const task = tasks.find((candidate) => candidate.id === route.params.taskId);
   const [reason, setReason] = useState('Requires re-inspection');
+  const [flagPhotos, setFlagPhotos] = useState<string[]>([]);
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [approving, setApproving] = useState(false);
+  const [submittingFlag, setSubmittingFlag] = useState(false);
+  const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<string | null>(null);
 
   // Multi-technician submission selection
   const submissionUids = useMemo(() => {
@@ -1282,6 +1255,77 @@ export function CompletedReviewDetailScreen({
         )
       : null);
 
+  const handlePickFlagPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsMultipleSelection: false,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setFlagPhotos((prev) => [...prev, result.assets[0].uri]);
+      }
+    } catch {
+      Alert.alert('Permission Error', 'Unable to access photo library.');
+    }
+  };
+
+  const handleTakeFlagPhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets?.[0]?.uri) {
+        setFlagPhotos((prev) => [...prev, result.assets[0].uri]);
+      }
+    } catch {
+      Alert.alert('Permission Error', 'Unable to open camera.');
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!user || !task) return;
+    setApproving(true);
+    try {
+      await approveTask({
+        taskId: task.id,
+        supervisorUid: user.uid,
+        supervisorName: user.name,
+      });
+      setMessage('Task approved successfully.');
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : 'Failed to approve task.',
+      );
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleFlagSubmit = async () => {
+    if (!user || !task || reason.trim().length < 5) return;
+    setSubmittingFlag(true);
+    try {
+      await flagTask({
+        taskId: task.id,
+        reason: reason.trim(),
+        supervisorUid: user.uid,
+        supervisorName: user.name,
+        flagPhotoUrls: flagPhotos,
+      });
+      setMessage('Task flagged for re-inspection.');
+      setVisible(false);
+      setReason('');
+      setFlagPhotos([]);
+    } catch (caught) {
+      setMessage(
+        caught instanceof Error ? caught.message : 'Failed to flag task.',
+      );
+    } finally {
+      setSubmittingFlag(false);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -1298,11 +1342,27 @@ export function CompletedReviewDetailScreen({
               <View
                 style={[
                   styles.teamBadge,
-                  styles.teamBadgeAvailable,
+                  task.inspectionStatus === 'approved'
+                    ? styles.teamBadgeAvailable
+                    : task.inspectionStatus === 'flagged' || task.status === 'flagged'
+                      ? styles.teamBadgeOffline
+                      : styles.teamBadgeOnTask,
                 ]}
               >
-                <Text style={styles.teamBadgeTextAvailable}>
-                  ✓ Completed
+                <Text
+                  style={
+                    task.inspectionStatus === 'approved'
+                      ? styles.teamBadgeTextAvailable
+                      : task.inspectionStatus === 'flagged' || task.status === 'flagged'
+                        ? styles.teamBadgeTextOffline
+                        : styles.teamBadgeTextOnTask
+                  }
+                >
+                  {task.inspectionStatus === 'approved'
+                    ? '✓ Approved'
+                    : task.inspectionStatus === 'flagged' || task.status === 'flagged'
+                      ? '⚠️ Flagged'
+                      : '⏳ Pending Review'}
                 </Text>
               </View>
             </View>
@@ -1371,7 +1431,13 @@ export function CompletedReviewDetailScreen({
         {/* Side-by-Side Dual Photo Comparison */}
         <View style={styles.photoRow}>
           {displayBeforePhoto ? (
-            <View style={styles.photoWrapper}>
+            <TouchableOpacity
+              style={styles.photoWrapper}
+              onPress={() => setSelectedViewerPhoto(displayBeforePhoto)}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="View Before photo fullscreen"
+            >
               <Image
                 source={{ uri: displayBeforePhoto }}
                 style={styles.photo}
@@ -1380,7 +1446,10 @@ export function CompletedReviewDetailScreen({
               <View style={styles.photoLabelTag}>
                 <Text style={styles.photoLabelText}>Before Photo</Text>
               </View>
-            </View>
+              <View style={styles.photoZoomIconBadge}>
+                <MaterialCommunityIcons name="magnify-plus" size={14} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
           ) : (
             <View style={styles.photoPlaceholder}>
               <MaterialCommunityIcons
@@ -1393,7 +1462,13 @@ export function CompletedReviewDetailScreen({
           )}
 
           {displayAfterPhoto ? (
-            <View style={styles.photoWrapper}>
+            <TouchableOpacity
+              style={styles.photoWrapper}
+              onPress={() => setSelectedViewerPhoto(displayAfterPhoto)}
+              accessible={true}
+              accessibilityRole="button"
+              accessibilityLabel="View After photo fullscreen"
+            >
               <Image
                 source={{ uri: displayAfterPhoto }}
                 style={styles.photo}
@@ -1402,7 +1477,10 @@ export function CompletedReviewDetailScreen({
               <View style={styles.photoLabelTag}>
                 <Text style={styles.photoLabelText}>After Photo</Text>
               </View>
-            </View>
+              <View style={styles.photoZoomIconBadge}>
+                <MaterialCommunityIcons name="magnify-plus" size={14} color="#FFFFFF" />
+              </View>
+            </TouchableOpacity>
           ) : (
             <View style={styles.photoPlaceholder}>
               <MaterialCommunityIcons
@@ -1478,17 +1556,59 @@ export function CompletedReviewDetailScreen({
               </Chip>
             ) : null}
 
-            <Button
-              mode="contained-tonal"
-              textColor={KLIR_COLORS.danger}
-              icon="flag-outline"
-              style={styles.flagButton}
-              contentStyle={styles.actionButtonContent}
-              labelStyle={styles.actionButtonLabel}
-              onPress={() => setVisible(true)}
-            >
-              Flag for Re-inspection
-            </Button>
+            {/* QA Audit Status Banners */}
+            {task.inspectionStatus === 'approved' ? (
+              <View style={styles.approvedBanner}>
+                <MaterialCommunityIcons name="check-decagram" size={20} color="#16A34A" />
+                <Text style={styles.approvedBannerText}>
+                  Approved by {task.inspectedByName ?? 'Supervisor'}
+                </Text>
+              </View>
+            ) : null}
+
+            {(task.inspectionStatus === 'flagged' || task.status === 'flagged') && task.flagReason ? (
+              <View style={styles.flaggedBanner}>
+                <MaterialCommunityIcons name="flag-variant" size={20} color="#DC2626" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.flaggedBannerTitle}>Flagged for Re-inspection</Text>
+                  <Text style={styles.flaggedBannerReason}>{task.flagReason}</Text>
+                </View>
+              </View>
+            ) : null}
+
+            {/* Dual QA Action Buttons */}
+            <View style={styles.qaActionRow}>
+              <Button
+                mode="contained"
+                icon="check"
+                buttonColor={KLIR_COLORS.success}
+                textColor="#FFFFFF"
+                loading={approving}
+                disabled={approving || submittingFlag || task.inspectionStatus === 'approved'}
+                style={styles.approveButton}
+                contentStyle={styles.actionButtonContent}
+                labelStyle={styles.actionButtonLabel}
+                onPress={() => void handleApprove()}
+              >
+                {task.inspectionStatus === 'approved' ? 'Approved' : 'Approve Task'}
+              </Button>
+
+              <Button
+                mode="contained-tonal"
+                textColor={KLIR_COLORS.danger}
+                icon="flag-outline"
+                style={styles.flagButton}
+                contentStyle={styles.actionButtonContent}
+                labelStyle={styles.actionButtonLabel}
+                onPress={() => {
+                  setReason('Requires re-inspection');
+                  setFlagPhotos([]);
+                  setVisible(true);
+                }}
+              >
+                Flag for Re-inspection
+              </Button>
+            </View>
           </Card.Content>
         </Card>
       </ScrollView>
@@ -1496,49 +1616,99 @@ export function CompletedReviewDetailScreen({
       {/* Flag Dialog */}
       <Portal>
         <Dialog visible={visible} onDismiss={() => setVisible(false)} style={styles.dialogCard}>
-          <Dialog.Title style={styles.dialogTitle}>Flag task</Dialog.Title>
-          <Dialog.Content>
+          <Dialog.Title style={styles.dialogTitle}>Flag for Re-inspection</Dialog.Title>
+          <Dialog.Content style={{ gap: 12 }}>
+            <Text style={styles.dialogSubtitle}>
+              Please explain why this task needs re-cleaning so the technician can correct it.
+            </Text>
             <TextInput
-              label="Reason"
+              label="Reason (Required)"
               value={reason}
               onChangeText={setReason}
               mode="outlined"
+              multiline
+              numberOfLines={3}
               outlineColor="#CBD5E1"
               activeOutlineColor={KLIR_COLORS.primary}
             />
+            {reason.trim().length > 0 && reason.trim().length < 5 ? (
+              <Text style={styles.errorCaptionText}>
+                Reason must be at least 5 characters.
+              </Text>
+            ) : null}
+
+            {/* Optional Photo Attachment */}
+            <View style={styles.flagPhotoPickerSection}>
+              <Text style={styles.flagPhotoSectionTitle}>
+                Attach Reference Photos (Optional)
+              </Text>
+              <View style={styles.flagPhotoBtnRow}>
+                <Button
+                  mode="outlined"
+                  icon="camera"
+                  onPress={() => void handleTakeFlagPhoto()}
+                  style={styles.photoPickerBtn}
+                  textColor={KLIR_COLORS.primary}
+                >
+                  Camera
+                </Button>
+                <Button
+                  mode="outlined"
+                  icon="image"
+                  onPress={() => void handlePickFlagPhoto()}
+                  style={styles.photoPickerBtn}
+                  textColor={KLIR_COLORS.primary}
+                >
+                  Gallery
+                </Button>
+              </View>
+
+              {flagPhotos.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.flagPhotoThumbList}>
+                  {flagPhotos.map((uri, idx) => (
+                    <View key={`${uri}-${idx}`} style={styles.flagThumbWrap}>
+                      <Image source={{ uri }} style={styles.flagThumb} />
+                      <TouchableOpacity
+                        style={styles.removePhotoBtn}
+                        onPress={() =>
+                          setFlagPhotos((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                      >
+                        <MaterialCommunityIcons name="close" size={14} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
+              ) : null}
+            </View>
           </Dialog.Content>
           <Dialog.Actions>
             <Button
               onPress={() => setVisible(false)}
               textColor={KLIR_COLORS.slateMuted}
+              disabled={submittingFlag}
             >
               Cancel
             </Button>
             <Button
               textColor={KLIR_COLORS.danger}
-              onPress={() => {
-                if (!user) return;
-                void flagTask({
-                  taskId: task.id,
-                  reason,
-                  supervisorUid: user.uid,
-                })
-                  .then(() => setMessage('Task flagged for re-inspection.'))
-                  .catch((caught) =>
-                    setMessage(
-                      caught instanceof Error
-                        ? caught.message
-                        : 'Failed to flag task.',
-                    ),
-                  )
-                  .finally(() => setVisible(false));
-              }}
+              loading={submittingFlag}
+              disabled={reason.trim().length < 5 || submittingFlag}
+              onPress={() => void handleFlagSubmit()}
             >
-              Flag
+              Flag Task
             </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
+      {/* Lightbox Pinch-to-Zoom Image Modal */}
+      <ImageViewerModal
+        visible={selectedViewerPhoto !== null}
+        imageUrl={selectedViewerPhoto}
+        caption={`Proof Photo • ${task.location}`}
+        onDismiss={() => setSelectedViewerPhoto(null)}
+      />
 
       <Snackbar visible={message !== null} onDismiss={() => setMessage(null)}>
         {message ?? ''}
@@ -1598,23 +1768,36 @@ export function SupervisorReportsScreen({
     let totalDurationSeconds = 0;
     let photoPairsCount = 0;
     let biometricCount = 0;
+    let approvedCount = 0;
+    let flaggedCount = 0;
 
     for (const t of filteredTasks) {
       if (t.workDuration) totalDurationSeconds += t.workDuration;
       if (t.beforePhotoUrl && t.afterPhotoUrl) photoPairsCount += 1;
       if (t.biometricVerified) biometricCount += 1;
+      if (t.inspectionStatus === 'approved') approvedCount += 1;
+      if (t.inspectionStatus === 'flagged' || t.status === 'flagged') flaggedCount += 1;
     }
 
+    const pendingAuditCount = total - (approvedCount + flaggedCount);
     const avgDurationSeconds =
       total > 0 ? Math.round(totalDurationSeconds / total) : 0;
     const biometricPct =
       total > 0 ? Math.round((biometricCount / total) * 100) : 0;
+    const complianceRate =
+      total > 0
+        ? Math.round(((approvedCount + flaggedCount) / total) * 100)
+        : 100;
 
     return {
       total,
       avgDuration: formatDuration(avgDurationSeconds),
       photoPairsCount,
       biometricPct: `${biometricPct}%`,
+      approvedCount,
+      flaggedCount,
+      pendingAuditCount,
+      complianceRate: `${complianceRate}%`,
     };
   }, [filteredTasks]);
 
@@ -1641,6 +1824,11 @@ export function SupervisorReportsScreen({
         'Completed At',
         'Work Duration (Seconds)',
         'Biometric Verified',
+        'Inspection Status',
+        'Inspected By',
+        'Inspected At',
+        'Flag Reason',
+        'Recheck Count',
         'Remarks',
       ];
 
@@ -1655,6 +1843,10 @@ export function SupervisorReportsScreen({
           : 'N/A';
         const remarksClean = `"${(t.remarks || '').replace(/"/g, '""')}"`;
         const locClean = `"${(t.location || t.restroomName || '').replace(/"/g, '""')}"`;
+        const inspStatus = t.inspectionStatus ?? (t.status === 'flagged' ? 'flagged' : 'pending_review');
+        const inspByName = `"${(t.inspectedByName || t.inspectedBy || 'N/A').replace(/"/g, '""')}"`;
+        const inspAtStr = t.inspectedAt ? t.inspectedAt.toISOString() : 'N/A';
+        const flagReasonClean = `"${(t.flagReason || '').replace(/"/g, '""')}"`;
 
         return [
           t.id,
@@ -1668,6 +1860,11 @@ export function SupervisorReportsScreen({
           completedAtStr,
           t.workDuration ?? 0,
           t.biometricVerified ? 'Yes' : 'No',
+          inspStatus,
+          inspByName,
+          inspAtStr,
+          flagReasonClean,
+          t.recheckCount ?? 0,
           remarksClean,
         ].join(',');
       });
@@ -1739,6 +1936,29 @@ export function SupervisorReportsScreen({
             );
           })}
         </ScrollView>
+
+        {/* Section Heading */}
+        <Text style={styles.sectionHeaderTitle}>Supervisor Audit Compliance</Text>
+
+        {/* Supervisor QA Audit KPI Card */}
+        <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
+          <Card.Content style={styles.cardContent}>
+            <View style={styles.rowBetween}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                  Audit Overview
+                </Text>
+                <Text style={styles.metricFooterText}>
+                  {metrics.approvedCount} approved • {metrics.flaggedCount} flagged • {metrics.pendingAuditCount} pending review
+                </Text>
+              </View>
+              <View style={styles.complianceBadge}>
+                <Text style={styles.complianceBadgeNumber}>{metrics.complianceRate}</Text>
+                <Text style={styles.complianceBadgeLabel}>Audited</Text>
+              </View>
+            </View>
+          </Card.Content>
+        </Card>
 
         {/* Section Heading */}
         <Text style={styles.sectionHeaderTitle}>Performance Summary</Text>
@@ -1824,20 +2044,15 @@ export function SupervisorReportsScreen({
                   }
                 </Text>
               </View>
-              <Button
-                mode="contained"
-                buttonColor={KLIR_COLORS.primary}
-                textColor="#FFFFFF"
+              <KlirButton
+                title="Export CSV"
+                variant="primary"
                 icon="file-download-outline"
                 loading={exporting}
                 disabled={exporting || filteredTasks.length === 0}
                 onPress={() => void handleExportCSV()}
                 style={styles.cardElevation}
-                contentStyle={styles.actionButtonContent}
-                labelStyle={styles.actionButtonLabel}
-              >
-                Export CSV
-              </Button>
+              />
             </View>
           </Card.Content>
         </Card>
@@ -1948,34 +2163,31 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  // Command Header
-  commandHeaderCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1,
-    borderColor: '#EAECF0',
-    borderLeftWidth: 4,
-    borderLeftColor: KLIR_COLORS.primary,
+  // Top Header Row
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 2,
     marginBottom: 4,
   },
-  headerTitleGroup: {
-    gap: 3,
+  sectionTitleGroup: {
+    gap: 2,
+    flex: 1,
   },
-  facilitySubtitle: {
-    fontFamily: INTER_FONT,
-    fontSize: 12,
-    fontWeight: '700',
-    color: KLIR_COLORS.primary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  facilityLeadName: {
+  screenHeaderTitle: {
     fontFamily: INTER_FONT,
     fontSize: 20,
     fontWeight: '800',
     color: '#0F172A',
     letterSpacing: -0.3,
+  },
+  facilitySubtitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
   },
 
   // Operational Bento Metrics Grid
@@ -2243,8 +2455,6 @@ const styles = StyleSheet.create({
   urgentCard: {
     backgroundColor: '#FFFBFB',
     borderColor: '#FECACA',
-    borderLeftWidth: 4,
-    borderLeftColor: KLIR_COLORS.danger,
     borderRadius: 16,
   },
   personHeaderGroup: {
@@ -2297,8 +2507,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF3C7',
     borderColor: '#FDE68A',
     borderWidth: 1,
-    borderLeftWidth: 4,
-    borderLeftColor: '#D97706',
     borderRadius: 10,
     padding: 10,
     marginTop: 4,
@@ -2659,8 +2867,89 @@ const styles = StyleSheet.create({
     marginTop: 4,
     borderRadius: 20,
   },
-  flagButton: {
+  photoZoomIconBadge: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  approvedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#F0FDF4',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BBF7D0',
+    marginTop: 6,
+  },
+  approvedBannerText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#15803D',
+  },
+  flaggedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    marginTop: 6,
+  },
+  flaggedBannerTitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#B91C1C',
+  },
+  flaggedBannerReason: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#7F1D1D',
+    marginTop: 2,
+  },
+  qaActionRow: {
+    gap: 8,
     marginTop: 8,
+  },
+  approveButton: {
+    borderRadius: 12,
+  },
+  complianceBadge: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EFF6FF',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  complianceBadgeNumber: {
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#1D4ED8',
+  },
+  complianceBadgeLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#3B82F6',
+    textTransform: 'uppercase',
+  },
+  flagButton: {
     borderRadius: 12,
   },
   dialogCard: {
@@ -2671,6 +2960,66 @@ const styles = StyleSheet.create({
     fontFamily: INTER_FONT,
     fontWeight: '800',
     color: '#0F172A',
+  },
+  dialogSubtitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+    lineHeight: 16,
+  },
+  errorCaptionText: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#DC2626',
+  },
+  flagPhotoPickerSection: {
+    gap: 8,
+    marginTop: 4,
+  },
+  flagPhotoSectionTitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  flagPhotoBtnRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  photoPickerBtn: {
+    flex: 1,
+    borderRadius: 8,
+  },
+  flagPhotoThumbList: {
+    flexDirection: 'row',
+    marginTop: 4,
+  },
+  flagThumbWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    overflow: 'hidden',
+    position: 'relative',
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  flagThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  removePhotoBtn: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Multi-Technician Tabs

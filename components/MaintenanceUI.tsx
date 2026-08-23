@@ -629,6 +629,14 @@ export const sharedShadow = {
   elevation: 2,
 };
 
+export const cardElevation = {
+  shadowColor: '#0F172A',
+  shadowOpacity: 0.05,
+  shadowRadius: 10,
+  shadowOffset: { width: 0, height: 2 },
+  elevation: 2,
+};
+
 const styles = StyleSheet.create({
   badge: {
     minHeight: 26,
@@ -968,13 +976,24 @@ export interface AssigneeAvatarClusterProps {
   people?: Array<{ id: string; displayName?: string; email?: string | null }>;
   showNames?: boolean;
   currentUserId?: string | null;
+  currentUserName?: string | null;
 }
 
-function getInitials(name?: string): string {
+export function getInitials(name?: string | null): string {
   if (!name) return 'OP';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  // Remove parenthetical annotations like (Tech), (Supervisor), (Admin), (Lead), etc.
+  const stripped = name.replace(/\([^)]*\)/g, '').trim();
+  // Split by whitespace and strip any remaining non-alphanumeric punctuation
+  const words = stripped
+    .split(/\s+/)
+    .map((word) => word.replace(/[^A-Za-z0-9]/g, ''))
+    .filter(Boolean);
+
+  if (words.length === 0) return 'OP';
+  if (words.length === 1) {
+    return words[0].substring(0, 2).toUpperCase();
+  }
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
 export function AssigneeAvatarCluster({
@@ -982,6 +1001,7 @@ export function AssigneeAvatarCluster({
   people = [],
   showNames = true,
   currentUserId,
+  currentUserName,
 }: AssigneeAvatarClusterProps): React.JSX.Element | null {
   const assignedIds =
     task.assignedToIds && task.assignedToIds.length > 0
@@ -990,7 +1010,63 @@ export function AssigneeAvatarCluster({
         ? [task.assignedTo]
         : [];
 
-  const isBroadcast = assignedIds.length === 0;
+  const isBroadcast =
+    task.isBroadcast ||
+    assignedIds.length === 0 ||
+    task.assignmentType === 'broadcast';
+
+  // Gather all unique contributor IDs who worked on or were assigned to this task
+  const allWorkerIds = Array.from(
+    new Set([
+      ...assignedIds,
+      ...(task.completedBy ? [task.completedBy] : []),
+      ...Object.keys(task.completedByMap ?? {}),
+      ...Object.keys(task.submissions ?? {}),
+      ...Object.keys(task.acknowledgedBy ?? {}),
+    ]),
+  );
+
+  const resolveWorkerName = (uid: string): { displayName: string; firstName: string } => {
+    // 1. Check if it matches current user
+    if (currentUserId && (uid === currentUserId || uid === 'current-user')) {
+      const full = currentUserName || 'You';
+      return { displayName: full, firstName: full.split(' ')[0] };
+    }
+
+    // 2. Check task submissions
+    const submissionName = task.submissions?.[uid]?.technicianName;
+    if (submissionName) {
+      const cleaned = submissionName.replace(/\([^)]*\)/g, '').trim();
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
+    }
+
+    // 3. Check people roster
+    const person = people.find((p) => p.id === uid || p.email === uid);
+    if (person?.displayName) {
+      const cleaned = person.displayName.replace(/\([^)]*\)/g, '').trim();
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
+    }
+    if (person?.email) {
+      const emailUser = person.email.split('@')[0];
+      return { displayName: emailUser, firstName: emailUser };
+    }
+
+    // 4. Format UID if it looks like an email or known ID
+    if (uid.includes('@')) {
+      const emailUser = uid.split('@')[0];
+      return { displayName: emailUser, firstName: emailUser };
+    }
+
+    if (uid === task.assignedTo && currentUserName && (currentUserId == null || currentUserId === uid)) {
+      return { displayName: currentUserName, firstName: currentUserName.split(' ')[0] };
+    }
+
+    if (uid === task.assignedTo) {
+      return { displayName: 'Assigned Tech', firstName: 'Assigned' };
+    }
+
+    return { displayName: 'Technician', firstName: 'Tech' };
+  };
 
   if (isBroadcast) {
     const responderUids = Array.from(
@@ -1038,18 +1114,10 @@ export function AssigneeAvatarCluster({
         {/* Responders Row */}
         <View style={styles.mobilizationChipsRow}>
           {responderUids.map((uid) => {
-            const person = people.find((p) => p.id === uid || p.email === uid);
-            const displayName =
-              uid === currentUserId
-                ? 'You'
-                : person?.displayName ||
-                  person?.email ||
-                  (uid === task.assignedTo ? 'Assigned Tech' : 'Technician');
-            const initials = getInitials(
-              displayName === 'You' ? person?.displayName || 'You' : displayName,
-            );
+            const { displayName, firstName } = resolveWorkerName(uid);
+            const initials = getInitials(displayName === 'You' && currentUserName ? currentUserName : displayName);
             const isDone = Boolean(
-              task.submissions?.[uid] || task.completedByMap?.[uid],
+              task.submissions?.[uid] || task.completedByMap?.[uid] || (task.status === 'completed' && task.completedBy === uid),
             );
 
             return (
@@ -1083,7 +1151,7 @@ export function AssigneeAvatarCluster({
                   </Text>
                 </View>
                 <Text style={styles.responderName} numberOfLines={1}>
-                  {displayName.split(' ')[0]}
+                  {firstName}
                 </Text>
                 <MaterialCommunityIcons
                   name={isDone ? 'check-all' : 'check'}
@@ -1115,15 +1183,14 @@ export function AssigneeAvatarCluster({
     );
   }
 
+  // Multi-assignee or standard assigned task
+  const targetIds = allWorkerIds.length > 0 ? allWorkerIds : assignedIds;
+
   return (
     <View style={styles.avatarClusterRow}>
-      {assignedIds.map((uid) => {
-        const person = people.find((p) => p.id === uid || p.email === uid);
-        const displayName =
-          person?.displayName ||
-          person?.email ||
-          (uid === task.assignedTo ? 'Assigned Tech' : uid);
-        const initials = getInitials(displayName);
+      {targetIds.map((uid) => {
+        const { displayName, firstName } = resolveWorkerName(uid);
+        const initials = getInitials(displayName === 'You' && currentUserName ? currentUserName : displayName);
 
         const hasAcknowledged = Boolean(
           task.acknowledgedBy?.[uid] ||
@@ -1136,7 +1203,7 @@ export function AssigneeAvatarCluster({
           task.submissions?.[uid] ||
             task.completedByMap?.[uid] ||
             (task.status === 'completed' &&
-              (task.completedBy === uid || task.assignedTo === uid)),
+              (task.completedBy === uid || (task.completedBy == null && task.assignedTo === uid))),
         );
 
         const statusLabel = hasSubmitted
@@ -1197,7 +1264,7 @@ export function AssigneeAvatarCluster({
 
             {showNames && (
               <Text style={styles.avatarLabel} numberOfLines={1}>
-                {displayName.split(' ')[0]}
+                {firstName}
                 {hasSubmitted ? ' (Done)' : hasAcknowledged ? ' (Ack)' : ''}
               </Text>
             )}
@@ -1207,4 +1274,5 @@ export function AssigneeAvatarCluster({
     </View>
   );
 }
+
 

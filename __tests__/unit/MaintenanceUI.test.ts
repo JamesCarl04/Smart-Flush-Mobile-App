@@ -272,4 +272,17 @@ describe('MaintenanceUI helper functions', () => {
       expect(taskPriorityTone('critical').label).toBe('Critical');
     });
   });
+
+  describe('getInitials', () => {
+    it('should strip parenthetical titles and return accurate initials', () => {
+      const { getInitials } = require('../../components/MaintenanceUI');
+      expect(getInitials('Justine Lopez (Tech)')).toBe('JL');
+      expect(getInitials('Justine Lopez (Supervisor)')).toBe('JL');
+      expect(getInitials('Justine Lopez')).toBe('JL');
+      expect(getInitials('Justine')).toBe('JU');
+      expect(getInitials('')).toBe('OP');
+      expect(getInitials(null)).toBe('OP');
+      expect(getInitials(undefined)).toBe('OP');
+    });
+  });
 });

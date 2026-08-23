@@ -3,10 +3,21 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react-nativ
 import { PaperProvider } from 'react-native-paper';
 
 import { InboxScreen } from '../../../screens/InboxScreen';
+import { AuthContext } from '../../../contexts/AuthContext';
 import * as useTasksHook from '../../../hooks/useTasks';
 import type { Task } from '../../../types';
 
 jest.mock('../../../hooks/useTasks');
+jest.mock('react-native-paper', () => {
+  const actual = jest.requireActual('react-native-paper');
+  const React = require('react');
+  const { View, Text } = require('react-native');
+  return {
+    ...actual,
+    Snackbar: ({ children, visible }: any) =>
+      visible ? <View testID="mock-snackbar"><Text>{children}</Text></View> : null,
+  };
+});
 
 const mockInboxTasks: Task[] = [
   {
@@ -61,6 +72,25 @@ const mockInboxTasks: Task[] = [
     createdAt: new Date('2026-08-15T08:30:00Z'),
     createdBy: 'system',
   },
+  {
+    id: 'task-flagged-4',
+    deviceId: 'dev-flagged-4',
+    restroomName: 'Restroom 4',
+    type: 'cleaning',
+    component: 'mirror',
+    location: '4F Restroom',
+    floor: '4F',
+    building: 'GB3 Building',
+    shift: '1st',
+    triggerType: 'maintenance',
+    message: 'Glass streaks flagged by inspector',
+    assignedTo: 'user-tech-1',
+    status: 'flagged',
+    flagReason: 'Mirrors have water streaks and counter is dusty',
+    inspectedByName: 'Lead Supervisor',
+    createdAt: new Date('2026-08-15T09:00:00Z'),
+    createdBy: 'system',
+  },
 ];
 
 describe('InboxScreen Integration', () => {
@@ -83,7 +113,7 @@ describe('InboxScreen Integration', () => {
       tasks: mockInboxTasks,
       inboxTasks: mockInboxTasks,
       historyTasks: [],
-      pendingCount: 2, // task-assigned-1 + task-reassign-3
+      pendingCount: 2,
       loading: false,
       errorMessage: null,
       refreshTasks: mockRefreshTasks,
@@ -94,7 +124,22 @@ describe('InboxScreen Integration', () => {
   const renderScreen = () => {
     return render(
       <PaperProvider>
-        <InboxScreen navigation={mockNavigation} route={mockRoute} />
+        <AuthContext.Provider
+          value={{
+            user: {
+              uid: 'user-tech-1',
+              name: 'Technician Sam',
+              email: 'tech@smartflush.com',
+              role: 'maintenance',
+              building: 'GB3',
+            },
+            role: 'maintenance',
+            loading: false,
+            logout: jest.fn(),
+          } as any}
+        >
+          <InboxScreen navigation={mockNavigation} route={mockRoute} />
+        </AuthContext.Provider>
       </PaperProvider>,
     );
   };
@@ -109,7 +154,6 @@ describe('InboxScreen Integration', () => {
     expect(screen.getByText('Pending')).toBeTruthy();
     expect(screen.getByText('2')).toBeTruthy(); // pendingCount
     expect(screen.getAllByText('In Progress').length).toBeGreaterThan(0);
-    expect(screen.getByText('1')).toBeTruthy(); // acknowledged count
 
     // Task cards content
     expect(screen.getByText('Continuous water running detected in flush valve')).toBeTruthy();
@@ -120,7 +164,6 @@ describe('InboxScreen Integration', () => {
   it('displays urgent priority card prioritizing reassignment_needed and navigates on press', () => {
     renderScreen();
 
-    // Urgent card picks task-reassign-3
     expect(screen.getByText('Open Priority Task')).toBeTruthy();
 
     fireEvent.press(screen.getByText('Open Priority Task'));
@@ -130,35 +173,35 @@ describe('InboxScreen Integration', () => {
     });
   });
 
-  it('filters tasks using filter chips: All, Active, and Acknowledged', () => {
+  it('filters tasks using segmented filter: All, Active, and Flagged', () => {
     renderScreen();
 
-    // Default 'All' filter shows all 3
+    // Default 'All' filter shows active and flagged
     expect(screen.getByText('Continuous water running detected in flush valve')).toBeTruthy();
     expect(screen.getByText('Spill cleanup requested')).toBeTruthy();
-    expect(screen.getAllByText('Main pipe pressure anomaly').length).toBeGreaterThan(0);
+    expect(screen.getByText('Glass streaks flagged by inspector')).toBeTruthy();
 
-    // Select 'Active' filter (assigned, unassigned, reassignment_needed)
-    const activeChip = screen.getByText('Active');
+    // Select 'Active' filter
+    const activeChip = screen.getByText('Active (3)');
     fireEvent.press(activeChip);
 
     expect(screen.getByText('Continuous water running detected in flush valve')).toBeTruthy();
-    expect(screen.getAllByText('Main pipe pressure anomaly').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Spill cleanup requested')).toBeNull();
+    expect(screen.queryByText('Glass streaks flagged by inspector')).toBeNull();
 
-    // Select 'Acknowledged' filter
-    const ackChip = screen.getByText('Acknowledged');
-    fireEvent.press(ackChip);
+    // Select 'Flagged' filter
+    const flaggedChip = screen.getByText('Flagged (1)');
+    fireEvent.press(flaggedChip);
 
     expect(screen.queryByText('Continuous water running detected in flush valve')).toBeNull();
-    expect(screen.getByText('Spill cleanup requested')).toBeTruthy();
+    expect(screen.getByText('Glass streaks flagged by inspector')).toBeTruthy();
+    expect(screen.getByText('Supervisor Remarks:')).toBeTruthy();
 
     // Select 'All' filter back
-    const allChip = screen.getByText('All');
+    const allChip = screen.getByText('All (4)');
     fireEvent.press(allChip);
 
     expect(screen.getByText('Continuous water running detected in flush valve')).toBeTruthy();
-    expect(screen.getByText('Spill cleanup requested')).toBeTruthy();
+    expect(screen.getByText('Glass streaks flagged by inspector')).toBeTruthy();
   });
 
   it('navigates to TaskDetail with correct taskId when task card is pressed', () => {
@@ -169,6 +212,22 @@ describe('InboxScreen Integration', () => {
 
     expect(mockNavigation.navigate).toHaveBeenCalledWith('TaskDetail', {
       taskId: 'task-assigned-1',
+    });
+  });
+
+  it('opens FlaggedRemarksModal when Review Remarks button is clicked on a flagged task', async () => {
+    renderScreen();
+
+    const flaggedChip = screen.getByText('Flagged (1)');
+    fireEvent.press(flaggedChip);
+
+    const reviewBtn = screen.getByText('Review Remarks & Accept Recheck');
+    fireEvent.press(reviewBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Flagged for Re-inspection')).toBeTruthy();
+      expect(screen.getByText('Mirrors have water streaks and counter is dusty')).toBeTruthy();
+      expect(screen.getByText('Accept Recheck')).toBeTruthy();
     });
   });
 

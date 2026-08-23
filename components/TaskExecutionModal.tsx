@@ -14,10 +14,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { captureRef } from 'react-native-view-shot';
 import {
-  ActivityIndicator,
   Button,
   Card,
-  Chip,
   Divider,
   ProgressBar,
   SegmentedButtons,
@@ -26,7 +24,13 @@ import {
 } from 'react-native-paper';
 
 import * as ImagePicker from '../lib/native-image-picker';
-import { KLIR_COLORS, KLIR_RADII, UI_COLORS, sharedShadow } from './MaintenanceUI';
+import {
+  INTER_FONT,
+  KLIR_COLORS,
+  KLIR_RADII,
+  KLIR_SPACING,
+  cardElevation,
+} from './MaintenanceUI';
 import { KlirButton } from './KlirButton';
 import {
   completeTaskOnline,
@@ -37,11 +41,8 @@ import {
 import {
   CHECKLIST_LABELS,
   EMPTY_CHECKLIST,
-  formatTaskComponent,
 } from '../lib/tasks';
 import { getRestroomLabel } from '../lib/restrooms';
-import { useAuth } from '../hooks/useAuth';
-import { useTasks } from '../hooks/useTasks';
 import type {
   ChecklistValue,
   Task,
@@ -469,7 +470,7 @@ export function TaskExecutionModal({
             <MaterialCommunityIcons
               name="close"
               size={20}
-              color={KLIR_COLORS.charcoal}
+              color="#0F172A"
             />
           </TouchableOpacity>
         </View>
@@ -478,6 +479,7 @@ export function TaskExecutionModal({
           style={styles.scrollView}
           contentContainerStyle={styles.contentContainer}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           {/* STEP 1: BEFORE PHOTO */}
           {step === 'before_photo' ? (
@@ -487,8 +489,8 @@ export function TaskExecutionModal({
                 <View style={styles.instructionBanner}>
                   <MaterialCommunityIcons
                     name="clipboard-text-outline"
-                    size={18}
-                    color={KLIR_COLORS.primary}
+                    size={16}
+                    color="#B45309"
                     style={styles.instructionIcon}
                   />
                   <View style={styles.instructionTextWrapper}>
@@ -499,7 +501,7 @@ export function TaskExecutionModal({
               ) : null}
 
               {/* Viewfinder / Capture Box */}
-              <Card mode="elevated" style={styles.stepCard}>
+              <Card mode="elevated" style={[styles.stepCard, styles.cardElevation]}>
                 <Card.Content style={styles.stepContent}>
                   {beforePhotoUri ? (
                     <View style={styles.previewBox}>
@@ -523,7 +525,7 @@ export function TaskExecutionModal({
                       <View style={styles.viewfinderIconCircle}>
                         <MaterialCommunityIcons
                           name="camera"
-                          size={36}
+                          size={32}
                           color={KLIR_COLORS.primary}
                         />
                       </View>
@@ -538,7 +540,7 @@ export function TaskExecutionModal({
                           <MaterialCommunityIcons
                             name="map-marker-outline"
                             size={12}
-                            color={KLIR_COLORS.slateMuted}
+                            color="#64748B"
                           />
                           <Text style={styles.viewfinderMetaText}>
                             {task.location}
@@ -548,7 +550,7 @@ export function TaskExecutionModal({
                           <MaterialCommunityIcons
                             name="shield-lock-outline"
                             size={12}
-                            color={KLIR_COLORS.slateMuted}
+                            color="#64748B"
                           />
                           <Text style={styles.viewfinderMetaText}>
                             Biometric Encrypted
@@ -559,38 +561,25 @@ export function TaskExecutionModal({
                   )}
 
                   {/* Actions */}
-                  <Button
-                    mode="contained"
+                  <KlirButton
+                    title={beforePhotoUri ? 'Retake Before Photo' : 'Take Proof Photo'}
+                    variant="primary"
                     onPress={() => void handleStartBeforePhoto()}
                     loading={actionInFlight}
                     disabled={actionInFlight}
-                    contentStyle={styles.ctaButtonContent}
-                    style={styles.ctaButton}
-                    textColor="#FFFFFF"
-                    labelStyle={styles.ctaButtonLabel}
-                    theme={{
-                      colors: {
-                        primary: '#B5121B',
-                        onPrimary: '#FFFFFF',
-                        surfaceDisabled: '#B5121B',
-                        onSurfaceDisabled: '#FFFFFF',
-                      },
-                    }}
                     icon="camera"
-                  >
-                    {beforePhotoUri ? 'Retake Before Photo' : 'Take Proof Photo'}
-                  </Button>
+                    style={styles.ctaButton}
+                  />
 
                   {beforePhotoUri ? (
-                    <Button
-                      mode="outlined"
+                    <KlirButton
+                      title="Proceed to Checklist"
+                      variant="outline"
                       onPress={() => setStep('checklist')}
-                      style={styles.secondaryButton}
-                      textColor={KLIR_COLORS.primary}
                       icon="arrow-right"
-                    >
-                      Proceed to Checklist
-                    </Button>
+                      iconPosition="right"
+                      style={styles.secondaryButton}
+                    />
                   ) : null}
                 </Card.Content>
               </Card>
@@ -599,7 +588,7 @@ export function TaskExecutionModal({
 
           {/* STEP 2: CHECKLIST */}
           {step === 'checklist' ? (
-            <Card mode="elevated" style={styles.stepCard}>
+            <Card mode="elevated" style={[styles.stepCard, styles.cardElevation]}>
               <Card.Content style={styles.stepContent}>
                 <View style={styles.checklistHeaderRow}>
                   <View>
@@ -629,7 +618,7 @@ export function TaskExecutionModal({
                     <View style={styles.categoryHeader}>
                       <MaterialCommunityIcons
                         name={category.icon}
-                        size={18}
+                        size={16}
                         color={KLIR_COLORS.primary}
                       />
                       <Text style={styles.categoryTitle}>{category.title}</Text>
@@ -667,35 +656,25 @@ export function TaskExecutionModal({
                   multiline
                   numberOfLines={3}
                   onChangeText={setRemarks}
-                  outlineColor="#E5E5E5"
-                  activeOutlineColor="#222222"
+                  outlineColor="#CBD5E1"
+                  activeOutlineColor={KLIR_COLORS.primary}
                   style={styles.remarksInput}
                 />
 
-                <Button
-                  mode="contained"
+                <KlirButton
+                  title="Take After Photo"
+                  variant="primary"
                   onPress={() => void handleCaptureAfterPhoto()}
-                  contentStyle={styles.ctaButtonContent}
-                  style={styles.ctaButton}
-                  textColor="#FFFFFF"
-                  labelStyle={styles.ctaButtonLabel}
-                  theme={{
-                    colors: {
-                      primary: '#B5121B',
-                      onPrimary: '#FFFFFF',
-                    },
-                  }}
                   icon="camera-flip-outline"
-                >
-                  Take After Photo
-                </Button>
+                  style={styles.ctaButton}
+                />
               </Card.Content>
             </Card>
           ) : null}
 
           {/* STEP 3: SUMMARY & VERIFICATION */}
           {step === 'summary' ? (
-            <Card mode="elevated" style={styles.stepCard}>
+            <Card mode="elevated" style={[styles.stepCard, styles.cardElevation]}>
               <Card.Content style={styles.stepContent}>
                 <Text style={styles.summaryTitle}>Completion Verification</Text>
                 <Text style={styles.summarySubtitle}>
@@ -707,17 +686,22 @@ export function TaskExecutionModal({
                   <View style={styles.photoCol}>
                     <View style={styles.photoHeader}>
                       <MaterialCommunityIcons
-                        name="camera"
+                        name="camera-outline"
                         size={14}
-                        color={KLIR_COLORS.slateMuted}
+                        color="#64748B"
                       />
                       <Text style={styles.photoHeaderLabel}>BEFORE</Text>
                     </View>
                     {beforePhotoUri ? (
-                      <Image
-                        source={{ uri: beforePhotoUri }}
-                        style={styles.comparePhoto}
-                      />
+                      <View style={styles.photoWrapper}>
+                        <Image
+                          source={{ uri: beforePhotoUri }}
+                          style={styles.comparePhoto}
+                        />
+                        <View style={styles.photoOverlayTag}>
+                          <Text style={styles.photoOverlayText}>Before</Text>
+                        </View>
+                      </View>
                     ) : (
                       <View style={styles.photoEmpty}>
                         <Text style={styles.photoEmptyText}>No Photo</Text>
@@ -730,18 +714,16 @@ export function TaskExecutionModal({
                     ) : null}
                   </View>
 
-                  <View style={styles.photoArrow}>
-                    <MaterialCommunityIcons
-                      name="arrow-right-bold"
-                      size={18}
-                      color={KLIR_COLORS.slateLight}
-                    />
-                  </View>
+                  <MaterialCommunityIcons
+                    name="arrow-right"
+                    size={16}
+                    color="#94A3B8"
+                  />
 
                   <View style={styles.photoCol}>
                     <View style={styles.photoHeader}>
                       <MaterialCommunityIcons
-                        name="camera-flip"
+                        name="camera-flip-outline"
                         size={14}
                         color={KLIR_COLORS.primary}
                       />
@@ -755,10 +737,15 @@ export function TaskExecutionModal({
                       </Text>
                     </View>
                     {afterPhotoUri ? (
-                      <Image
-                        source={{ uri: afterPhotoUri }}
-                        style={styles.comparePhoto}
-                      />
+                      <View style={styles.photoWrapper}>
+                        <Image
+                          source={{ uri: afterPhotoUri }}
+                          style={styles.comparePhoto}
+                        />
+                        <View style={styles.photoOverlayTag}>
+                          <Text style={styles.photoOverlayText}>After</Text>
+                        </View>
+                      </View>
                     ) : (
                       <View style={styles.photoEmpty}>
                         <Text style={styles.photoEmptyText}>No Photo</Text>
@@ -807,27 +794,15 @@ export function TaskExecutionModal({
                 <Divider style={styles.divider} />
 
                 {/* Final Submit Button */}
-                <Button
-                  mode="contained"
+                <KlirButton
+                  title="Submit Completion"
+                  variant="primary"
                   loading={actionInFlight}
                   disabled={actionInFlight}
                   onPress={() => void submitCompletion()}
-                  contentStyle={styles.ctaButtonContent}
-                  style={styles.ctaButton}
-                  textColor="#FFFFFF"
-                  labelStyle={styles.ctaButtonLabel}
-                  theme={{
-                    colors: {
-                      primary: '#B5121B',
-                      onPrimary: '#FFFFFF',
-                      surfaceDisabled: '#B5121B',
-                      onSurfaceDisabled: '#FFFFFF',
-                    },
-                  }}
                   icon="cloud-upload-outline"
-                >
-                  Submit Completion
-                </Button>
+                  style={styles.ctaButton}
+                />
               </Card.Content>
             </Card>
           ) : null}
@@ -854,12 +829,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  cardElevation: {
+    ...cardElevation,
+  },
   modalHeader: {
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#EEEEEE',
+    borderBottomColor: '#EAECF0',
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
@@ -869,49 +847,34 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 3,
   },
-  stepBadgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: '#FEE2E2',
-  },
-  stepPillText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: KLIR_COLORS.primary,
-    letterSpacing: 0.5,
-  },
   stepTitle: {
-    fontSize: 17,
+    fontFamily: INTER_FONT,
+    fontSize: 16,
     fontWeight: '800',
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
     letterSpacing: -0.2,
   },
   locationSubtitle: {
+    fontFamily: INTER_FONT,
     fontSize: 12,
     fontWeight: '600',
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
   },
   closeButton: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 12,
   },
   scrollView: {
     flex: 1,
-    backgroundColor: KLIR_COLORS.canvas,
+    backgroundColor: '#F8FAFC',
   },
   contentContainer: {
-    padding: 16,
+    padding: KLIR_SPACING.lg,
     paddingBottom: 40,
     gap: 14,
   },
@@ -924,8 +887,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF9E7',
     borderWidth: 1,
     borderColor: '#FDE68A',
-    borderRadius: 14,
-    padding: 14,
+    borderRadius: 10,
+    padding: 12,
     gap: 10,
   },
   instructionIcon: {
@@ -936,41 +899,44 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   instructionLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 10,
     fontWeight: '800',
     color: '#B45309',
     letterSpacing: 0.5,
   },
   instructionText: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
     color: '#92400E',
     fontWeight: '600',
     lineHeight: 18,
   },
   stepCard: {
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: '#FFFFFF',
-    ...sharedShadow,
+    borderWidth: 1,
+    borderColor: '#EAECF0',
   },
   stepContent: {
     padding: 16,
-    gap: 16,
+    gap: 14,
   },
   viewfinderBox: {
     alignItems: 'center',
     paddingVertical: 24,
     paddingHorizontal: 16,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: '#FAFAFA',
     borderWidth: 1.5,
-    borderColor: '#E5E7EB',
+    borderColor: '#CBD5E1',
     borderStyle: 'dashed',
     gap: 10,
   },
   viewfinderIconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: '#FEE2E2',
     alignItems: 'center',
     justifyContent: 'center',
@@ -988,31 +954,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#F1F5F9',
   },
   viewfinderMetaText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '600',
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
   },
   stepHeadline: {
+    fontFamily: INTER_FONT,
     fontSize: 17,
     fontWeight: '800',
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
     textAlign: 'center',
   },
   stepDescription: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
     textAlign: 'center',
     lineHeight: 18,
     paddingHorizontal: 12,
   },
   previewBox: {
-    borderRadius: 14,
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E5E5E5',
+    borderColor: '#EAECF0',
   },
   previewImage: {
     width: '100%',
@@ -1026,27 +995,22 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   previewText: {
+    fontFamily: INTER_FONT,
     color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '600',
   },
   ctaButton: {
-    borderRadius: 14,
-    backgroundColor: KLIR_COLORS.primary,
-  },
-  ctaButtonContent: {
-    minHeight: 52,
-  },
-  ctaButtonLabel: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
+    borderRadius: 12,
+    marginTop: 2,
   },
   secondaryButton: {
-    borderRadius: 14,
-    borderColor: '#E5E5E5',
+    borderRadius: 12,
   },
   checklistHeaderRow: {
     flexDirection: 'row',
@@ -1054,17 +1018,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   checklistTitle: {
+    fontFamily: INTER_FONT,
     fontSize: 16,
     fontWeight: '800',
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
   },
   checklistSubtitle: {
+    fontFamily: INTER_FONT,
     fontSize: 12,
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
     marginTop: 2,
   },
   countBadge: {
-    minHeight: 26,
+    minHeight: 24,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: KLIR_RADII.tag,
@@ -1073,6 +1039,7 @@ const styles = StyleSheet.create({
     borderColor: '#FDE68A',
   },
   countBadgeText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '800',
     color: '#B45309',
@@ -1080,45 +1047,53 @@ const styles = StyleSheet.create({
   progressBar: {
     height: 6,
     borderRadius: 3,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#E2E8F0',
   },
   categoryBox: {
-    gap: 10,
+    gap: 8,
     padding: 12,
-    borderRadius: 14,
-    backgroundColor: KLIR_COLORS.canvas,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EAECF0',
   },
   categoryHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    marginBottom: 2,
   },
   categoryTitle: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
     fontWeight: '800',
-    color: KLIR_COLORS.charcoal,
+    color: KLIR_COLORS.primary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   checklistItem: {
     gap: 6,
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   checklistItemLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
     fontWeight: '600',
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
   },
   remarksInput: {
     backgroundColor: '#FFFFFF',
   },
   summaryTitle: {
-    fontSize: 18,
+    fontFamily: INTER_FONT,
+    fontSize: 17,
     fontWeight: '800',
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
   },
   summarySubtitle: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
     marginTop: -8,
   },
   photoComparisonRow: {
@@ -1137,38 +1112,62 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   photoHeaderLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '800',
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
   },
-  comparePhoto: {
+  photoWrapper: {
     width: '100%',
     height: 130,
     borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative',
     backgroundColor: '#E2E8F0',
+  },
+  comparePhoto: {
+    width: '100%',
+    height: '100%',
     resizeMode: 'cover',
+  },
+  photoOverlayTag: {
+    position: 'absolute',
+    bottom: 6,
+    left: 6,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  photoOverlayText: {
+    fontFamily: INTER_FONT,
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   photoEmpty: {
     width: '100%',
     height: 130,
     borderRadius: 12,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },
   photoEmptyText: {
+    fontFamily: INTER_FONT,
     fontSize: 12,
     fontWeight: '600',
-    color: KLIR_COLORS.slateMuted,
+    color: '#94A3B8',
   },
   compareTime: {
+    fontFamily: INTER_FONT,
     fontSize: 10,
     fontWeight: '600',
-    color: KLIR_COLORS.slateMuted,
-  },
-  photoArrow: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    color: '#94A3B8',
   },
   metricsRow: {
     flexDirection: 'row',
@@ -1178,39 +1177,47 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     borderRadius: 12,
-    backgroundColor: KLIR_COLORS.canvas,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EAECF0',
     alignItems: 'center',
     gap: 2,
   },
   metricLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '700',
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
   },
   metricValue: {
+    fontFamily: INTER_FONT,
     fontSize: 20,
     fontWeight: '900',
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
   },
   remarksBox: {
-    padding: 10,
-    borderRadius: 10,
-    backgroundColor: KLIR_COLORS.canvas,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#EAECF0',
     gap: 2,
   },
   remarksBoxLabel: {
+    fontFamily: INTER_FONT,
     fontSize: 10,
     fontWeight: '800',
-    color: KLIR_COLORS.slateMuted,
+    color: '#64748B',
     textTransform: 'uppercase',
   },
   remarksBoxText: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
-    color: KLIR_COLORS.charcoal,
+    color: '#0F172A',
   },
   divider: {
     marginVertical: 4,
-    backgroundColor: '#E5E5E5',
+    backgroundColor: '#EAECF0',
   },
   overlayStage: {
     position: 'absolute',
@@ -1245,3 +1252,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 });
+

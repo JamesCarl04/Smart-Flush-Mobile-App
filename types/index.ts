@@ -6,7 +6,8 @@ export type TaskStatus =
   | 'acknowledged'
   | 'completed'
   | 'reassignment_needed'
-  | 'flagged';
+  | 'flagged'
+  | 'rechecking';
 
 export type TaskTriggerType =
   | 'manual'
@@ -85,6 +86,17 @@ export interface Task {
   reassignCount?: number;
   supervisorUid?: string | null;
   createdBy: string;
+
+  // QA & Supervisor Audit Fields
+  inspectionStatus?: 'pending_review' | 'approved' | 'flagged';
+  inspectedBy?: string | null;
+  inspectedByName?: string | null;
+  inspectedAt?: Date | null;
+  flagReason?: string | null;
+  flagPhotoUrls?: string[];
+  recheckCount?: number;
+  recheckedBy?: string | null;
+  recheckedAt?: Date | null;
 }
 
 export interface AuthUser {

@@ -1,5 +1,6 @@
 import { apiFetch } from '../../lib/api';
 import {
+  approveTask,
   fetchMaintenancePersonnel,
   flagTask,
   reassignTask,
@@ -112,6 +113,8 @@ describe('supervisor-api utility', () => {
       taskId: 'task-100',
       reason: 'Requires external plumber assistance',
       supervisorUid: 'sup-1',
+      supervisorName: 'Supervisor Jane',
+      flagPhotoUrls: ['file:///photos/leak.jpg'],
     };
 
     it('should send POST request with JSON payload to /api/supervisor/flag-task', async () => {
@@ -136,6 +139,110 @@ describe('supervisor-api utility', () => {
       await expect(flagTask(flagInput)).rejects.toThrow(
         'Task has already been completed',
       );
+    });
+  });
+
+  describe('approveTask', () => {
+    const approveInput = {
+      taskId: 'task-100',
+      supervisorUid: 'sup-1',
+      supervisorName: 'Supervisor Jane',
+    };
+
+    it('should send POST request with JSON payload to /api/supervisor/approve-task', async () => {
+      mockedApiFetch.mockResolvedValueOnce({
+        success: true,
+      });
+
+      await approveTask(approveInput);
+
+      expect(mockedApiFetch).toHaveBeenCalledWith('/api/supervisor/approve-task', {
+        method: 'POST',
+        body: JSON.stringify(approveInput),
+      });
+    });
+
+    it('should throw an error when approveTask fails', async () => {
+      mockedApiFetch.mockResolvedValueOnce({
+        success: false,
+        error: 'Task not found',
+      });
+
+      await expect(approveTask(approveInput)).rejects.toThrow('Task not found');
+    });
+  });
+
+  describe('normalizeBuildingName & isPersonMatchingBuilding', () => {
+    const {
+      normalizeBuildingName,
+      isPersonMatchingBuilding,
+    } = require('../../lib/supervisor-api');
+
+    it('should normalize building names ignoring facility/building suffixes', () => {
+      expect(normalizeBuildingName('SDCA Annex Facility')).toBe('sdcaannex');
+      expect(normalizeBuildingName('SDCA Annex Building')).toBe('sdcaannex');
+      expect(normalizeBuildingName('GB3 Building')).toBe('gb3');
+      expect(normalizeBuildingName('')).toBe('');
+      expect(normalizeBuildingName(null)).toBe('');
+    });
+
+    it('should match buildings flexibly between supervisor and technician', () => {
+      expect(isPersonMatchingBuilding('SDCA Annex Building', 'SDCA Annex Facility')).toBe(true);
+      expect(isPersonMatchingBuilding('GB3 Building', 'GB3')).toBe(true);
+      expect(isPersonMatchingBuilding(null, 'SDCA Annex Facility')).toBe(true);
+      expect(isPersonMatchingBuilding('SDCA Annex Building', null)).toBe(true);
+      expect(isPersonMatchingBuilding('Main Campus', 'Annex Campus')).toBe(false);
+    });
+  });
+
+  describe('getPersonOperationalStatus', () => {
+    const { getPersonOperationalStatus } = require('../../lib/supervisor-api');
+
+    const samplePerson = {
+      id: 'tech-1',
+      displayName: 'Justine Lopez',
+      email: 'justine@example.com',
+      isAvailable: true,
+      currentTaskId: null,
+      shift: '1st',
+      building: 'SDCA Annex',
+      supervisorUid: null,
+    };
+
+    it('should return available when person has no active tasks and isAvailable is true', () => {
+      const { status, activeTask } = getPersonOperationalStatus(samplePerson, []);
+      expect(status).toBe('available');
+      expect(activeTask).toBeNull();
+    });
+
+    it('should return on_task when person has an active uncompleted task', () => {
+      const mockActiveTask: any = {
+        id: 'task-1',
+        status: 'acknowledged',
+        assignedTo: 'tech-1',
+      };
+      const { status, activeTask } = getPersonOperationalStatus(samplePerson, [mockActiveTask]);
+      expect(status).toBe('on_task');
+      expect(activeTask).toEqual(mockActiveTask);
+    });
+
+    it('should return available if task is completed even if currentTaskId was set', () => {
+      const personWithOldTask = { ...samplePerson, currentTaskId: 'task-completed-99' };
+      const completedTask: any = {
+        id: 'task-completed-99',
+        status: 'completed',
+        assignedTo: 'tech-1',
+      };
+      const { status, activeTask } = getPersonOperationalStatus(personWithOldTask, [completedTask]);
+      expect(status).toBe('available');
+      expect(activeTask).toBeNull();
+    });
+
+    it('should return offline when isAvailable is false and no active task', () => {
+      const offlinePerson = { ...samplePerson, isAvailable: false };
+      const { status, activeTask } = getPersonOperationalStatus(offlinePerson, []);
+      expect(status).toBe('offline');
+      expect(activeTask).toBeNull();
     });
   });
 });

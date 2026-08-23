@@ -2,18 +2,21 @@ import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { Button, Card, Divider, Snackbar, Text } from 'react-native-paper';
+import { Card, Snackbar, Text } from 'react-native-paper';
 
+import { KlirButton } from '../components/KlirButton';
 import {
+  AssigneeAvatarCluster,
   EmptyOperationState,
+  INTER_FONT,
+  KLIR_COLORS,
   KLIR_RADII,
+  KLIR_SPACING,
   MetaPill,
   OperationBadge,
-  UI_COLORS,
+  cardElevation,
   getComponentMeta,
   getTaskDisplayTone,
-  sharedShadow,
-  statusTone,
 } from '../components/MaintenanceUI';
 import { TaskDetailSkeleton } from '../components/SkeletonScreens';
 import { TaskExecutionModal } from '../components/TaskExecutionModal';
@@ -21,12 +24,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
-import {
-  formatTaskComponent,
-  formatTaskStatus,
-  formatTaskTrigger,
-  getTaskDisplayStatus,
-} from '../lib/tasks';
+import { getTaskDisplayStatus } from '../lib/tasks';
 import type { Task, TaskStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<TaskStackParamList, 'ActiveTask'>;
@@ -43,38 +41,6 @@ function formatDate(date: Date | null | undefined): string {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date);
-}
-
-
-
-function DetailRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}): React.JSX.Element {
-  return (
-    <View style={styles.detailRow}>
-      <Text variant="labelLarge" style={styles.detailLabel}>
-        {label}
-      </Text>
-      <Text variant="bodyLarge" style={styles.detailValue}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function formatAssignee(
-  assignedTo: string | null,
-  currentUserId: string | null,
-): string {
-  if (!assignedTo) {
-    return 'All maintenance team';
-  }
-
-  return assignedTo === currentUserId ? 'You' : 'Maintenance staff';
 }
 
 function EmptyTaskPanel(): React.JSX.Element {
@@ -136,10 +102,6 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
     }
   };
 
-  const handleOpenTask = (taskId: string): void => {
-    navigation.navigate('TaskDetail', { taskId });
-  };
-
   if (loading) {
     return <TaskDetailSkeleton />;
   }
@@ -150,11 +112,11 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.contentContainer}>
-        {/* Unified Hero Action Card - Everything at a single glance */}
-        <Card mode="elevated" style={styles.heroCard}>
+      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+        {/* Unified Hero Action Card */}
+        <Card mode="elevated" style={[styles.heroCard, styles.cardElevation]}>
           <Card.Content style={styles.heroContent}>
-            {/* Top Row: Single Status Badge + Shift Pill */}
+            {/* Top Row: Status Badge + Shift Pill */}
             <View style={styles.headerTopRow}>
               <OperationBadge
                 label={getTaskDisplayStatus(activeTask)}
@@ -164,12 +126,10 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
                 <MaterialCommunityIcons
                   name="clock-outline"
                   size={12}
-                  color={UI_COLORS.muted}
-                  accessibilityElementsHidden={true}
-                  importantForAccessibility="no"
+                  color="#475569"
                 />
                 <Text style={styles.shiftPillText}>
-                  {`${activeTask.shift} Shift`}
+                  {`${activeTask.shift ?? '1st'} Shift`}
                 </Text>
               </View>
             </View>
@@ -179,7 +139,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
               {getRestroomLabel(activeTask)}
             </Text>
 
-            {/* Single Breadcrumb Subtitle */}
+            {/* Location Breadcrumb Subtitle */}
             <Text style={styles.locationBreadcrumb}>
               {`${activeTask.floor} • ${activeTask.location} • ${activeTask.building}`}
             </Text>
@@ -189,11 +149,9 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
               <View style={styles.instructionCallout}>
                 <MaterialCommunityIcons
                   name="clipboard-text-outline"
-                  size={18}
+                  size={16}
                   color="#B45309"
                   style={styles.instructionIcon}
-                  accessibilityElementsHidden={true}
-                  importantForAccessibility="no"
                 />
                 <View style={styles.instructionTextWrapper}>
                   <Text style={styles.instructionLabel}>INSTRUCTION</Text>
@@ -219,34 +177,32 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
               />
             </View>
 
-            {/* Direct Action Button (Launches Slide-Up Execution Modal) */}
-            <Button
-              mode="contained"
+            <View style={{ marginTop: 4 }}>
+              <AssigneeAvatarCluster
+                task={activeTask}
+                currentUserId={user?.uid}
+                currentUserName={user?.name}
+              />
+            </View>
+
+            {/* Direct Action Button */}
+            <KlirButton
+              title={
+                activeTask.status === 'acknowledged'
+                  ? 'Resume Task & Open Camera'
+                  : 'Acknowledge & Start Task'
+              }
+              variant="primary"
               loading={actionInFlight}
               disabled={actionInFlight}
-              onPress={() => void handleAction()}
-              contentStyle={styles.actionButtonContent}
-              style={styles.actionButton}
-              textColor="#FFFFFF"
-              labelStyle={styles.actionButtonLabel}
-              theme={{
-                colors: {
-                  primary: '#B5121B',
-                  onPrimary: '#FFFFFF',
-                  surfaceDisabled: '#B5121B',
-                  onSurfaceDisabled: '#FFFFFF',
-                },
-              }}
               icon={
                 activeTask.status === 'acknowledged'
                   ? 'camera-outline'
                   : 'clipboard-check-outline'
               }
-            >
-              {activeTask.status === 'acknowledged'
-                ? 'Resume Task & Open Camera'
-                : 'Acknowledge & Start Task'}
-            </Button>
+              onPress={() => void handleAction()}
+              style={styles.actionButton}
+            />
           </Card.Content>
         </Card>
       </ScrollView>
@@ -276,13 +232,16 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: UI_COLORS.background,
+    backgroundColor: '#F8FAFC',
   },
   contentContainer: {
-    padding: 16,
+    padding: KLIR_SPACING.lg,
     paddingBottom: 32,
-    gap: 16,
-    backgroundColor: UI_COLORS.background,
+    gap: KLIR_SPACING.md,
+    backgroundColor: '#F8FAFC',
+  },
+  cardElevation: {
+    ...cardElevation,
   },
   centerState: {
     flex: 1,
@@ -290,26 +249,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 24,
-    backgroundColor: UI_COLORS.background,
+    backgroundColor: '#F8FAFC',
   },
   heroCard: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
+    borderColor: '#EAECF0',
   },
   heroContent: {
     gap: 12,
+    padding: 16,
   },
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 2,
   },
   shiftPill: {
-    minHeight: 26,
+    minHeight: 24,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -321,34 +279,34 @@ const styles = StyleSheet.create({
     borderColor: '#E2E8F0',
   },
   shiftPillText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '700',
     color: '#475569',
   },
   locationHeadline: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontFamily: INTER_FONT,
+    fontSize: 20,
     fontWeight: '800',
-    color: UI_COLORS.text,
+    color: '#0F172A',
     letterSpacing: -0.3,
   },
   locationBreadcrumb: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
-    lineHeight: 18,
     fontWeight: '600',
-    color: UI_COLORS.muted,
+    color: '#64748B',
+    marginTop: -4,
   },
   instructionCallout: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
     padding: 12,
-    borderRadius: KLIR_RADII.chip,
-    backgroundColor: '#FFFBEB',
+    borderRadius: 10,
+    backgroundColor: '#FEF9E7',
     borderWidth: 1,
     borderColor: '#FDE68A',
-    borderLeftWidth: 4,
-    borderLeftColor: '#D97706',
   },
   instructionIcon: {
     marginTop: 2,
@@ -358,65 +316,27 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   instructionLabel: {
-    fontSize: 11,
+    fontFamily: INTER_FONT,
+    fontSize: 10,
     fontWeight: '800',
     color: '#B45309',
     letterSpacing: 0.5,
   },
   instructionText: {
-    fontSize: 14,
+    fontFamily: INTER_FONT,
+    fontSize: 13,
     fontWeight: '600',
-    color: UI_COLORS.text,
-    lineHeight: 20,
+    color: '#92400E',
+    lineHeight: 19,
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   actionButton: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: '#B5121B',
+    borderRadius: 12,
     marginTop: 4,
   },
-  actionButtonContent: {
-    minHeight: 52,
-  },
-  actionButtonLabel: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  detailCard: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
-    borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
-  },
-  sectionContent: {
-    gap: 12,
-  },
-  sectionTitle: {
-    color: UI_COLORS.text,
-    fontWeight: '900',
-  },
-  detailRow: {
-    gap: 4,
-  },
-  detailLabel: {
-    color: UI_COLORS.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  detailValue: {
-    color: UI_COLORS.text,
-    fontWeight: '700',
-  },
-  noteText: {
-    color: UI_COLORS.text,
-    fontSize: 17,
-    lineHeight: 25,
-  },
 });
+

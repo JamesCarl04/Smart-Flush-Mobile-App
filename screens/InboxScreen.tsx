@@ -2,44 +2,37 @@ import { FlatList, RefreshControl, StyleSheet, TouchableOpacity, View } from 're
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useContext, useMemo, useState } from 'react';
-import { Button, Card, Snackbar, Text } from 'react-native-paper';
+import { Card, Snackbar, Text } from 'react-native-paper';
 
+import { KlirButton } from '../components/KlirButton';
 import {
   AssigneeAvatarCluster,
   EmptyOperationState,
+  INTER_FONT,
+  KLIR_COLORS,
   KLIR_RADII,
+  KLIR_SPACING,
   MetaPill,
   OperationBadge,
-  SegmentedFilterControl,
-  UI_COLORS,
+  cardElevation,
   getComponentMeta,
+  getInitials,
   getTaskDisplayTone,
   getTaskPriority,
-  sharedShadow,
-  statusTone,
   taskPriorityTone,
   taskTriggerTone,
-  urgencyTone,
 } from '../components/MaintenanceUI';
+import { FlaggedRemarksModal } from '../components/FlaggedRemarksModal';
 import { TaskExecutionModal } from '../components/TaskExecutionModal';
 import { AuthContext } from '../contexts/AuthContext';
 import { useTasks } from '../hooks/useTasks';
-import { acknowledgeTask } from '../lib/task-api';
+import { acknowledgeTask, acceptRecheckTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
-import { formatTaskStatus, getTaskDisplayStatus } from '../lib/tasks';
+import { getTaskDisplayStatus } from '../lib/tasks';
 import type { InboxStackParamList, Task } from '../types';
 
 type Props = NativeStackScreenProps<InboxStackParamList, 'InboxHome'>;
-type InboxFilter = 'all' | 'active' | 'acknowledged';
-
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat('en-PH', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date);
-}
+type InboxFilter = 'all' | 'active' | 'flagged';
 
 function formatRelativeTime(date: Date): string {
   const now = new Date();
@@ -73,7 +66,7 @@ function LoadingCards(): React.JSX.Element {
   return (
     <View style={styles.loadingList}>
       {[0, 1, 2].map((item) => (
-        <View key={item} style={styles.loadingCard}>
+        <View key={item} style={[styles.loadingCard, styles.cardElevation]}>
           <View style={styles.loadingLineShort} />
           <View style={styles.loadingLineWide} />
           <View style={styles.loadingLineMid} />
@@ -96,8 +89,23 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   } = useTasks();
 
   const acknowledgedCount = inboxTasks.filter(
-    (task) => task.status === 'acknowledged',
+    (task) => task.status === 'acknowledged' || task.status === 'rechecking',
   ).length;
+
+  const flaggedTasksList = useMemo(() => {
+    return inboxTasks.filter((task) => task.status === 'flagged');
+  }, [inboxTasks]);
+
+  const activeTasksList = useMemo(() => {
+    return inboxTasks.filter(
+      (task) =>
+        task.status === 'assigned' ||
+        task.status === 'acknowledged' ||
+        task.status === 'rechecking' ||
+        task.status === 'unassigned' ||
+        task.status === 'reassignment_needed',
+    );
+  }, [inboxTasks]);
 
   const priorityTask =
     inboxTasks.find((task) => getTaskPriority(task) === 'critical') ??
@@ -111,28 +119,30 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     const baseTasks =
       activeFilter === 'all'
         ? inboxTasks
-        : activeFilter === 'active'
-          ? inboxTasks.filter(
-              (task) =>
-                task.status === 'assigned' ||
-                task.status === 'unassigned' ||
-                task.status === 'reassignment_needed',
-            )
-          : inboxTasks.filter((task) => task.status === activeFilter);
+        : activeFilter === 'flagged'
+          ? flaggedTasksList
+          : activeTasksList;
 
-    if (priorityTask && activeFilter !== 'acknowledged') {
+    if (priorityTask && activeFilter !== 'flagged') {
       return baseTasks.filter((task) => task.id !== priorityTask.id);
     }
 
     return baseTasks;
-  }, [activeFilter, inboxTasks, priorityTask]);
+  }, [activeFilter, inboxTasks, activeTasksList, flaggedTasksList, priorityTask]);
 
   const [executingTask, setExecutingTask] = useState<Task | null>(null);
+  const [flaggedTaskToReview, setFlaggedTaskToReview] = useState<Task | null>(null);
   const [actionInFlightId, setActionInFlightId] = useState<string | null>(null);
+  const [acceptingRecheck, setAcceptingRecheck] = useState(false);
 
   const handleStartTask = async (task: Task): Promise<void> => {
-    if (task.status === 'acknowledged') {
+    if (task.status === 'acknowledged' || task.status === 'rechecking') {
       setExecutingTask(task);
+      return;
+    }
+
+    if (task.status === 'flagged') {
+      setFlaggedTaskToReview(task);
       return;
     }
 
@@ -152,6 +162,30 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     }
   };
 
+  const handleAcceptRecheck = async (task: Task): Promise<void> => {
+    if (!user) return;
+    setAcceptingRecheck(true);
+    try {
+      await acceptRecheckTask({
+        taskId: task.id,
+        technicianUid: user.uid,
+        technicianName: user.name,
+      });
+      await refreshTasks();
+      setFlaggedTaskToReview(null);
+      setExecutingTask({
+        ...task,
+        status: 'rechecking',
+        recheckedBy: user.uid,
+        recheckedAt: new Date(),
+      });
+    } catch {
+      // Handled by refresh error
+    } finally {
+      setAcceptingRecheck(false);
+    }
+  };
+
   const handleRefresh = async (): Promise<void> => {
     setRefreshing(true);
     await refreshTasks();
@@ -162,92 +196,92 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     navigation.navigate('TaskDetail', { taskId });
   };
 
+  const userCleanName = user?.name ? user.name.replace(/\([^)]*\)/g, '').trim() : 'Technician';
+
   return (
     <View style={styles.screen}>
       <FlatList
         data={visibleTasks}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.contentContainer}
+        showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={() => {
               void handleRefresh();
             }}
+            colors={[KLIR_COLORS.primary]}
           />
         }
         ListHeaderComponent={
           <View style={styles.headerBlock}>
-            {/* Duty Status Row */}
-            <View style={styles.dutyHeaderRow}>
+            {/* Top Section Header Row */}
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionTitleGroup}>
+                <Text style={styles.sectionHeaderTitle}>Today's Tasks</Text>
+                <Text style={styles.facilitySubtitle}>
+                  {user?.building ? `${user.building} Facility` : 'SDCA Annex Facility'} • {user?.shift ?? '1st'} Shift
+                </Text>
+              </View>
               <View style={styles.onDutyPill}>
                 <View style={styles.onDutyDot} />
                 <Text style={styles.onDutyText}>On Duty</Text>
               </View>
-              <View style={styles.shiftPill}>
-                <MaterialCommunityIcons
-                  name="clock-time-four-outline"
-                  size={12}
-                  color={UI_COLORS.muted}
-                  accessibilityElementsHidden={true}
-                  importantForAccessibility="no"
-                />
-                <Text style={styles.shiftLabel}>
-                  {user?.shift ?? '1st Shift'}
-                </Text>
-              </View>
             </View>
 
-            {/* Context Headline & Subtitle */}
-            <View style={styles.titleWrapper}>
-              <Text variant="headlineSmall" style={styles.headerTitle}>
-                Today's Tasks
-              </Text>
-              <Text variant="bodyMedium" style={styles.headerDescription}>
-                Review assigned tasks and open the next job that needs action.
-              </Text>
-            </View>
-
-            {/* Summary Metrics */}
-            <View style={styles.summaryRow}>
-              <Card mode="contained" style={styles.summaryCard}>
-                <Card.Content style={styles.summaryContent}>
-                  <View style={styles.summaryHeader}>
-                    <MaterialCommunityIcons
-                      name="clipboard-alert-outline"
-                      size={18}
-                      color="#B5121B"
-                      accessibilityElementsHidden={true}
-                      importantForAccessibility="no"
-                    />
-                    <Text style={styles.summaryLabel}>Pending</Text>
-                  </View>
-                  <Text style={styles.summaryValue}>{pendingCount}</Text>
+            {/* 2-Column Bento KPI Metrics Grid */}
+            <View style={styles.metricsGrid}>
+              {/* Bento Card 1: Pending Tasks */}
+              <Card
+                mode="contained"
+                style={[
+                  styles.metricTile,
+                  pendingCount > 0 ? styles.urgentMetricTile : styles.standardMetricTile,
+                  styles.cardElevation,
+                ]}
+              >
+                <Card.Content style={styles.metricTileContent}>
+                  <Text
+                    variant="labelLarge"
+                    style={[styles.metricLabel, pendingCount > 0 && styles.urgentMetricLabel]}
+                  >
+                    Pending
+                  </Text>
+                  <Text
+                    variant="displaySmall"
+                    style={[styles.metricBigNumber, pendingCount > 0 && styles.urgentMetricNumber]}
+                  >
+                    {loading ? '—' : pendingCount}
+                  </Text>
+                  <Text style={styles.metricFooterText}>
+                    {pendingCount > 0 ? 'Needs action today' : 'All clear'}
+                  </Text>
                 </Card.Content>
               </Card>
 
-              <Card mode="contained" style={styles.summaryCardAlt}>
-                <Card.Content style={styles.summaryContent}>
-                  <View style={styles.summaryHeader}>
-                    <MaterialCommunityIcons
-                      name="progress-clock"
-                      size={18}
-                      color="#C9A227"
-                      accessibilityElementsHidden={true}
-                      importantForAccessibility="no"
-                    />
-                    <Text style={styles.summaryLabel}>In Progress</Text>
-                  </View>
-                  <Text style={styles.summaryValue}>{acknowledgedCount}</Text>
+              {/* Bento Card 2: In Progress Tasks */}
+              <Card
+                mode="contained"
+                style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
+              >
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelLarge" style={styles.metricLabel}>
+                    In Progress
+                  </Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {loading ? '—' : acknowledgedCount}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Being worked on</Text>
                 </Card.Content>
               </Card>
             </View>
 
             {/* Priority Alert Callout */}
-            {priorityTask && activeFilter !== 'acknowledged' ? (
+            {priorityTask && activeFilter !== 'flagged' ? (
               <Card
                 mode="contained"
-                style={styles.urgentCard}
+                style={[styles.urgentCard, styles.cardElevation]}
                 onPress={() => openTaskDetail(priorityTask.id)}
               >
                 <Card.Content style={styles.urgentContent}>
@@ -259,11 +293,9 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                       />
                       <View style={styles.shiftPill}>
                         <MaterialCommunityIcons
-                          name="clock-time-four-outline"
+                          name="clock-outline"
                           size={12}
-                          color="#666666"
-                          accessibilityElementsHidden={true}
-                          importantForAccessibility="no"
+                          color="#475569"
                         />
                         <Text style={styles.shiftPillText}>
                           {`${priorityTask.shift ?? '1st'} Shift`}
@@ -275,8 +307,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                         name="alert-decagram"
                         size={13}
                         color="#B5121B"
-                        accessibilityElementsHidden={true}
-                        importantForAccessibility="no"
                       />
                       <Text style={styles.priorityAlertTagText}>
                         {getTaskPriority(priorityTask) === 'critical' ? 'CRITICAL' : 'HIGH PRIORITY'}
@@ -305,46 +335,101 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                     />
                   </View>
 
-                  <View style={{ marginTop: 10 }}>
-                    <AssigneeAvatarCluster task={priorityTask} />
+                  <View style={{ marginTop: 6 }}>
+                    <AssigneeAvatarCluster
+                      task={priorityTask}
+                      currentUserId={user?.uid}
+                      currentUserName={user?.name}
+                    />
                   </View>
 
-                  <Button
-                    mode="contained"
+                  <KlirButton
+                    title="Open Priority Task"
+                    variant="primary"
                     onPress={() => openTaskDetail(priorityTask.id)}
-                    contentStyle={styles.actionButtonContent}
-                    style={styles.urgentActionButton}
                     icon="arrow-right"
-                  >
-                    Open Priority Task
-                  </Button>
+                    iconPosition="right"
+                    style={styles.urgentActionButton}
+                  />
                 </Card.Content>
               </Card>
             ) : null}
 
-            {/* Segmented Filter Control */}
-            <SegmentedFilterControl<InboxFilter>
-              items={[
-                { key: 'all', label: 'All' },
-                { key: 'active', label: 'Active' },
-                { key: 'acknowledged', label: 'Acknowledged' },
-              ]}
-              activeKey={activeFilter}
-              onChange={setActiveFilter}
-            />
+            {/* Section Heading */}
+            <Text style={styles.sectionHeaderTitle}>Task Queue</Text>
+
+            {/* Mobbin Segmented Filter Control */}
+            <View style={styles.segmentedContainer}>
+              <TouchableOpacity
+                style={[styles.segmentBtn, activeFilter === 'all' && styles.segmentBtnActive]}
+                onPress={() => setActiveFilter('all')}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeFilter === 'all' }}
+                accessibilityLabel={`All tasks (${inboxTasks.length})`}
+              >
+                <Text
+                  style={[
+                    styles.segmentBtnText,
+                    activeFilter === 'all' && styles.segmentBtnTextActive,
+                  ]}
+                >
+                  All ({inboxTasks.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.segmentBtn, activeFilter === 'active' && styles.segmentBtnActive]}
+                onPress={() => setActiveFilter('active')}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeFilter === 'active' }}
+                accessibilityLabel={`Active tasks (${activeTasksList.length})`}
+              >
+                <Text
+                  style={[
+                    styles.segmentBtnText,
+                    activeFilter === 'active' && styles.segmentBtnTextActive,
+                  ]}
+                >
+                  Active ({activeTasksList.length})
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.segmentBtn,
+                  activeFilter === 'flagged' && styles.segmentBtnActive,
+                  flaggedTasksList.length > 0 && styles.segmentBtnFlaggedAlert,
+                ]}
+                onPress={() => setActiveFilter('flagged')}
+                accessible={true}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: activeFilter === 'flagged' }}
+                accessibilityLabel={`Flagged tasks (${flaggedTasksList.length})`}
+              >
+                <Text
+                  style={[
+                    styles.segmentBtnText,
+                    activeFilter === 'flagged' && styles.segmentBtnTextActive,
+                    flaggedTasksList.length > 0 && styles.segmentBtnFlaggedText,
+                  ]}
+                >
+                  Flagged ({flaggedTasksList.length})
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
         }
         ListEmptyComponent={loading ? <LoadingCards /> : <EmptyState />}
         renderItem={({ item }) => (
           <Card
             mode="elevated"
-            style={styles.taskCard}
+            style={[styles.taskCard, styles.cardElevation]}
             onPress={() => openTaskDetail(item.id)}
             accessible={true}
             accessibilityRole="button"
-            accessibilityLabel={`${getRestroomLabel(item)}, ${item.floor} ${item.location}. Status: ${item.status}. ${
-              item.triggerType === 'hardware_failure' ? 'Urgent hardware failure alert.' : ''
-            }`}
+            accessibilityLabel={`${getRestroomLabel(item)}, ${item.floor} ${item.location}. Status: ${item.status}.`}
             accessibilityHint="Double tap to view details or start task"
           >
             <Card.Content style={styles.cardContent}>
@@ -366,7 +451,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   <MaterialCommunityIcons
                     name="clock-outline"
                     size={12}
-                    color={UI_COLORS.muted}
+                    color="#94A3B8"
                   />
                   <Text style={styles.relativeTimeText}>
                     {formatRelativeTime(item.createdAt)}
@@ -389,6 +474,21 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 {item.message}
               </Text>
 
+              {/* Supervisor Flag Reason Snippet */}
+              {item.status === 'flagged' && item.flagReason ? (
+                <View style={styles.flagSnippetCard}>
+                  <MaterialCommunityIcons
+                    name="flag-variant"
+                    size={14}
+                    color="#DC2626"
+                  />
+                  <Text style={styles.flagSnippetText} numberOfLines={2}>
+                    <Text style={styles.flagSnippetBold}>Supervisor Remarks: </Text>
+                    {item.flagReason}
+                  </Text>
+                </View>
+              ) : null}
+
               {/* Non-redundant Specific Tags Row */}
               <View style={styles.metaRow}>
                 <MetaPill
@@ -400,45 +500,66 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 ) : null}
               </View>
 
-              <View style={{ marginTop: 10 }}>
-                <AssigneeAvatarCluster task={item} currentUserId={user?.uid} />
+              <View style={{ marginTop: 6 }}>
+                <AssigneeAvatarCluster
+                  task={item}
+                  currentUserId={user?.uid}
+                  currentUserName={user?.name}
+                />
               </View>
             </Card.Content>
 
             {/* Tactile Full-width View Details Action */}
             <Card.Actions style={styles.cardActions}>
-              <Button
-                mode="contained"
-                loading={actionInFlightId === item.id}
-                disabled={actionInFlightId === item.id}
-                onPress={() => void handleStartTask(item)}
-                contentStyle={styles.actionButtonContent}
-                style={styles.taskActionButton}
-                textColor="#FFFFFF"
-                labelStyle={styles.taskActionLabel}
-                theme={{
-                  colors: {
-                    primary: '#B5121B',
-                    onPrimary: '#FFFFFF',
-                    surfaceDisabled: '#B5121B',
-                    onSurfaceDisabled: '#FFFFFF',
-                  },
-                }}
-                icon={
-                  item.status === 'acknowledged' ||
-                  (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
-                    ? 'camera-outline'
-                    : 'clipboard-check-outline'
-                }
-              >
-                {item.status === 'acknowledged' ||
-                (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
-                  ? 'Resume Task & Open Camera'
-                  : 'Acknowledge & Start'}
-              </Button>
+              {item.status === 'flagged' ? (
+                <KlirButton
+                  title="Review Remarks & Accept Recheck"
+                  variant="primary"
+                  onPress={() => setFlaggedTaskToReview(item)}
+                  icon="flag-variant"
+                  style={styles.taskActionButton}
+                />
+              ) : item.status === 'rechecking' ? (
+                <KlirButton
+                  title="Resume Recheck & Open Camera"
+                  variant="primary"
+                  onPress={() => setExecutingTask(item)}
+                  icon="camera-outline"
+                  style={styles.taskActionButton}
+                />
+              ) : (
+                <KlirButton
+                  title={
+                    item.status === 'acknowledged' ||
+                    (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
+                      ? 'Resume Task & Open Camera'
+                      : 'Acknowledge & Start'
+                  }
+                  variant="primary"
+                  loading={actionInFlightId === item.id}
+                  disabled={actionInFlightId === item.id}
+                  onPress={() => void handleStartTask(item)}
+                  icon={
+                    item.status === 'acknowledged' ||
+                    (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
+                      ? 'camera-outline'
+                      : 'clipboard-check-outline'
+                  }
+                  style={styles.taskActionButton}
+                />
+              )}
             </Card.Actions>
           </Card>
         )}
+      />
+
+      {/* Slide-Up Flagged Remarks Dialog */}
+      <FlaggedRemarksModal
+        visible={flaggedTaskToReview !== null}
+        task={flaggedTaskToReview}
+        loading={acceptingRecheck}
+        onDismiss={() => setFlaggedTaskToReview(null)}
+        onAcceptRecheck={(task) => void handleAcceptRecheck(task)}
       />
 
       {/* Slide-Up Task Execution Modal */}
@@ -461,26 +582,48 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: UI_COLORS.background,
+    backgroundColor: '#F8FAFC',
   },
   contentContainer: {
-    padding: 16,
+    padding: KLIR_SPACING.lg,
     paddingBottom: 34,
-    gap: 14,
-    backgroundColor: UI_COLORS.background,
+    gap: KLIR_SPACING.md,
+    backgroundColor: '#F8FAFC',
     flexGrow: 1,
   },
   headerBlock: {
-    gap: 16,
-    marginBottom: 8,
+    gap: 12,
+    marginBottom: 4,
   },
-  commandHeader: {
-    gap: 8,
+  cardElevation: {
+    ...cardElevation,
   },
-  dutyHeaderRow: {
+
+  // Top Header Row
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 2,
+    marginBottom: 4,
+  },
+  sectionTitleGroup: {
+    gap: 2,
+    flex: 1,
+  },
+  sectionHeaderTitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  facilitySubtitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
   },
   onDutyPill: {
     minHeight: 26,
@@ -489,8 +632,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F0FDF4',
+    gap: 5,
+    backgroundColor: '#DCFCE7',
     borderWidth: 1,
     borderColor: '#BBF7D0',
   },
@@ -498,78 +641,94 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: UI_COLORS.success,
+    backgroundColor: '#16A34A',
   },
   onDutyText: {
-    color: UI_COLORS.successText,
+    fontFamily: INTER_FONT,
+    color: '#15803D',
     fontWeight: '800',
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
-  shiftLabel: {
-    color: '#475569',
-    fontWeight: '700',
+  shiftPill: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  shiftPillText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
   },
-  headerTitle: {
-    color: UI_COLORS.text,
-    fontWeight: '900',
-  },
-  headerDescription: {
-    color: UI_COLORS.muted,
-    lineHeight: 22,
-  },
-  summaryRow: {
+
+  // Bento Metrics Grid
+  metricsGrid: {
     flexDirection: 'row',
     gap: 12,
   },
-  summaryCard: {
+  metricTile: {
     flex: 1,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
   },
-  summaryCardAlt: {
-    flex: 1,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
-    borderWidth: 1,
-    borderColor: UI_COLORS.border,
-    ...sharedShadow,
-  },
-  summaryContent: {
-    gap: 6,
-  },
-  summaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  summaryLabel: {
-    color: UI_COLORS.muted,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    fontSize: 12,
-  },
-  summaryValue: {
-    color: UI_COLORS.text,
-    fontSize: 32,
-    lineHeight: 38,
-    fontWeight: '900',
-  },
-  urgentCard: {
-    borderRadius: KLIR_RADII.card,
+  standardMetricTile: {
     backgroundColor: '#FFFFFF',
+    borderColor: '#EAECF0',
+  },
+  urgentMetricTile: {
+    backgroundColor: '#FFFBFB',
+    borderColor: '#FECACA',
+  },
+  metricTileContent: {
+    padding: 14,
+    gap: 4,
+  },
+  metricLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  urgentMetricLabel: {
+    color: '#991B1B',
+  },
+  metricBigNumber: {
+    fontFamily: INTER_FONT,
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#0F172A',
+    letterSpacing: -0.5,
+    marginVertical: 2,
+  },
+  urgentMetricNumber: {
+    color: '#B5121B',
+  },
+  metricFooterText: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#94A3B8',
+  },
+
+  // Urgent Callout Card
+  urgentCard: {
+    borderRadius: 16,
+    backgroundColor: '#FFFBFB',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderLeftWidth: 4,
-    borderLeftColor: UI_COLORS.danger,
-    ...sharedShadow,
+    borderColor: '#FECACA',
+    marginTop: 2,
   },
   urgentContent: {
+    padding: 16,
     gap: 10,
   },
   urgentHeaderRow: {
@@ -589,76 +748,109 @@ const styles = StyleSheet.create({
     borderColor: '#FECACA',
   },
   priorityAlertTagText: {
+    fontFamily: INTER_FONT,
     fontSize: 10,
     fontWeight: '800',
     color: '#B5121B',
     letterSpacing: 0.5,
   },
   urgentTitle: {
-    color: UI_COLORS.text,
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '900',
+    fontFamily: INTER_FONT,
+    color: '#0F172A',
+    fontSize: 19,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   urgentLocationBreadcrumb: {
-    color: UI_COLORS.muted,
+    fontFamily: INTER_FONT,
+    color: '#64748B',
     fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
+    fontWeight: '600',
+    marginTop: -4,
   },
   urgentMessage: {
-    color: UI_COLORS.text,
-    lineHeight: 22,
-    fontWeight: '600',
-  },
-  urgentActionButton: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: '#B5121B',
-    marginTop: 4,
-  },
-  filterRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  filterPill: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-    borderRadius: KLIR_RADII.chip,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  filterPillActive: {
-    backgroundColor: '#B5121B',
-    borderWidth: 0,
-  },
-  filterPillInactive: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E5E5E5',
-  },
-  filterPillText: {
-    fontSize: 12,
-  },
-  filterPillTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  filterPillTextInactive: {
-    color: '#222222',
+    fontFamily: INTER_FONT,
+    color: '#334155',
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: '500',
   },
+  urgentActionButton: {
+    borderRadius: 12,
+    marginTop: 4,
+  },
+
+  // Segmented Filter Control
+  segmentedContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 3,
+    gap: 4,
+    marginTop: 2,
+  },
+  segmentBtn: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  segmentBtnActive: {
+    backgroundColor: KLIR_COLORS.primary,
+  },
+  segmentBtnFlaggedAlert: {
+    backgroundColor: '#FEF2F2',
+  },
+  segmentBtnFlaggedText: {
+    color: '#DC2626',
+    fontWeight: '800',
+  },
+  segmentBtnText: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+  },
+  segmentBtnTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
+  },
+
+  // Task Cards
   taskCard: {
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
+    borderColor: '#EAECF0',
     overflow: 'hidden',
-    ...sharedShadow,
   },
   cardContent: {
     padding: 16,
-    gap: 12,
+    gap: 10,
+  },
+  flagSnippetCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#FEF2F2',
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    marginTop: 2,
+  },
+  flagSnippetText: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    color: '#991B1B',
+    flex: 1,
+    lineHeight: 16,
+  },
+  flagSnippetBold: {
+    fontWeight: '800',
+    color: '#7F1D1D',
   },
   cardStatusRow: {
     flexDirection: 'row',
@@ -675,7 +867,7 @@ const styles = StyleSheet.create({
   },
   relativeTimeBadge: {
     minHeight: 22,
-    borderRadius: KLIR_RADII.sm,
+    borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
     flexDirection: 'row',
@@ -683,52 +875,53 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#EAECF0',
   },
   relativeTimeText: {
+    fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '600',
-    color: UI_COLORS.muted,
+    color: '#94A3B8',
   },
   cardTitleBlock: {
-    gap: 3,
+    gap: 2,
   },
   cardHeadline: {
-    fontSize: 18,
-    lineHeight: 24,
+    fontFamily: INTER_FONT,
+    fontSize: 17,
     fontWeight: '800',
-    color: UI_COLORS.text,
+    color: '#0F172A',
     letterSpacing: -0.2,
   },
   locationBreadcrumb: {
+    fontFamily: INTER_FONT,
     fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '700',
-    color: UI_COLORS.muted,
+    fontWeight: '600',
+    color: '#64748B',
   },
   noteText: {
-    color: UI_COLORS.text,
-    fontSize: 15,
-    lineHeight: 22,
+    fontFamily: INTER_FONT,
+    color: '#334155',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
   },
   metaRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   cardActions: {
     paddingHorizontal: 16,
     paddingBottom: 16,
-    paddingTop: 0,
+    paddingTop: 4,
   },
   taskActionButton: {
     flex: 1,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.primary,
+    borderRadius: 12,
   },
-  actionButtonContent: {
-    minHeight: 48,
-  },
+
+  // Skeleton Loader
   loadingList: {
     gap: 12,
   },
@@ -736,72 +929,27 @@ const styles = StyleSheet.create({
     height: 138,
     padding: 16,
     gap: 14,
-    borderRadius: KLIR_RADII.card,
-    backgroundColor: UI_COLORS.surface,
+    borderRadius: 16,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: UI_COLORS.border,
+    borderColor: '#EAECF0',
   },
   loadingLineShort: {
     width: '34%',
     height: 18,
     borderRadius: 6,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: '#E2E8F0',
   },
   loadingLineWide: {
     width: '80%',
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#E5E7EB',
-  },
-  titleWrapper: {
-    gap: 4,
-  },
-  shiftPill: {
-    minHeight: 26,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: KLIR_RADII.tag,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  shiftPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
-  },
-  taskCardContent: {
-    padding: 16,
-    gap: 12,
-  },
-  cardHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  timeTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  cardTime: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#666666',
-  },
-  taskActionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
+    backgroundColor: '#E2E8F0',
   },
   loadingLineMid: {
     width: '56%',
     height: 18,
-    borderRadius: 9,
-    backgroundColor: '#E5E7EB',
+    borderRadius: 6,
+    backgroundColor: '#E2E8F0',
   },
 });

@@ -11,7 +11,13 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Divider } from 'react-native-paper';
 
-import { KLIR_COLORS, KLIR_RADII, MetaPill, sharedShadow } from './MaintenanceUI';
+import {
+  KLIR_COLORS,
+  KLIR_RADII,
+  MetaPill,
+  sharedShadow,
+  getInitials,
+} from './MaintenanceUI';
 import { TasksContext } from '../contexts/TasksContext';
 import { useAuth } from '../hooks/useAuth';
 import { useOfflineSync } from '../hooks/useOfflineSync';
@@ -29,13 +35,6 @@ export function ProfileSheetModal({
   const { user, role, logout } = useAuth();
   const { syncing } = useOfflineSync();
   const tasksCtx = useContext(TasksContext);
-
-  const getInitials = (name?: string): string => {
-    if (!name) return 'OP';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
 
   const handleSimulateHardwareAlert = (): void => {
     const fakeTask = tasksCtx?.simulateHardwareFailureAlert?.();
@@ -406,8 +405,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
     borderWidth: 1,
     borderColor: '#FECACA',
-    borderLeftWidth: 4,
-    borderLeftColor: KLIR_COLORS.danger,
     borderRadius: KLIR_RADII.card,
     padding: 12,
     gap: 12,

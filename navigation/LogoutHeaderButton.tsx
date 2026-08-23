@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ActivityIndicator } from 'react-native-paper';
 
-import { KLIR_COLORS } from '../components/MaintenanceUI';
+import { KLIR_COLORS, getInitials } from '../components/MaintenanceUI';
 import { ProfileSheetModal } from '../components/ProfileSheetModal';
 import { useAuth } from '../hooks/useAuth';
 import { useOfflineSync } from '../hooks/useOfflineSync';
@@ -11,13 +11,6 @@ export function ProfileHeaderButton(): React.JSX.Element {
   const { user } = useAuth();
   const { syncing } = useOfflineSync();
   const [modalVisible, setModalVisible] = useState(false);
-
-  const getInitials = (name?: string): string => {
-    if (!name) return 'OP';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
 
   return (
     <>
