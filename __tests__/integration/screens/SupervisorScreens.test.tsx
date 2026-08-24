@@ -28,6 +28,11 @@ jest.mock('../../../lib/supervisor-api', () => {
   };
 });
 jest.mock('../../../hooks/useAuth');
+jest.mock('expo-local-authentication', () => ({
+  hasHardwareAsync: jest.fn().mockResolvedValue(true),
+  isEnrolledAsync: jest.fn().mockResolvedValue(true),
+  authenticateAsync: jest.fn().mockResolvedValue({ success: true }),
+}));
 
 const renderWithSupervisor = (ui: React.ReactElement) => {
   return render(
@@ -218,7 +223,9 @@ describe('Supervisor Screens Integration Suite', () => {
       expect(mockNavigation.navigate).toHaveBeenCalledWith('TeamAvailability');
 
       fireEvent.press(screen.getByText('Completed Tasks'));
-      expect(mockNavigation.navigate).toHaveBeenCalledWith('CompletedReviews');
+      await waitFor(() => {
+        expect(mockNavigation.navigate).toHaveBeenCalledWith('CompletedReviews');
+      });
 
       fireEvent.press(screen.getByText('Reports & Export'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('SupervisorReports');

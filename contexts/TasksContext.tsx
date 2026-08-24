@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   createContext,
   useCallback,
@@ -13,12 +14,72 @@ import { isBroadcastTask, parseTaskDocument } from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
+const TASKS_CACHE_KEY = '@klir:technician_tasks';
+
+function deduplicateTasks(taskList: Task[]): Task[] {
+  const map = new Map<string, Task>();
+  for (const task of taskList) {
+    if (task && task.id) {
+      map.set(task.id, task);
+    }
+  }
+  return Array.from(map.values()).sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
+}
+
+function hydrateCachedTask(raw: any): Task {
+  return {
+    ...raw,
+    createdAt: new Date(raw.createdAt),
+    assignedAt: raw.assignedAt ? new Date(raw.assignedAt) : null,
+    acknowledgedAt: raw.acknowledgedAt ? new Date(raw.acknowledgedAt) : null,
+    completedAt: raw.completedAt ? new Date(raw.completedAt) : null,
+    beforePhotoCapturedAt: raw.beforePhotoCapturedAt
+      ? new Date(raw.beforePhotoCapturedAt)
+      : null,
+    afterPhotoCapturedAt: raw.afterPhotoCapturedAt
+      ? new Date(raw.afterPhotoCapturedAt)
+      : null,
+  };
+}
 
 export function TasksProvider({ children }: PropsWithChildren): React.JSX.Element {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // 1. Instant 0ms cache hydration on initial mount
+  useEffect(() => {
+    let isMounted = true;
+    void (async () => {
+      try {
+        const cached = await AsyncStorage.getItem(TASKS_CACHE_KEY);
+        if (cached && isMounted) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTasks(deduplicateTasks(parsed.map(hydrateCachedTask)));
+            setLoading(false);
+          }
+        }
+      } catch (err) {
+        console.warn('[TasksContext] Cache hydration warning:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const saveCache = useCallback((nextTasks: Task[]) => {
+    try {
+      void AsyncStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(nextTasks));
+    } catch {
+      // ignore cache write failures
+    }
+  }, []);
 
   const refreshTasks = useCallback(async (): Promise<void> => {
     if (!user) {
@@ -30,18 +91,20 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
     try {
       const apiTasks = await fetchTasks();
-      setTasks(apiTasks);
+      const deduped = deduplicateTasks(apiTasks);
+      setTasks(deduped);
+      saveCache(deduped);
       setErrorMessage(null);
     } catch (error) {
       const message =
         error instanceof Error
           ? `Unable to refresh maintenance tasks: ${error.message}`
-          : 'Unable to refresh maintenance tasks. Check your connection and try again.';
+          : 'Unable to refresh maintenance tasks.';
       setErrorMessage(message);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [saveCache, user]);
 
   useEffect(() => {
     if (!user) {
@@ -51,7 +114,13 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       return undefined;
     }
 
-    setLoading(true);
+    // Only set loading to true on cold boot with empty tasks to prevent screen flashing
+    setTasks((prev) => {
+      if (prev.length === 0) {
+        setLoading(true);
+      }
+      return prev;
+    });
     setErrorMessage(null);
 
     void refreshTasks();
@@ -66,9 +135,10 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
               if (snapshot && !snapshot.empty) {
                 const parsed = snapshot.docs
                   .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
-                  .filter((task): task is Task => task !== null)
-                  .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-                setTasks(parsed);
+                  .filter((task): task is Task => task !== null);
+                const deduped = deduplicateTasks(parsed);
+                setTasks(deduped);
+                saveCache(deduped);
                 setLoading(false);
                 setErrorMessage(null);
               } else if (snapshot && snapshot.empty) {
@@ -96,15 +166,14 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       }
       clearInterval(intervalId);
     };
-  }, [refreshTasks, user]);
+  }, [refreshTasks, saveCache, user]);
 
   const inboxTasks = tasks.filter(
     (task) =>
-      (task.status !== 'completed' || task.inspectionStatus === 'flagged') &&
+      task.status !== 'completed' &&
       (task.status === 'unassigned' ||
         task.status === 'reassignment_needed' ||
         task.status === 'flagged' ||
-        task.inspectionStatus === 'flagged' ||
         task.assignedTo === user?.uid ||
         task.assignedTo === user?.email ||
         (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
@@ -131,35 +200,6 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       task.status === 'reassignment_needed',
   ).length;
 
-  const simulateHardwareFailureAlert = useCallback((): Task => {
-    const fakeAlertTask: Task = {
-      id: `task-hw-${Date.now()}`,
-      deviceId: 'toilet-01',
-      restroomName: 'Restroom 2',
-      location: 'Ground Floor Male Restroom',
-      floor: 'Ground',
-      building: 'GB3 Building',
-      component: 'flush_valve',
-      triggerType: 'hardware_failure',
-      status: 'assigned',
-      message: 'CRITICAL HARDWARE ALERT: Continuous water running detected in flush valve (Critical Flow Leak).',
-      assignedTo: user?.uid ?? null,
-      createdAt: new Date(),
-      assignedAt: new Date(),
-      acknowledgedAt: null,
-      completedAt: null,
-      completedBy: null,
-      beforePhotoUrl: null,
-      afterPhotoUrl: null,
-      type: 'maintenance',
-      shift: '1st',
-      createdBy: 'system_iot',
-    };
-
-    setTasks((prev) => [fakeAlertTask, ...prev]);
-    return fakeAlertTask;
-  }, [user]);
-
   return (
     <TasksContext.Provider
       value={{
@@ -171,7 +211,6 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         errorMessage,
         refreshTasks,
         clearError: () => setErrorMessage(null),
-        simulateHardwareFailureAlert,
       }}
     >
       {children}

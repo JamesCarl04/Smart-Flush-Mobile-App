@@ -181,7 +181,7 @@ describe('InboxScreen Integration', () => {
     expect(screen.getByText('Glass streaks flagged by inspector')).toBeTruthy();
 
     // Select 'Active' filter
-    const activeChip = screen.getByText('Active (3)');
+    const activeChip = screen.getByText('Active (2)');
     fireEvent.press(activeChip);
 
     expect(screen.getByText('Continuous water running detected in flush valve')).toBeTruthy();

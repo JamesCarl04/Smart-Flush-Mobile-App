@@ -9,6 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { FirebaseError } from 'firebase/app';
 import { signInWithEmailAndPassword } from '@react-native-firebase/auth';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -23,6 +24,8 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { auth } from '../lib/firebase';
 import type { AuthStackParamList } from '../types';
+
+const BIOMETRIC_VAULT_KEY = '@klir:biometric_vault';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -68,6 +71,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const [submitting, setSubmitting] = useState(false);
   const [awaitingRoleValidation, setAwaitingRoleValidation] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometrics');
 
   useEffect(() => {
@@ -75,6 +79,20 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       try {
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        const saved = await AsyncStorage.getItem(BIOMETRIC_VAULT_KEY);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved) as { email?: string; password?: string };
+            if (parsed.email && parsed.password) {
+              setHasSavedCredentials(true);
+              setEmail(parsed.email);
+            }
+          } catch {
+            // ignore parsing error
+          }
+        }
+
         if (hasHardware && isEnrolled) {
           setBiometricsAvailable(true);
           const types =
@@ -85,6 +103,12 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             )
           ) {
             setBiometricType('Face ID');
+          } else if (
+            types.includes(
+              LocalAuthentication.AuthenticationType.FINGERPRINT,
+            )
+          ) {
+            setBiometricType('Fingerprint');
           } else {
             setBiometricType('Biometrics');
           }
@@ -128,6 +152,14 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       setErrorMessage(null);
       setSubmitting(true);
       await signInWithEmailAndPassword(auth, email.trim(), password);
+
+      // Save credentials into secure local vault for seamless biometric login
+      await AsyncStorage.setItem(
+        BIOMETRIC_VAULT_KEY,
+        JSON.stringify({ email: email.trim(), password }),
+      );
+      setHasSavedCredentials(true);
+
       setAwaitingRoleValidation(true);
     } catch (error) {
       setSubmitting(false);
@@ -139,21 +171,42 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const handleBiometricQuickResume = async (): Promise<void> => {
     try {
       setErrorMessage(null);
+
+      const saved = await AsyncStorage.getItem(BIOMETRIC_VAULT_KEY);
+      if (!saved) {
+        setErrorMessage(
+          'Please sign in with your email and password first to enable biometric login.',
+        );
+        return;
+      }
+
+      let parsed: { email?: string; password?: string } | null = null;
+      try {
+        parsed = JSON.parse(saved) as { email?: string; password?: string };
+      } catch {
+        parsed = null;
+      }
+
+      if (!parsed?.email || !parsed?.password) {
+        setErrorMessage(
+          'Please sign in with your email and password first to enable biometric login.',
+        );
+        return;
+      }
+
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Verify identity to resume Klir session',
+        promptMessage: `Verify identity to unlock Klir Facility Ops`,
         fallbackLabel: 'Use Password',
       });
 
       if (result.success) {
-        if (auth.currentUser) {
-          setAwaitingRoleValidation(true);
-        } else {
-          setErrorMessage(
-            'No active session found. Please sign in with your email and password first.',
-          );
-        }
+        setSubmitting(true);
+        await signInWithEmailAndPassword(auth, parsed.email, parsed.password);
+        setAwaitingRoleValidation(true);
       }
     } catch {
+      setSubmitting(false);
+      setAwaitingRoleValidation(false);
       setErrorMessage('Biometric verification failed. Please sign in manually.');
     }
   };
@@ -256,7 +309,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
               {biometricsAvailable ? (
                 <KlirButton
-                  title={`Quick Resume with ${biometricType}`}
+                  title={hasSavedCredentials ? `Unlock with ${biometricType}` : `Sign in with ${biometricType}`}
                   variant="secondary"
                   icon="fingerprint"
                   disabled={isBusy}

@@ -35,19 +35,6 @@ export function ProfileSheetModal({
 }: ProfileSheetModalProps): React.JSX.Element {
   const { user, role, logout } = useAuth();
   const { syncing } = useOfflineSync();
-  const tasksCtx = useContext(TasksContext);
-
-  const handleSimulateHardwareAlert = (): void => {
-    const fakeTask = tasksCtx?.simulateHardwareFailureAlert?.();
-    if (fakeTask) {
-      emitLocalNotification({
-        title: 'Hardware Failure: Restroom 2 • toilet-01',
-        body: 'Continuous water running detected in flush valve (Critical Flow Leak).',
-        taskId: fakeTask.id,
-      });
-    }
-    onDismiss();
-  };
 
   const handleLogout = (): void => {
     Alert.alert(
@@ -209,44 +196,6 @@ export function ProfileSheetModal({
                   </View>
                 </View>
               </View>
-
-              {/* QA / Diagnostics Simulation Section (Maintenance only) */}
-              {role !== 'supervisor' ? (
-                <>
-                  <Divider style={styles.divider} />
-                  <View style={styles.simulationSection}>
-                    <Text style={styles.simulationHeader}>SYSTEM SIMULATOR</Text>
-                    <TouchableOpacity
-                      onPress={handleSimulateHardwareAlert}
-                      style={styles.simulateAlertCard}
-                      activeOpacity={0.8}
-                      accessibilityRole="button"
-                      accessibilityLabel="Simulate Hardware Failure Alert"
-                    >
-                      <View style={styles.simulateIconBox}>
-                        <MaterialCommunityIcons
-                          name="alert-decagram"
-                          size={22}
-                          color="#B5121B"
-                        />
-                      </View>
-                      <View style={styles.simulateTextBox}>
-                        <Text style={styles.simulateTitle}>
-                          Test Hardware Alert
-                        </Text>
-                        <Text style={styles.simulateSubtitle}>
-                          Fires top push banner & creates urgent priority card
-                        </Text>
-                      </View>
-                      <MaterialCommunityIcons
-                        name="chevron-right"
-                        size={20}
-                        color="#B5121B"
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </>
-              ) : null}
 
               <Divider style={styles.divider} />
 

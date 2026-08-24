@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase/firestore';
 
 import type {
+  AreaPhoto,
   ChecklistValue,
   Task,
   TaskChecklist,
@@ -45,6 +46,7 @@ type TaskDocumentShape = {
   beforePhotoCapturedAt?: FirestoreDateValue;
   afterPhotoUrl?: unknown;
   afterPhotoCapturedAt?: FirestoreDateValue;
+  additionalPhotos?: unknown;
   biometricVerified?: unknown;
   offlineSynced?: unknown;
   reassignCount?: unknown;
@@ -88,6 +90,25 @@ function parseTimestampMap(value: unknown): Record<string, Date> {
   return result;
 }
 
+function parseAreaPhotos(value: unknown): AreaPhoto[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== 'object') return null;
+      const photoUrl = stringOrNull(item.photoUrl);
+      if (!photoUrl) return null;
+      return {
+        id: typeof item.id === 'string' ? item.id : `photo_${index}`,
+        areaTag: typeof item.areaTag === 'string' ? item.areaTag : 'Other Area',
+        photoUrl,
+        capturedAt: toDate(item.capturedAt as FirestoreDateValue) ?? new Date(),
+      };
+    })
+    .filter((p): p is AreaPhoto => p !== null);
+}
+
 function parseSubmissions(value: unknown): Record<string, TaskSubmission> {
   if (!value || typeof value !== 'object') {
     return {};
@@ -105,6 +126,7 @@ function parseSubmissions(value: unknown): Record<string, TaskSubmission> {
       beforePhotoCapturedAt: toDate(sub.beforePhotoCapturedAt as FirestoreDateValue),
       afterPhotoUrl: stringOrNull(sub.afterPhotoUrl),
       afterPhotoCapturedAt: toDate(sub.afterPhotoCapturedAt as FirestoreDateValue),
+      additionalPhotos: parseAreaPhotos(sub.additionalPhotos),
       remarks: typeof sub.remarks === 'string' ? sub.remarks : '',
       workDuration: numberOrNull(sub.workDuration),
       completedAt,
@@ -530,6 +552,7 @@ export function parseTaskDocument(
     beforePhotoCapturedAt: toDate(data.beforePhotoCapturedAt),
     afterPhotoUrl: stringOrNull(data.afterPhotoUrl),
     afterPhotoCapturedAt: toDate(data.afterPhotoCapturedAt),
+    additionalPhotos: parseAreaPhotos(data.additionalPhotos),
     biometricVerified: data.biometricVerified === true,
     offlineSynced: data.offlineSynced === true,
     completedBy,

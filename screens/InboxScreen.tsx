@@ -52,12 +52,30 @@ function formatRelativeTime(date: Date): string {
   return `${diffDays}d ago`;
 }
 
-function EmptyState(): React.JSX.Element {
+function EmptyState({ activeFilter }: { activeFilter?: InboxFilter }): React.JSX.Element {
   return (
     <EmptyOperationState
-      icon="shield-check-outline"
-      title="No pending tasks"
-      body="You are all caught up for now. New restroom alerts will appear here as soon as the IoT system assigns them to you."
+      icon={
+        activeFilter === 'flagged'
+          ? 'flag-outline'
+          : activeFilter === 'active'
+            ? 'progress-clock'
+            : 'shield-check-outline'
+      }
+      title={
+        activeFilter === 'flagged'
+          ? 'No flagged tasks'
+          : activeFilter === 'active'
+            ? 'No active tasks'
+            : 'No pending tasks'
+      }
+      body={
+        activeFilter === 'flagged'
+          ? 'All tasks have passed supervisor QA inspection.'
+          : activeFilter === 'active'
+            ? 'You currently have no tasks in progress.'
+            : 'You are all caught up for now. New restroom alerts will appear here as soon as the IoT system assigns them to you.'
+      }
     />
   );
 }
@@ -94,20 +112,30 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
 
   const flaggedTasksList = useMemo(() => {
     return inboxTasks.filter(
-      (task) => task.status === 'flagged' || task.inspectionStatus === 'flagged',
+      (task) => task.status === 'flagged',
     );
   }, [inboxTasks]);
 
   const activeTasksList = useMemo(() => {
-    return inboxTasks.filter(
-      (task) =>
-        task.status === 'assigned' ||
-        task.status === 'acknowledged' ||
-        task.status === 'rechecking' ||
-        task.status === 'unassigned' ||
-        task.status === 'reassignment_needed',
-    );
-  }, [inboxTasks]);
+    return inboxTasks.filter((task) => {
+      // Tasks currently in progress by this technician
+      if (task.status === 'acknowledged' || task.status === 'rechecking') {
+        return true;
+      }
+
+      // Tasks assigned directly to this technician
+      const isAssignedToMe =
+        task.assignedTo === user?.uid ||
+        task.assignedTo === user?.email ||
+        (Array.isArray(task.assignedToIds) && task.assignedToIds.includes(user?.uid ?? ''));
+
+      if (task.status === 'assigned' && isAssignedToMe) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [inboxTasks, user?.uid, user?.email]);
 
   const priorityTask =
     inboxTasks.find((task) => getTaskPriority(task) === 'critical') ??
@@ -419,7 +447,13 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             </View>
           </View>
         }
-        ListEmptyComponent={loading ? <LoadingCards /> : <EmptyState />}
+        ListEmptyComponent={
+          loading && visibleTasks.length === 0 ? (
+            <LoadingCards />
+          ) : (
+            <EmptyState activeFilter={activeFilter} />
+          )
+        }
         renderItem={({ item }) => (
           <Card
             mode="elevated"

@@ -19,6 +19,13 @@ export interface CompletionBundle {
   offlineSynced: false;
 }
 
+export interface AreaPhotoInput {
+  id: string;
+  areaTag: string;
+  localUri: string;
+  capturedAt: Date;
+}
+
 export interface OnlineCompletionInput {
   taskId: string;
   acknowledgedAt: Date | null;
@@ -29,6 +36,7 @@ export interface OnlineCompletionInput {
   beforePhotoCapturedAt: Date;
   afterPhotoLocalUri: string;
   afterPhotoCapturedAt: Date;
+  additionalPhotos?: AreaPhotoInput[];
   biometricVerified: boolean;
   completedAt: Date;
   completedBy: string;
@@ -99,7 +107,7 @@ export async function uploadTaskPhoto(
 }
 
 export async function completeTaskOnline(input: OnlineCompletionInput): Promise<void> {
-  const [beforePhotoUrl, afterPhotoUrl] = await Promise.all([
+  const [beforePhotoUrl, afterPhotoUrl, additionalUploadedPhotos] = await Promise.all([
     uploadTaskPhoto(
       input.taskId,
       input.beforePhotoLocalUri,
@@ -111,6 +119,22 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       input.afterPhotoLocalUri,
       'after',
       input.afterPhotoCapturedAt,
+    ),
+    Promise.all(
+      (input.additionalPhotos || []).map(async (photo) => {
+        const photoUrl = await uploadTaskPhoto(
+          input.taskId,
+          photo.localUri,
+          `area_${photo.id}` as any,
+          photo.capturedAt,
+        );
+        return {
+          id: photo.id,
+          areaTag: photo.areaTag,
+          photoUrl,
+          capturedAt: firestore.Timestamp.fromDate(photo.capturedAt),
+        };
+      }),
     ),
   ]);
   const workDuration = secondsBetween(input.acknowledgedAt, input.completedAt);
@@ -128,6 +152,7 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       beforePhotoCapturedAt: firestore.Timestamp.fromDate(input.beforePhotoCapturedAt),
       afterPhotoUrl,
       afterPhotoCapturedAt: firestore.Timestamp.fromDate(input.afterPhotoCapturedAt),
+      additionalPhotos: additionalUploadedPhotos,
       remarks: input.remarks,
       workDuration,
       completedAt: firestore.Timestamp.fromDate(input.completedAt),
@@ -138,6 +163,30 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
         : null,
     };
 
+    let isFullyCompleted = true;
+    try {
+      const currentTaskDoc = await db.collection('tasks').doc(input.taskId).get();
+      const exists =
+        typeof (currentTaskDoc as any).exists === 'function'
+          ? (currentTaskDoc as any).exists()
+          : Boolean((currentTaskDoc as any).exists);
+      if (exists) {
+        const currentData = (currentTaskDoc.data() as Record<string, any>) || {};
+        const assignedToIds = Array.isArray(currentData.assignedToIds) ? currentData.assignedToIds : [];
+        if (assignedToIds.length > 1) {
+          const completedByMap = currentData.completedBy && typeof currentData.completedBy === 'object'
+            ? currentData.completedBy
+            : {};
+          const completedCount = assignedToIds.filter(
+            (id: string) => id === input.completedBy || Boolean(completedByMap[id]),
+          ).length;
+          isFullyCompleted = completedCount >= assignedToIds.length;
+        }
+      }
+    } catch {
+      isFullyCompleted = true;
+    }
+
     const updatePayload: Record<string, unknown> = {
       checklist: input.checklist,
       remarks: input.remarks,
@@ -145,12 +194,17 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       beforePhotoCapturedAt: firestore.Timestamp.fromDate(input.beforePhotoCapturedAt),
       afterPhotoUrl,
       afterPhotoCapturedAt: firestore.Timestamp.fromDate(input.afterPhotoCapturedAt),
+      additionalPhotos: additionalUploadedPhotos,
       biometricVerified: input.biometricVerified,
       offlineSynced: false,
-      status: 'completed',
-      inspectionStatus: 'pending_review',
-      completedAt: firestore.Timestamp.fromDate(input.completedAt),
-      completedBy: input.completedBy,
+      status: isFullyCompleted ? 'completed' : 'acknowledged',
+      ...(isFullyCompleted
+        ? {
+            inspectionStatus: 'pending_review',
+            completedAt: firestore.Timestamp.fromDate(input.completedAt),
+            completedBy: input.completedBy,
+          }
+        : {}),
       [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt),
       [`submissions.${input.completedBy}`]: submissionPayload,
       assignedTo: input.completedBy,

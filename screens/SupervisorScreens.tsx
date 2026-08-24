@@ -42,11 +42,13 @@ import {
   statusTone,
 } from '../components/MaintenanceUI';
 import * as ImagePicker from 'expo-image-picker';
+import * as LocalAuthentication from 'expo-local-authentication';
+import { signInWithEmailAndPassword } from '@react-native-firebase/auth';
 import { ImageViewerModal } from '../components/ImageViewerModal';
 import { KlirButton } from '../components/KlirButton';
 import { useAuth } from '../hooks/useAuth';
 import { useSupervisorContext } from '../contexts/SupervisorContext';
-import { db } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import {
   approveTask,
   fetchMaintenancePersonnel,
@@ -205,6 +207,57 @@ export function SupervisorDashboardScreen({
       offline: offlineCount,
     };
   }, [visiblePeople, tasks]);
+
+  const [authDialogVisible, setAuthDialogVisible] = useState(false);
+  const [authPassword, setAuthPassword] = useState('');
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authVerifying, setAuthVerifying] = useState(false);
+
+  const handleAccessCompletedTasks = async (): Promise<void> => {
+    try {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+      if (hasHardware && isEnrolled) {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Verify supervisor identity to access QA records',
+          fallbackLabel: 'Use Password',
+        });
+
+        if (result.success) {
+          navigation.navigate('CompletedReviews');
+          return;
+        }
+      }
+    } catch {
+      // Fall through to password modal
+    }
+
+    setAuthError(null);
+    setAuthPassword('');
+    setAuthDialogVisible(true);
+  };
+
+  const handleVerifyPassword = async (): Promise<void> => {
+    if (!authPassword.trim() || !user?.email) {
+      setAuthError('Please enter your supervisor password.');
+      return;
+    }
+
+    setAuthVerifying(true);
+    setAuthError(null);
+    try {
+      await signInWithEmailAndPassword(auth, user.email, authPassword);
+      setAuthDialogVisible(false);
+      setAuthPassword('');
+      navigation.navigate('CompletedReviews');
+    } catch {
+      setAuthError('Incorrect supervisor password. Please try again.');
+    } finally {
+      setAuthVerifying(false);
+    }
+  };
 
   const isColdLoading = loading && tasks.length === 0;
 
@@ -374,10 +427,10 @@ export function SupervisorDashboardScreen({
 
           <View style={styles.menuDivider} />
 
-          {/* Row 3: Review Completed Tasks */}
+          {/* Row 3: Review Completed Tasks (Biometric & Password Protected) */}
           <TouchableOpacity
             style={styles.menuRow}
-            onPress={() => navigation.navigate('CompletedReviews')}
+            onPress={() => void handleAccessCompletedTasks()}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Completed Tasks"
@@ -436,6 +489,87 @@ export function SupervisorDashboardScreen({
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Supervisor Biometric / Password Security Gate Modal */}
+      <Portal>
+        <Dialog
+          visible={authDialogVisible}
+          onDismiss={() => {
+            if (!authVerifying) {
+              setAuthDialogVisible(false);
+              setAuthPassword('');
+              setAuthError(null);
+            }
+          }}
+          style={{ backgroundColor: '#FFFFFF', borderRadius: 16 }}
+        >
+          <Dialog.Title style={{ fontWeight: '800', color: '#0F172A', fontSize: 18 }}>
+            Supervisor Authentication
+          </Dialog.Title>
+          <Dialog.Content style={{ gap: 12 }}>
+            <Text style={{ color: '#64748B', fontSize: 13 }}>
+              Enter your password to unlock Completed Tasks & QA Inspection Records.
+            </Text>
+
+            {authError ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: 8,
+                  backgroundColor: '#FEE2E2',
+                  borderRadius: 8,
+                }}
+              >
+                <MaterialCommunityIcons name="alert-circle" size={16} color={KLIR_COLORS.danger} />
+                <Text style={{ color: KLIR_COLORS.danger, fontSize: 12, flex: 1 }}>{authError}</Text>
+              </View>
+            ) : null}
+
+            <TextInput
+              label="Supervisor Password"
+              value={authPassword}
+              mode="outlined"
+              secureTextEntry={!showAuthPassword}
+              onChangeText={setAuthPassword}
+              disabled={authVerifying}
+              right={
+                <TextInput.Icon
+                  icon={showAuthPassword ? 'eye-off-outline' : 'eye-outline'}
+                  onPress={() => setShowAuthPassword((prev) => !prev)}
+                />
+              }
+              outlineColor="#CBD5E1"
+              activeOutlineColor={KLIR_COLORS.primary}
+              style={{ backgroundColor: '#FFFFFF' }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions style={{ paddingHorizontal: 16, paddingBottom: 16, gap: 8 }}>
+            <Button
+              mode="text"
+              onPress={() => {
+                setAuthDialogVisible(false);
+                setAuthPassword('');
+                setAuthError(null);
+              }}
+              disabled={authVerifying}
+              textColor="#64748B"
+            >
+              Cancel
+            </Button>
+            <Button
+              mode="contained"
+              onPress={() => void handleVerifyPassword()}
+              loading={authVerifying}
+              disabled={authVerifying || !authPassword.trim()}
+              buttonColor={KLIR_COLORS.primary}
+            >
+              Unlock
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
 
       <Snackbar visible={error !== null} onDismiss={clearError}>
         {error ?? ''}
@@ -981,60 +1115,94 @@ export function SupervisorTaskDetailScreen({
           </Card.Content>
         </Card>
 
-        {/* Reassignment Selector Card */}
-        <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
-          <Card.Content style={styles.cardContent}>
-            <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-              Select Team Member
-            </Text>
-            <RadioButton.Group onValueChange={setAssignee} value={assignee}>
-              {(availablePeople.length > 0 ? availablePeople : people).map((person) => {
-                const isSelected = assignee === person.id;
-                return (
-                  <TouchableOpacity
-                    key={person.id}
-                    style={[
-                      styles.technicianSelectRow,
-                      isSelected && styles.technicianSelectRowActive,
-                    ]}
-                    onPress={() => setAssignee(person.id)}
-                    accessible={true}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={cleanPersonName(person.displayName)}
-                  >
-                    <RadioButton.Item
-                      label={cleanPersonName(person.displayName)}
-                      value={person.id}
-                      color={KLIR_COLORS.primary}
-                      labelStyle={styles.radioLabel}
-                      style={{ paddingHorizontal: 0, paddingVertical: 4 }}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </RadioButton.Group>
+        {/* Reassignment / Lock Status Card */}
+        {task.status === 'acknowledged' || task.status === 'rechecking' ? (
+          <Card mode="elevated" style={[styles.personCard, styles.cardElevation, { borderColor: '#E2E8F0', borderWidth: 1 }]}>
+            <Card.Content style={styles.cardContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}>
+                <MaterialCommunityIcons name="lock-outline" size={24} color={KLIR_COLORS.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '700', color: '#1E293B', fontSize: 15 }}>
+                    Reassignment Locked
+                  </Text>
+                  <Text style={{ color: '#64748B', fontSize: 13, marginTop: 2 }}>
+                    Work is actively in progress on-site by {getAssigneeName(task.assignedTo, people, task)}.
+                  </Text>
+                </View>
+              </View>
+            </Card.Content>
+          </Card>
+        ) : task.status === 'completed' ? (
+          <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
+            <Card.Content style={styles.cardContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}>
+                <MaterialCommunityIcons name="check-circle-outline" size={24} color="#16A34A" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '700', color: '#1E293B', fontSize: 15 }}>
+                    Task Completed
+                  </Text>
+                  <Text style={{ color: '#64748B', fontSize: 13, marginTop: 2 }}>
+                    This work order has already been completed and cannot be reassigned.
+                  </Text>
+                </View>
+              </View>
+            </Card.Content>
+          </Card>
+        ) : (
+          <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
+            <Card.Content style={styles.cardContent}>
+              <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                Select Team Member
+              </Text>
+              <RadioButton.Group onValueChange={setAssignee} value={assignee}>
+                {(availablePeople.length > 0 ? availablePeople : people).map((person) => {
+                  const isSelected = assignee === person.id;
+                  return (
+                    <TouchableOpacity
+                      key={person.id}
+                      style={[
+                        styles.technicianSelectRow,
+                        isSelected && styles.technicianSelectRowActive,
+                      ]}
+                      onPress={() => setAssignee(person.id)}
+                      accessible={true}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: isSelected }}
+                      accessibilityLabel={cleanPersonName(person.displayName)}
+                    >
+                      <RadioButton.Item
+                        label={cleanPersonName(person.displayName)}
+                        value={person.id}
+                        color={KLIR_COLORS.primary}
+                        labelStyle={styles.radioLabel}
+                        style={{ paddingHorizontal: 0, paddingVertical: 4 }}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+              </RadioButton.Group>
 
-            <TextInput
-              label="Reason"
-              value={reason}
-              onChangeText={setReason}
-              mode="outlined"
-              outlineColor="#CBD5E1"
-              activeOutlineColor={KLIR_COLORS.primary}
-              style={styles.reasonInput}
-            />
+              <TextInput
+                label="Reason"
+                value={reason}
+                onChangeText={setReason}
+                mode="outlined"
+                outlineColor="#CBD5E1"
+                activeOutlineColor={KLIR_COLORS.primary}
+                style={styles.reasonInput}
+              />
 
-            <KlirButton
-              title="Reassign Task"
-              variant="primary"
-              loading={submitting}
-              disabled={!assignee || submitting}
-              onPress={() => void submit()}
-              style={[styles.reassignButton, styles.cardElevation]}
-            />
-          </Card.Content>
-        </Card>
+              <KlirButton
+                title="Reassign Task"
+                variant="primary"
+                loading={submitting}
+                disabled={!assignee || submitting}
+                onPress={() => void submit()}
+                style={[styles.reassignButton, styles.cardElevation]}
+              />
+            </Card.Content>
+          </Card>
+        )}
       </ScrollView>
 
       <Snackbar
@@ -1541,6 +1709,56 @@ export function CompletedReviewDetailScreen({
             </View>
           )}
         </View>
+
+        {/* Additional Area Photos Carousel */}
+        {((activeSubmission?.additionalPhotos && activeSubmission.additionalPhotos.length > 0) ||
+          (task.additionalPhotos && task.additionalPhotos.length > 0)) ? (
+          <Card mode="elevated" style={[styles.personCard, styles.cardElevation, { marginTop: 12 }]}>
+            <Card.Content style={styles.cardContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <MaterialCommunityIcons name="camera-burst" size={18} color={KLIR_COLORS.primary} />
+                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                  Additional Area Proofs
+                </Text>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
+                {(activeSubmission?.additionalPhotos || task.additionalPhotos || []).map((areaPhoto) => (
+                  <TouchableOpacity
+                    key={areaPhoto.id}
+                    onPress={() => setSelectedViewerPhoto(areaPhoto.photoUrl)}
+                    style={{
+                      width: 140,
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      borderWidth: 1,
+                      borderColor: '#CBD5E1',
+                      backgroundColor: '#FFFFFF',
+                    }}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${areaPhoto.areaTag} photo`}
+                  >
+                    <Image source={{ uri: areaPhoto.photoUrl }} style={{ width: 140, height: 100 }} />
+                    <View
+                      style={{
+                        padding: 6,
+                        backgroundColor: '#0F172A',
+                        flexDirection: 'row',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+                        {areaPhoto.areaTag}
+                      </Text>
+                      <MaterialCommunityIcons name="magnify-plus" size={12} color="#FFFFFF" />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </Card.Content>
+          </Card>
+        ) : null}
 
         {/* Checklist & Audit Metrics */}
         <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>

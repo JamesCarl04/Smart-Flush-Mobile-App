@@ -496,6 +496,26 @@ export function TaskDetailScreen({
     }
   };
 
+  const handleCheckAllAsDone = (): void => {
+    const allDone: TaskChecklist = {
+      removeCeilingDust: 'done',
+      removeWallDust: 'done',
+      removeLightBulbDust: 'done',
+      cleanWindows: 'done',
+      wipeDownFixtures: 'done',
+      disinfectTouchedSurfaces: 'done',
+      sweepAndDryFloors: 'done',
+      emptyTrashBins: 'done',
+      arrangeFixtures: 'done',
+      disinfectUVLights: 'done',
+    };
+    setChecklist(allDone);
+  };
+
+  const handleResetChecklist = (): void => {
+    setChecklist({ ...EMPTY_CHECKLIST });
+  };
+
   const captureAfterPhoto = async (): Promise<void> => {
     if (!checklistComplete(checklist)) {
       setSnackbarMessage(
@@ -925,6 +945,25 @@ export function TaskDetailScreen({
                 color={KLIR_COLORS.primary}
                 style={styles.progressBar}
               />
+
+              {/* 1-Tap Quick Action Button */}
+              <View style={{ marginTop: 10, marginBottom: 8 }}>
+                {CHECKLIST_LABELS.filter((item) => checklist[item.key] === 'done' || checklist[item.key] === 'na').length === 10 ? (
+                  <KlirButton
+                    title="Reset All Items"
+                    variant="outline"
+                    onPress={handleResetChecklist}
+                    icon="refresh"
+                  />
+                ) : (
+                  <KlirButton
+                    title="Check All as Done (1-Tap)"
+                    variant="primary"
+                    onPress={handleCheckAllAsDone}
+                    icon="check-all"
+                  />
+                )}
+              </View>
 
               {/* Chunked Categories */}
               {CHECKLIST_CATEGORIES.map((category) => (

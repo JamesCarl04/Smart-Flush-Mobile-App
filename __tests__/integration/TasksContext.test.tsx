@@ -3,6 +3,8 @@ import { Button, Text, View } from 'react-native';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { TasksProvider } from '../../contexts/TasksContext';
 import { useTasks } from '../../hooks/useTasks';
 import * as taskApi from '../../lib/task-api';
@@ -156,8 +158,9 @@ const mockTasksData: Task[] = [
 ];
 
 describe('TasksContext Integration', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await AsyncStorage.clear();
     (useAuthHook.useAuth as jest.Mock).mockReturnValue({
       user: {
         uid: 'user-tech-1',

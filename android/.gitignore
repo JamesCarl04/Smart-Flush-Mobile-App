@@ -8,10 +8,10 @@ build/
 .idea
 .gradle
 local.properties
-app/debug.keystore
 *.iml
 *.hprof
 .cxx/
 
 # Bundle artifacts
 *.jsbundle
+*.keystore

@@ -7,6 +7,7 @@
 [![Expo](https://img.shields.io/badge/Expo%20SDK-54.0-black.svg?logo=expo)](https://expo.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20FCM-orange.svg?logo=firebase)](https://firebase.google.com/)
+[![Jest Tests](https://img.shields.io/badge/Tests-19%20Suites%20%7C%20149%20Passed-brightgreen.svg?logo=jest)](#-testing--qa-verification)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](#)
 
 ---
@@ -14,45 +15,112 @@
 ## 📌 Table of Contents
 
 1. [Executive Summary](#-executive-summary)
-2. [Facility Master Mapping (SDCA Annex)](#-facility-master-mapping-sdca-annex)
-3. [Dual-Role Architecture](#-dual-role-architecture)
-   - [Facility Supervisor (Operations Hub)](#1-facility-supervisor-operations-hub)
-   - [Maintenance Technician (Task Workspace)](#2-maintenance-technician-task-workspace)
-4. [The 30-Second Cleaning Execution Workflow](#-the-30-second-cleaning-execution-workflow)
-5. [Real-Time Availability Engine (3-State Logic)](#-real-time-availability-engine-3-state-logic)
-6. [Offline-First Sync & SQLite Architecture](#-offline-first-sync--sqlite-architecture)
-7. [Push Notifications & Role-Aware Deep Linking](#-push-notifications--role-aware-deep-linking)
-8. [Live User Directory & Permissions](#-live-user-directory--permissions)
-9. [Project Setup & Installation](#-project-setup--installation)
-10. [Build & Verification Scripts](#-build--verification-scripts)
-11. [Troubleshooting & FAQs](#-troubleshooting--faqs)
+2. [End-to-End System Architecture](#-end-to-end-system-architecture)
+3. [The 11 Delivered Production Modules](#-the-11-delivered-production-modules)
+4. [Facility Master Mapping (SDCA Annex 19 Restrooms)](#-facility-master-mapping-sdca-annex-19-restrooms)
+5. [Dual-Role System & Access Matrix](#-dual-role-system--access-matrix)
+6. [3-Step Maintenance Execution & Multi-Area Proofs](#-3-step-maintenance-execution--multi-area-proofs)
+7. [Supervisor Command Hub & Inspection Review](#-supervisor-command-hub--inspection-review)
+8. [Biometric Vault & Hardware Security Gate](#-biometric-vault--hardware-security-gate)
+9. [Offline-First Sync & Smart Compression Pipeline](#-offline-first-sync--smart-compression-pipeline)
+10. [Live User Directory & Credentials](#-live-user-directory--credentials)
+11. [Project Setup & Installation](#-project-setup--installation)
+12. [Testing & QA Verification](#-testing--qa-verification)
+13. [Troubleshooting & FAQs](#-troubleshooting--faqs)
 
 ---
 
 ## 🏢 Executive Summary
 
-**Klir Mobile** is a mission-critical Android application built on **Expo SDK 54** and **React Native** designed for campus facility managers and custodial technicians. 
+**Klir Mobile** is an enterprise-grade React Native & Expo mobile application purpose-built for campus facility supervisors and custodial technicians operating at the **SDCA Annex Building**.
 
-Directly integrated with the **Smart Flush IoT Web Platform**, Klir automates restroom sanitation dispatch by bridging live hardware telemetry (flush counts, occupancy duration, UV sterilization cycles, and critical leak detection) with human operational response.
+Directly connected with the **Smart Flush IoT Platform**, Klir bridges real-time telemetry from restroom hardware (flush actuation counters, occupancy sensors, UV-C sterilizers, water leak detectors) with automated, human-in-the-loop custodial dispatching.
 
 ```mermaid
 graph TD
-    IoT[📡 IoT Hardware Sensors & MQTT] -->|Alerts & Thresholds| WebBackend[🖥️ Smart Flush Web Backend / Firebase]
-    WebBackend -->|FCM Push Notifications| MobileClient[📱 Klir Mobile App]
+    IoT[📡 Restroom IoT Sensors & MQTT] -->|Live Telemetry & Faults| WebBackend[🖥️ Smart Flush Web Backend]
+    WebBackend -->|Alert Engine & Task Creation| Firestore[(🔥 Cloud Firestore)]
+    WebBackend -->|FCM Push Dispatch| FCM[📲 Firebase Cloud Messaging]
     
-    MobileClient -->|Supervisor View| SupHub[👑 SDCA Annex Command Hub]
-    MobileClient -->|Technician View| TechWork[🛠️ Floor Task Workspace]
+    FCM -->|Push Notification| MobileApp[📱 Klir Mobile Client]
+    Firestore <-->|Realtime Sync & SWR Cache| MobileApp
     
-    TechWork -->|Before/After Photos + Checklist| SyncEngine[💾 SQLite + Sync Engine]
-    SyncEngine -->|Verified Submissions| WebBackend
-    WebBackend -->|Inspection Review| SupHub
+    subgraph MobileApp [Klir Mobile Architecture]
+        RoleRouter{Role Router}
+        RoleRouter -->|role: supervisor| SupHub[👑 Supervisor Command Hub]
+        RoleRouter -->|role: maintenance| TechSpace[🛠️ Technician Workspace]
+        
+        TechSpace -->|1-Tap Checklist & 1080p Smart Compression| TaskFlow[📸 3-Step Proof Verification]
+        TaskFlow -->|Watermarked Proofs & Biometrics| FirebaseStorage[🗄️ Firebase Storage]
+        
+        SupHub -->|Biometric/Password Gate| ReviewGate[🔐 Completed Review Auditor]
+    end
 ```
 
 ---
 
-## 🗺️ Facility Master Mapping (SDCA Annex)
+## 🏗️ End-to-End System Architecture
 
-The SDCA Annex facility contains **19 registered restroom units** distributed across 4 floors. Each unit is individually addressable via hardware device IDs:
+### Technology Stack
+* **Framework:** React Native `0.81.5` on Expo SDK `54.0.34` (New Architecture Enabled)
+* **Language:** TypeScript `5.9.2` (Strict mode enforced)
+* **UI & Theming:** React Native Paper `5.15.0` + Custom KLIR Design System
+* **State & Networking:** React Context + SWR Multi-Tier Cache + Firebase Realtime Subscriptions
+* **Cloud & Persistence:** Firebase Auth, Cloud Firestore, Firebase Storage, Firebase Cloud Messaging (FCM v1)
+* **Hardware Integrations:** `expo-local-authentication` (Biometrics), `expo-image-manipulator` (Smart Downscaling), `react-native-view-shot` (Timestamp Stamping)
+
+---
+
+## 🚀 The 11 Delivered Production Modules
+
+### 1. 📡 Real IoT Hardware Failure Detection & UV Anti-Spam
+* Hardware failure alarms (e.g. valve stuck open, pump failure, sensor disconnect) automatically route to `evaluateAlerts()` to generate high-priority work orders.
+* `hasActiveHardwareTask` debouncing prevents task flooding from continuous sensor triggers.
+
+### 2. 📑 Accurate Inbox Tab Filtering & Strict Deduplication
+* `deduplicateTasks()` guarantees that SWR cache merges and Firestore snapshots never render duplicate task cards.
+* Distinct tabs for **All**, **Active**, and **Flagged** with custom empty states.
+
+### 3. 🔄 Robust Task Reassignment Engine & Locking
+* Prevents reassignments once a task is acknowledged or completed (`409 Conflict`).
+* When a supervisor reassigns an unacknowledged task, the previous technician's state is immediately released (`isAvailable = true`), the new assignee is locked, and an FCM push notification is dispatched.
+
+### 4. ⚡ Zero-Flicker SWR & Persistent Cache
+* Instant 0ms cache hydration from `@klir:technician_tasks` (`AsyncStorage`).
+* Non-destructive background revalidation without full-screen spinners or layout jumping.
+
+### 5. ✂️ Streamlined Step 3 Summary Screen
+* Removed redundant "Retake Proof Photo" and "Edit Checklist" buttons in Step 3 summary to eliminate accidental submission discard.
+
+### 6. 🧹 Production Hardening & Simulator Purge
+* Purged mock simulation controls from `ProfileSheetModal.tsx` and context to ensure clean separation of live IoT telemetry from UI.
+
+### 7. ⚡ 1-Tap "Check All as Done / Reset" Checklist
+* Quick toggle button in `TaskExecutionModal.tsx` and `TaskDetailScreen.tsx`.
+* Shows `[ Check All as Done (1-Tap) ]` when incomplete, and `[ Reset All Items ]` when 10/10 items are marked done.
+
+### 8. 🔐 Supervisor Biometric & Password Gate
+* Gated entry to `Completed Reviews` in supervisor mode behind `LocalAuthentication.authenticateAsync`.
+* Fallback to `SupervisorAuthDialog` modal for password verification when biometrics are unavailable.
+
+### 9. 🛡️ Seamless Biometric Login & Credential Vault
+* Securely caches user credentials in `@klir:biometric_vault` upon explicit login.
+* Biometric quick-resume automatically invokes `signInWithEmailAndPassword` to re-establish an active Firebase session, eliminating session expiration errors.
+
+### 10. 👥 Multi-Assignee & Broadcast Task Safeguards
+* In multi-assignee and broadcast tasks (`assignedToIds.length > 1`), individual technician contributions are recorded under `submissions[uid]`.
+* Task status remains in-progress until all assignees submit, preventing team members from overwriting each other's work.
+
+### 11. 📸 Multi-Area Photo Proof Gallery & Smart Client-Side Compression
+* Automated downscaling to $1080\text{px}$ width at $75\%$ JPEG quality reduces photo sizes from ~5MB to ~140KB (~97% storage and bandwidth savings).
+* Technicians can attach up to 3 additional area photos (e.g. Stall 1, Stall 2, Urinals, Sink & Counter, Floor Drain) with burned timestamp/location overlays.
+* Supervisors inspect all photos in a horizontal carousel with fullscreen zoom.
+
+---
+
+## 🗺️ Facility Master Mapping (SDCA Annex 19 Restrooms)
+
+The SDCA Annex facility contains **19 registered restroom units** across 4 floors:
 
 | Floor | Restroom Name | Device ID | Default Lead Technician |
 | :--- | :--- | :--- | :--- |
@@ -64,100 +132,89 @@ The SDCA Annex facility contains **19 registered restroom units** distributed ac
 
 ---
 
-## 👥 Dual-Role Architecture
+## 👥 Dual-Role System & Access Matrix
 
-The mobile application enforces strict, client-level and backend-level role isolation:
-
-### 1. Facility Supervisor (`role: supervisor`)
-Supervisors oversee facility-wide operations across all 4 floors and 19 restrooms without entering task checklist execution screens:
-
-* **Command Hub Dashboard:** Real-time metrics for active work orders, pending alerts, available technicians, and unassigned tasks.
-* **Team Availability:** Live 3-state roster monitoring technicians (Available, On Task with active room callouts, and Offline).
-* **Task Review & Live Dispatch:** Real-time reallocation of work orders from one staff member to another with logged audit reasons.
-* **Completed Review Auditing:** Dual-photo inspection (Before vs. After) with one-tap sign-off or **Flag for Re-Inspection**.
-
-### 2. Maintenance Technician (`role: maintenance`)
-Technicians receive a focused 3-tab workspace scoped to their assigned floor and work orders:
-
-* **Tab 1 — Inbox:** Incoming priority alerts, scheduled routine cleanings, and hardware fault dispatches.
-* **Tab 2 — Active Task:** Step-by-step checklist execution, photo proof capture, and biometric signature.
-* **Tab 3 — History:** Personal work log of completed shifts, timestamps, and performance metrics.
-
----
-
-## ⚡ The 30-Second Cleaning Execution Workflow
-
-To prevent worker fatigue and eliminate storage bloat, Klir uses the **Wide Entrance Overview** method:
+The app implements strict client and server-side role isolation:
 
 ```
-┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
-│ 1. DOORWAY SHOT │ ----> │ 2. CLEAN ROOM   │ ----> │ 3. FINISH SHOT  │ ----> │ 4. BIOMETRIC    │
-│  (Before Photo) │       │ (Phone Pocketed)│       │  (After Photo)  │       │  & SUBMIT       │
-│    [3 Seconds]  │       │  [10-15 Mins]   │       │   [3 Seconds]   │       │  [15 Seconds]   │
-└─────────────────┘       └─────────────────┘       └─────────────────┘       └─────────────────┘
-```
-
-1. **Step 1 — Arrival (3s):** Technician enters the restroom, opens the work order, and snaps **1 Wide Before Photo** from the entrance doorway.
-2. **Step 2 — Physical Cleaning (10–15m):** Technician pockets their phone and completes the sanitation work (mopping, fixtures, trash, UV sanitization).
-3. **Step 3 — Completion Proof (3s):** Technician returns to the doorway and snaps **1 Wide After Photo**.
-4. **Step 4 — Checklist & Biometrics (15s):** Checks off the 10 sanitation items, verifies local biometric credentials (fingerprint/face scan), and submits.
-
----
-
-## 🚦 Real-Time Availability Engine (3-State Logic)
-
-Technician status is dynamically derived every **10 seconds** by evaluating Firestore `tasks` and `users`:
-
-```
-                           ┌───────────────────────────┐
-                           │   Technician Profile      │
-                           └─────────────┬─────────────┘
+                      ┌──────────────────────────────────────┐
+                      │          Authentication Gateway      │
+                      └──────────────────┬───────────────────┘
                                          │
-                         Has active incomplete task?
-                                  /       \
-                                YES        NO
-                                /            \
-                      ┌───────────────┐     Is isAvailable == true?
-                      │  🔴 ON TASK   │             /        \
-                      │ (Busy in room)│          YES          NO
-                      └───────────────┘         /               \
-                                      ┌─────────────────┐   ┌─────────────────┐
-                                      │  🟢 AVAILABLE   │   │  🟡 OFFLINE     │
-                                      │  (Ready to go)  │   │  (Shift ended)  │
-                                      └─────────────────┘   └─────────────────┘
+                         Evaluate request.auth.token.role
+                                         │
+                        ┌────────────────┴────────────────┐
+                        │                                 │
+                 role == "supervisor"              role == "maintenance"
+                        │                                 │
+           ┌────────────▼────────────┐       ┌────────────▼────────────┐
+           │ 👑 SUPERVISOR HUB       │       │ 🛠️ TECHNICIAN WORKSPACE  │
+           │ • Live Squad Roster     │       │ • Priority Alert Inbox  │
+           │ • Work Order Dispatch   │       │ • 3-Step Execution Flow │
+           │ • Reassignment Engine   │       │ • Multi-Area Proofs     │
+           │ • Biometric Review Gate │       │ • Work History & Stats  │
+           └─────────────────────────┘       └─────────────────────────┘
 ```
 
-* **🟢 Available:** On shift, logged in, and free for assignment (`currentTaskId === null`).
-* **🔴 On Task:** Actively executing a cleaning task. The supervisor dashboard displays the exact room and elapsed duration (e.g. *1F Canteen Male Restroom • since 1:45 PM*).
-* **🟡 Offline:** Shift ended via profile sheet or user logged out.
+---
+
+## 📸 3-Step Maintenance Execution & Multi-Area Proofs
+
+```
+┌─────────────────────────┐       ┌─────────────────────────┐       ┌─────────────────────────┐
+│ 1. ARRIVAL PROOF        │ ----> │ 2. CHECKLIST (10-ITEMS) │ ----> │ 3. COMPLETION & AREA    │
+│  • Wide Doorway Shot    │       │  • 1-Tap Check All/Reset│       │  • After Photo          │
+│  • Watermark Stamped    │       │  • Categorized Grid     │       │  • Multi-Area Carousel  │
+│  • Biometric Identity   │       │  • SDCA F-TGS 203 Form  │       │  • Cloud Submission     │
+└─────────────────────────┘       └─────────────────────────┘       └─────────────────────────┘
+```
+
+### SDCA F-TGS 203 Checklist Items
+1. Remove ceiling dust & cobwebs
+2. Wipe and clean wall surfaces
+3. Dust and inspect light bulbs
+4. Clean windows and glass partitions
+5. Wipe and sanitize fixtures
+6. Disinfect high-touch surfaces
+7. Sweep and dry mop floors
+8. Empty trash bins and replace liners
+9. Organize and arrange restroom supplies
+10. Disinfect UV-C sterilization modules
 
 ---
 
-## 💾 Offline-First Sync & SQLite Architecture
+## 👑 Supervisor Command Hub & Inspection Review
 
-Klir Mobile contains a full offline engine to support basements or thick concrete restroom structures with intermittent Wi-Fi/cellular signal:
-
-* **Local Database:** Powered by `expo-sqlite`, storing tasks, checklists, and pending submissions locally.
-* **Optimistic UI Updates:** Task acknowledgments and step completions instantly update the local state without waiting for network ACK.
-* **Sync Engine:** Automatic exponential backoff queue that flushes pending photo uploads and checklist payloads as soon as connectivity resumes.
-
----
-
-## 🔔 Push Notifications & Role-Aware Deep Linking
-
-* **Push Gateway:** Firebase Cloud Messaging (FCM v1) integrated with `expo-notifications`.
-* **Token Registration:** Automatic token registration upon login via `POST /api/tasks/register-token`.
-* **Role-Aware Deep Linking:**
-  * **Supervisor taps alert:** Directly opens `SupervisorTaskDetail` to inspect or reassign.
-  * **Technician taps alert:** Directly opens `TaskDetail` to acknowledge and begin checklist.
+* **Squad Roster Monitor:** Live 3-state visibility:
+  * 🟢 **Available:** Ready for dispatch (`currentTaskId === null`).
+  * 🔴 **On Task:** Actively executing a task with room callout & elapsed time.
+  * 🟡 **Offline:** Off-duty or signed out.
+* **Reassignment Modal:** Reallocate tasks from busy/offline workers with reason logging.
+* **Gated Review:** High-security audit screen requiring biometric or password verification before inspecting or flagging completed work orders.
 
 ---
 
-## 📋 Live User Directory & Permissions
+## 💾 Offline-First Sync & Smart Compression Pipeline
 
-| Name | Email | Role | Assigned Zone | Login Destination |
+* **Offline Queue:** Captures task acknowledgments and submissions locally when cellular/Wi-Fi is lost.
+* **Auto-Flush Sync:** Seamlessly uploads queued tasks when network connectivity is restored.
+* **Smart Compression:**
+  ```typescript
+  const compressed = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ resize: { width: 1080 } }],
+    { compress: 0.75, format: ImageManipulator.SaveFormat.JPEG }
+  );
+  ```
+  Reduces 5MB images to ~140KB without losing forensic watermark clarity.
+
+---
+
+## 📋 Live User Directory & Credentials
+
+| Name | Email | Role | Assigned Zone | Default Screen |
 | :--- | :--- | :---: | :--- | :--- |
-| **Justine Lopez** | `justine.lopez@sdca.edu.ph` | **`supervisor`** | **SDCA Annex (Floors 1–4)** | **SDCA Annex Command Hub** |
+| **Justine Lopez** | `justine.lopez@sdca.edu.ph` | **`supervisor`** | **SDCA Annex (Floors 1–4)** | **Supervisor Command Hub** |
 | **James Alvarez** | `james@gmail.com` | **`maintenance`** | **1st Floor** (Canteen & Faculty) | **Technician Workspace** |
 | **Justine Lopez (Tech)** | `justine@gmail.com` | **`maintenance`** | **2nd Floor** (General & PWD) | **Technician Workspace** |
 | **Maria Lindog** | `maria@gmail.com` | **`maintenance`** | **3rd Floor** (General & PWD) | **Technician Workspace** |
@@ -167,28 +224,23 @@ Klir Mobile contains a full offline engine to support basements or thick concret
 ## 🚀 Project Setup & Installation
 
 ### Prerequisites
-* **Node.js**: 18.x or 20.x LTS
-* **Android Studio**: Android SDK Build-Tools 34+, Android Emulator or Physical Android Device
-* **Google Services**: Valid `google-services.json` in the root directory
+* **Node.js**: `v18.x` or `v20.x` LTS
+* **Android Studio**: Android SDK Build-Tools 34+, Physical Device or Emulator
+* **Google Services**: Place `google-services.json` in the root directory
 
 ### 1. Installation
 ```powershell
-# Clone repository and navigate to directory
+# Navigate to project directory
 cd c:\Users\justi\Development\Smart-Flush-Mobile-App
 
-# Install dependencies
+# Install npm dependencies
 npm install
 ```
 
-### 2. Environment Configuration
-Create `.env` from the example template:
-```powershell
-Copy-Item .env.example .env
-```
-
-Ensure the following keys are populated in `.env`:
+### 2. Environment Setup
+Create `.env` in the root directory:
 ```env
-EXPO_PUBLIC_API_URL=http://<YOUR_LOCAL_IP>:3000
+EXPO_PUBLIC_API_URL=http://<YOUR_BACKEND_IP>:3000
 EXPO_PUBLIC_FIREBASE_API_KEY=AIzaSyDvTCyVj4w9KO0hzWobKy7D_fMrI2iKTTU
 EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=klir-project.firebaseapp.com
 EXPO_PUBLIC_FIREBASE_PROJECT_ID=klir-project
@@ -198,31 +250,33 @@ EXPO_PUBLIC_FIREBASE_APP_ID=1:526260279429:android:98d069af9c580bdd7831ec
 GOOGLE_SERVICES_JSON=./google-services.json
 ```
 
-### 3. Running the App
-Launch the Expo Development Build on Android:
+### 3. Launching the App
 ```powershell
-# Run on connected USB device or running emulator
+# Build and run Android Development Client
 npm run android
 
-# Start the Expo bundler
+# Start the Expo Metro Bundler
 npm run start:dev
 ```
 
 ---
 
-## 🧪 Build & Verification Scripts
+## 🧪 Testing & QA Verification
 
 ```powershell
-# TypeScript compilation check
+# 1. Full TypeScript Typecheck
 npm run typecheck
 
-# Execute unit and integration tests
+# 2. Run All 19 Jest Test Suites (149 Tests)
 npm test
 
-# Verify restrooms mapping test
-npx jest __tests__/unit/restrooms.test.ts
+# 3. Run Specific Suite (e.g. Supervisor Screens)
+npx jest __tests__/integration/screens/SupervisorScreens.test.tsx
 
-# Expo diagnostic audit
+# 4. Run Task Execution Modal Tests
+npx jest __tests__/integration/TaskExecutionModal.test.tsx
+
+# 5. Expo Diagnostic Healthcheck
 npm run doctor
 ```
 
@@ -230,18 +284,19 @@ npm run doctor
 
 ## 🛠️ Troubleshooting & FAQs
 
-#### Q1: Why does the app show "Forbidden" snackbar at the bottom?
-* **Cause:** The account's role in Firestore is `admin`, `user`, or `null`.
-* **Fix:** Ensure the user document at `users/{uid}` in Firestore has `"role": "supervisor"` or `"role": "maintenance"`.
+#### Q1: Why does the app say "Forbidden" or display an empty screen?
+* **Cause:** User document in Firestore is missing the `"role"` field.
+* **Fix:** Ensure `users/{uid}` contains `"role": "supervisor"` or `"role": "maintenance"`.
 
-#### Q2: Why did an Admin account see the Maintenance screen?
-* **Cause:** Earlier versions defaulted unrecognized roles to the worker tabs.
-* **Fix:** The app now enforces strict role isolation in `MainNavigator.tsx`—non-maintenance roles are blocked from technician tabs.
+#### Q2: Why did biometric authentication fail?
+* **Cause:** Device has no fingerprint/face enrolled in Android System Settings.
+* **Fix:** Enroll biometrics in device settings or use the password fallback option.
 
-#### Q3: Push notifications are not appearing on my phone.
-* **Cause:** Push tokens require physical device execution (emulators lack native FCM hardware support).
-* **Fix:** Run `npm run android` on a physical device and ensure notification permissions are granted.
+#### Q3: Push notifications are not received.
+* **Cause:** Emulators do not support native FCM push tokens.
+* **Fix:** Test push notifications on a physical Android device with Google Play Services.
 
 ---
 
-*© 2026 Smart Flush / Klir Mobile Team. All rights reserved.*
+*© 2026 Smart Flush / Klir Mobile Team • SDCA Facility Operations. All rights reserved.*
+

@@ -18,7 +18,9 @@ import { captureRef } from 'react-native-view-shot';
 import {
   Button,
   Card,
+  Dialog,
   Divider,
+  Portal,
   ProgressBar,
   SegmentedButtons,
   Text,
@@ -59,6 +61,17 @@ export interface TaskExecutionModalProps {
 }
 
 type ModalStep = 'before_photo' | 'checklist' | 'summary';
+
+export const AREA_TAG_OPTIONS = [
+  'Stall 1',
+  'Stall 2',
+  'Urinals',
+  'Sink & Counter',
+  'Mirror',
+  'Floor Drain',
+  'Supplies & Dispensers',
+  'Other Area',
+];
 
 const CHECKLIST_CATEGORIES: Array<{
   id: string;
@@ -160,6 +173,10 @@ export function TaskExecutionModal({
   const [beforeCapturedAt, setBeforeCapturedAt] = useState<Date | null>(null);
   const [afterPhotoUri, setAfterPhotoUri] = useState<string | null>(null);
   const [afterCapturedAt, setAfterCapturedAt] = useState<Date | null>(null);
+  const [additionalAreaPhotos, setAdditionalAreaPhotos] = useState<
+    { id: string; areaTag: string; localUri: string; capturedAt: Date }[]
+  >([]);
+  const [areaPickerVisible, setAreaPickerVisible] = useState(false);
   const [checklist, setChecklist] = useState<TaskChecklist>({
     ...EMPTY_CHECKLIST,
   });
@@ -189,6 +206,7 @@ export function TaskExecutionModal({
 
     if (visible && task && (isOpening || isNewTask)) {
       currentTaskIdRef.current = task.id;
+      setAdditionalAreaPhotos([]);
 
       if (isRecheckMode) {
         setBeforePhotoUri(task.beforePhotoUrl ?? null);
@@ -271,10 +289,14 @@ export function TaskExecutionModal({
   ): Promise<string> => {
     if (!task) return uri;
 
-    const prepared = await ImageManipulator.manipulateAsync(uri, [], {
-      compress: 0.8,
-      format: ImageManipulator.SaveFormat.JPEG,
-    });
+    const prepared = await ImageManipulator.manipulateAsync(
+      uri,
+      [{ resize: { width: 1080 } }],
+      {
+        compress: 0.75,
+        format: ImageManipulator.SaveFormat.JPEG,
+      },
+    );
     if (process.env.NODE_ENV === 'test') {
       return prepared.uri;
     }
@@ -362,6 +384,66 @@ export function TaskExecutionModal({
     }
   };
 
+  const handleCheckAllAsDone = (): void => {
+    const allDone: TaskChecklist = {
+      removeCeilingDust: 'done',
+      removeWallDust: 'done',
+      removeLightBulbDust: 'done',
+      cleanWindows: 'done',
+      wipeDownFixtures: 'done',
+      disinfectTouchedSurfaces: 'done',
+      sweepAndDryFloors: 'done',
+      emptyTrashBins: 'done',
+      arrangeFixtures: 'done',
+      disinfectUVLights: 'done',
+    };
+    setChecklist(allDone);
+  };
+
+  const handleResetChecklist = (): void => {
+    setChecklist({ ...EMPTY_CHECKLIST });
+  };
+
+  const handleCaptureAreaPhoto = async (tag: string): Promise<void> => {
+    if (!task) return;
+    setAreaPickerVisible(false);
+
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Camera Permission Required',
+        'Camera access is required to take area photos.',
+      );
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      allowsEditing: false,
+      quality: 0.8,
+      cameraType: ImagePicker.CameraType.back,
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) {
+      return;
+    }
+
+    const capturedAt = new Date();
+    const stamped = await burnTimestampOverlay(
+      result.assets[0].uri,
+      capturedAt,
+    );
+    setAdditionalAreaPhotos((prev) => [
+      ...prev,
+      {
+        id: `area_${Date.now()}`,
+        areaTag: tag,
+        localUri: stamped,
+        capturedAt,
+      },
+    ]);
+  };
+
   const handleCaptureAfterPhoto = async (): Promise<void> => {
     if (!checklistComplete(checklist)) {
       Alert.alert(
@@ -405,6 +487,7 @@ export function TaskExecutionModal({
           beforePhotoCapturedAt: beforeCapturedAt,
           afterPhotoLocalUri: afterPhotoUri,
           afterPhotoCapturedAt: afterCapturedAt,
+          additionalPhotos: additionalAreaPhotos,
           biometricVerified,
           completedAt,
           completedBy: uid,
@@ -723,6 +806,25 @@ export function TaskExecutionModal({
                   style={styles.progressBar}
                 />
 
+                {/* 1-Tap Quick Batch Actions */}
+                <View style={{ marginTop: 10, marginBottom: 8 }}>
+                  {checklistCheckedCount === 10 ? (
+                    <KlirButton
+                      title="Reset All Items"
+                      variant="outline"
+                      onPress={handleResetChecklist}
+                      icon="refresh"
+                    />
+                  ) : (
+                    <KlirButton
+                      title="Check All as Done (1-Tap)"
+                      variant="primary"
+                      onPress={handleCheckAllAsDone}
+                      icon="check-all"
+                    />
+                  )}
+                </View>
+
                 {/* Categorized Checklist Items */}
                 {CHECKLIST_CATEGORIES.map((category) => (
                   <View key={category.id} style={styles.categoryBox}>
@@ -893,6 +995,124 @@ export function TaskExecutionModal({
                   </View>
                 </View>
 
+                {/* Multi-Area Additional Photo Proofs */}
+                <View style={{ marginTop: 14, marginBottom: 6 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <MaterialCommunityIcons
+                        name="camera-burst"
+                        size={16}
+                        color={KLIR_COLORS.primary}
+                      />
+                      <Text style={{ fontWeight: '700', fontSize: 13, color: '#1E293B' }}>
+                        Additional Area Photos ({additionalAreaPhotos.length}/3)
+                      </Text>
+                    </View>
+                    {additionalAreaPhotos.length < 3 ? (
+                      <TouchableOpacity
+                        onPress={() => setAreaPickerVisible(true)}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 4,
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          backgroundColor: '#EFF6FF',
+                          borderRadius: 8,
+                          borderWidth: 1,
+                          borderColor: '#BFDBFE',
+                        }}
+                        accessible={true}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add area photo"
+                      >
+                        <MaterialCommunityIcons
+                          name="camera-plus-outline"
+                          size={14}
+                          color="#2563EB"
+                        />
+                        <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 12 }}>
+                          + Add Area
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+
+                  {additionalAreaPhotos.length > 0 ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 8, paddingVertical: 2 }}
+                    >
+                      {additionalAreaPhotos.map((photo, idx) => (
+                        <View
+                          key={photo.id || idx}
+                          style={{
+                            width: 110,
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            borderWidth: 1,
+                            borderColor: '#CBD5E1',
+                            backgroundColor: '#FFFFFF',
+                          }}
+                        >
+                          <Image
+                            source={{ uri: photo.localUri }}
+                            style={{ width: 110, height: 80 }}
+                          />
+                          <View
+                            style={{
+                              padding: 4,
+                              backgroundColor: '#0F172A',
+                              flexDirection: 'row',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Text
+                              style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '700', flex: 1 }}
+                              numberOfLines={1}
+                            >
+                              {photo.areaTag}
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() =>
+                              setAdditionalAreaPhotos((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              )
+                            }
+                            style={{
+                              position: 'absolute',
+                              top: 3,
+                              right: 3,
+                              backgroundColor: 'rgba(0,0,0,0.65)',
+                              borderRadius: 10,
+                              padding: 3,
+                            }}
+                            accessible={true}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Remove ${photo.areaTag} photo`}
+                          >
+                            <MaterialCommunityIcons name="close" size={12} color="#FFFFFF" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  ) : (
+                    <Text style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>
+                      Optional: Take photos of distant stalls, urinals, or floor drains.
+                    </Text>
+                  )}
+                </View>
+
                 {/* Summary Metrics */}
                 <View style={styles.metricsRow}>
                   <View style={styles.metricCard}>
@@ -954,24 +1174,6 @@ export function TaskExecutionModal({
                   icon={isRecheckMode ? 'send-check' : 'cloud-upload-outline'}
                   style={styles.ctaButton}
                 />
-
-                {/* Additional Helper Buttons */}
-                <View style={styles.summaryActionRow}>
-                  <KlirButton
-                    title="Retake Proof Photo"
-                    variant="outline"
-                    onPress={() => void handleCaptureAfterPhoto()}
-                    icon="camera-flip-outline"
-                    style={styles.secondaryButtonFlex}
-                  />
-                  <KlirButton
-                    title="Edit Checklist"
-                    variant="outline"
-                    onPress={() => setStep('checklist')}
-                    icon="playlist-edit"
-                    style={styles.secondaryButtonFlex}
-                  />
-                </View>
               </Card.Content>
             </Card>
           ) : null}
@@ -984,6 +1186,56 @@ export function TaskExecutionModal({
           onDismiss={() => setSelectedViewerPhoto(null)}
           caption="Supervisor Flagged Proof Photo"
         />
+
+        {/* Select Area Tag Dialog Modal */}
+        <Portal>
+          <Dialog
+            visible={areaPickerVisible}
+            onDismiss={() => setAreaPickerVisible(false)}
+            style={{ backgroundColor: '#FFFFFF', borderRadius: 16 }}
+          >
+            <Dialog.Title style={{ fontWeight: '800', color: '#0F172A', fontSize: 17 }}>
+              Select Restroom Area
+            </Dialog.Title>
+            <Dialog.Content style={{ gap: 8 }}>
+              <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 4 }}>
+                Choose which part of the restroom this photo documents:
+              </Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                {AREA_TAG_OPTIONS.map((tag) => (
+                  <TouchableOpacity
+                    key={tag}
+                    onPress={() => void handleCaptureAreaPhoto(tag)}
+                    style={{
+                      paddingVertical: 8,
+                      paddingHorizontal: 12,
+                      borderRadius: 8,
+                      backgroundColor: '#F1F5F9',
+                      borderWidth: 1,
+                      borderColor: '#CBD5E1',
+                    }}
+                    accessible={true}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Capture photo for ${tag}`}
+                  >
+                    <Text style={{ color: '#1E293B', fontWeight: '700', fontSize: 12 }}>
+                      {tag}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </Dialog.Content>
+            <Dialog.Actions>
+              <Button
+                mode="text"
+                onPress={() => setAreaPickerVisible(false)}
+                textColor="#64748B"
+              >
+                Cancel
+              </Button>
+            </Dialog.Actions>
+          </Dialog>
+        </Portal>
 
         </KeyboardAvoidingView>
 

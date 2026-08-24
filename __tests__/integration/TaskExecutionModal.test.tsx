@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { PaperProvider } from 'react-native-paper';
 import { TaskExecutionModal } from '../../components/TaskExecutionModal';
 import type { Task } from '../../types';
 
@@ -70,10 +71,14 @@ const mockTask: Task = {
   biometricVerified: false,
 };
 
+const renderWithPaper = (ui: React.ReactElement) => {
+  return render(<PaperProvider>{ui}</PaperProvider>);
+};
+
 describe('TaskExecutionModal', () => {
   it('renders Step 1 (Proof Photo) when visible', () => {
     const onDismiss = jest.fn();
-    const { getByText } = render(
+    const { getByText } = renderWithPaper(
       <TaskExecutionModal
         visible={true}
         task={mockTask}
@@ -88,7 +93,7 @@ describe('TaskExecutionModal', () => {
 
   it('calls onDismiss when close button is pressed', () => {
     const onDismiss = jest.fn();
-    const { getByLabelText } = render(
+    const { getByLabelText } = renderWithPaper(
       <TaskExecutionModal
         visible={true}
         task={mockTask}
@@ -103,7 +108,7 @@ describe('TaskExecutionModal', () => {
 
   it('progresses to checklist after taking before photo', async () => {
     const onDismiss = jest.fn();
-    const { getByText } = render(
+    const { getByText } = renderWithPaper(
       <TaskExecutionModal
         visible={true}
         task={mockTask}
@@ -122,7 +127,7 @@ describe('TaskExecutionModal', () => {
 
   it('retains Step 2 (Checklist) state when parent re-renders with fresh task reference from polling', async () => {
     const onDismiss = jest.fn();
-    const { getByText, rerender, queryByText } = render(
+    const { getByText, rerender, queryByText } = renderWithPaper(
       <TaskExecutionModal
         visible={true}
         task={mockTask}
@@ -140,11 +145,13 @@ describe('TaskExecutionModal', () => {
     // 2. Simulate background polling interval triggering parent re-render with a new task reference
     const polledTask: Task = { ...mockTask };
     rerender(
-      <TaskExecutionModal
-        visible={true}
-        task={polledTask}
-        onDismiss={onDismiss}
-      />,
+      <PaperProvider>
+        <TaskExecutionModal
+          visible={true}
+          task={polledTask}
+          onDismiss={onDismiss}
+        />
+      </PaperProvider>,
     );
 
     // 3. Confirm modal stays on Step 2 (Checklist) and is NOT reset to Step 1

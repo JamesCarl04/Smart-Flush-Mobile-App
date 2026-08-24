@@ -32,6 +32,13 @@ export interface TaskChecklist {
   disinfectUVLights: ChecklistValue;
 }
 
+export interface AreaPhoto {
+  id: string;
+  areaTag: string;
+  photoUrl: string;
+  capturedAt: Date;
+}
+
 export interface TaskSubmission {
   technicianUid: string;
   technicianName: string;
@@ -40,6 +47,7 @@ export interface TaskSubmission {
   beforePhotoCapturedAt?: Date | null;
   afterPhotoUrl?: string | null;
   afterPhotoCapturedAt?: Date | null;
+  additionalPhotos?: AreaPhoto[];
   remarks?: string;
   workDuration?: number | null;
   completedAt: Date;
@@ -80,6 +88,7 @@ export interface Task {
   beforePhotoCapturedAt?: Date | null;
   afterPhotoUrl?: string | null;
   afterPhotoCapturedAt?: Date | null;
+  additionalPhotos?: AreaPhoto[];
   biometricVerified?: boolean;
   offlineSynced?: boolean;
   completedBy?: string | null;
@@ -124,7 +133,6 @@ export interface TasksContextValue {
   errorMessage: string | null;
   refreshTasks: () => Promise<void>;
   clearError: () => void;
-  simulateHardwareFailureAlert?: () => Task;
 }
 
 export type AuthStackParamList = {
