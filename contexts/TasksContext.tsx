@@ -100,9 +100,11 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const inboxTasks = tasks.filter(
     (task) =>
-      task.status !== 'completed' &&
+      (task.status !== 'completed' || task.inspectionStatus === 'flagged') &&
       (task.status === 'unassigned' ||
         task.status === 'reassignment_needed' ||
+        task.status === 'flagged' ||
+        task.inspectionStatus === 'flagged' ||
         task.assignedTo === user?.uid ||
         task.assignedTo === user?.email ||
         (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||

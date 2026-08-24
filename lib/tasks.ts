@@ -554,3 +554,26 @@ export function parseTaskDocument(
     recheckedAt: toDate(data.recheckedAt),
   };
 }
+
+export function formatDuration(seconds?: number | null): string {
+  if (!seconds || seconds <= 0) {
+    return 'N/A';
+  }
+
+  const totalSecs = Math.round(seconds);
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const minutes = Math.floor((totalSecs % 3600) / 60);
+  const remainder = totalSecs % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes} min ${remainder} sec`;
+  }
+  return `${remainder} sec`;
+}

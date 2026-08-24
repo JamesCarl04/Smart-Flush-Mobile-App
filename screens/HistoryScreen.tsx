@@ -37,13 +37,26 @@ function formatDate(date: Date): string {
 }
 
 function formatDuration(seconds?: number | null): string {
-  if (!seconds) {
+  if (!seconds || seconds <= 0) {
     return 'N/A';
   }
 
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes} min ${remainder} sec`;
+  const totalSecs = Math.round(seconds);
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const minutes = Math.floor((totalSecs % 3600) / 60);
+  const remainder = totalSecs % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes} min ${remainder} sec`;
+  }
+  return `${remainder} sec`;
 }
 
 function formatAvgDuration(seconds: number): string {
@@ -263,11 +276,11 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
               <View style={styles.cardHeader}>
                 <View style={styles.badgeRow}>
                   {item.inspectionStatus === 'approved' ? (
-                    <OperationBadge label="✓ Approved" tone={statusTone('completed')} />
+                    <OperationBadge label="Approved" tone={statusTone('completed')} />
                   ) : item.inspectionStatus === 'flagged' || item.status === 'flagged' ? (
-                    <OperationBadge label="⚠️ Flagged for Recheck" tone={statusTone('flagged')} />
+                    <OperationBadge label="Flagged" tone={statusTone('flagged')} />
                   ) : item.status === 'rechecking' ? (
-                    <OperationBadge label="🔄 Under Recheck" tone={statusTone('rechecking')} />
+                    <OperationBadge label="Rechecking" tone={statusTone('rechecking')} />
                   ) : (
                     <OperationBadge
                       label={formatTaskStatus(item.status)}

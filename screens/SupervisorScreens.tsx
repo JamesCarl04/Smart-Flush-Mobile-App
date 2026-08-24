@@ -95,13 +95,26 @@ function formatDate(date?: Date | null): string {
 }
 
 function formatDuration(seconds?: number | null): string {
-  if (!seconds) {
+  if (!seconds || seconds <= 0) {
     return 'N/A';
   }
 
-  const minutes = Math.floor(seconds / 60);
-  const remainder = seconds % 60;
-  return `${minutes} min ${remainder} sec`;
+  const totalSecs = Math.round(seconds);
+  const days = Math.floor(totalSecs / 86400);
+  const hours = Math.floor((totalSecs % 86400) / 3600);
+  const minutes = Math.floor((totalSecs % 3600) / 60);
+  const remainder = totalSecs % 60;
+
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes} min ${remainder} sec`;
+  }
+  return `${remainder} sec`;
 }
 
 function formatRelativeTime(date?: Date | null): string {
@@ -1097,25 +1110,19 @@ export function CompletedReviewsScreen({
             const isRechecking = item.status === 'rechecking';
 
             const chipBg = isApproved
-              ? '#DCFCE7'
+              ? '#2E7D32'
               : isFlagged
-                ? '#FEE2E2'
-                : isRechecking
-                  ? '#F3E8FF'
-                  : '#E0F2FE';
-            const chipTextColor = isApproved
-              ? '#15803D'
-              : isFlagged
-                ? '#B91C1C'
+                ? '#DC2626'
                 : isRechecking
                   ? '#7E22CE'
-                  : '#0369A1';
+                  : '#0284C7';
+            const chipTextColor = '#FFFFFF';
             const chipLabel = isApproved
-              ? '✓ Approved'
+              ? 'Approved'
               : isFlagged
-                ? '⚠️ Flagged'
+                ? 'Flagged'
                 : isRechecking
-                  ? '🔄 Rechecking'
+                  ? 'Rechecking'
                   : 'Completed';
 
             return (
@@ -1400,10 +1407,10 @@ export function CompletedReviewDetailScreen({
                   }
                 >
                   {task.inspectionStatus === 'approved'
-                    ? '✓ Approved'
+                    ? 'Approved'
                     : task.inspectionStatus === 'flagged' || task.status === 'flagged'
-                      ? '⚠️ Flagged'
-                      : '⏳ Pending Review'}
+                      ? 'Flagged'
+                      : 'Pending Review'}
                 </Text>
               </View>
             </View>
@@ -2167,7 +2174,7 @@ export function SupervisorReportsScreen({
                     ]}
                   >
                     <Text style={styles.teamBadgeTextAvailable}>
-                      ✓ Completed
+                      Completed
                     </Text>
                   </View>
                 </View>
@@ -2331,45 +2338,46 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   teamBadge: {
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    borderRadius: 20,
-    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 9999,
+    alignSelf: 'flex-start',
   },
   teamBadgeAvailable: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#A7F3D0',
+    backgroundColor: '#2E7D32', // Solid forest green
   },
   teamBadgeOnTask: {
-    backgroundColor: '#FEE2E2',
-    borderColor: '#FECACA',
+    backgroundColor: '#E05A36', // Solid terracotta/orange
   },
   teamBadgeOffline: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#CBD5E1',
+    backgroundColor: '#64748B', // Solid slate gray
   },
   teamBadgeTextAvailable: {
     fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '800',
-    color: '#065F46',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   teamBadgeTextOnTask: {
     fontFamily: INTER_FONT,
     fontSize: 11,
     fontWeight: '800',
-    color: '#991B1B',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   teamBadgeTextOffline: {
     fontFamily: INTER_FONT,
     fontSize: 11,
-    fontWeight: '700',
-    color: '#475569',
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.2,
   },
   teamBadgeText: {
     fontFamily: INTER_FONT,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 
   // Grouped Menu Action List

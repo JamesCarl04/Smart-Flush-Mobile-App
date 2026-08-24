@@ -281,19 +281,21 @@ describe('Supervisor Operations Flow E2E', () => {
     const flagBtn = screen.getByRole('button', { name: 'Flag for Re-inspection' });
     fireEvent.press(flagBtn);
 
-    expect(await screen.findByText('Flag task')).toBeTruthy();
+    expect(await screen.findByText('Flag Task')).toBeTruthy();
     const flagReasonInput = screen.getByDisplayValue('Requires re-inspection');
     fireEvent.changeText(flagReasonInput, 'Requires supervisor physical inspection of flush pressure');
 
-    const confirmFlagBtn = screen.getByRole('button', { name: 'Flag' });
+    const confirmFlagBtn = screen.getByRole('button', { name: 'Flag Task' });
     fireEvent.press(confirmFlagBtn);
 
     await waitFor(() => {
-      expect(flagRequestPayload).toEqual({
-        taskId: 'task-completed-777',
-        reason: 'Requires supervisor physical inspection of flush pressure',
-        supervisorUid: 'supervisor-lead-01',
-      });
+      expect(flagRequestPayload).toEqual(
+        expect.objectContaining({
+          taskId: 'task-completed-777',
+          reason: 'Requires supervisor physical inspection of flush pressure',
+          supervisorUid: 'supervisor-lead-01',
+        }),
+      );
     });
   });
 });

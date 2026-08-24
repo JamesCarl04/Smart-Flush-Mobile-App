@@ -277,55 +277,55 @@ export function statusTone(status: Task['status'] | 'broadcast' | 'Team Broadcas
 } {
   if (status === 'completed') {
     return {
-      backgroundColor: UI_COLORS.softGreen,
-      color: UI_COLORS.success,
+      backgroundColor: '#2E7D32', // Rich solid forest green
+      color: '#FFFFFF',
       icon: 'check-circle-outline',
     };
   }
 
   if (status === 'acknowledged') {
     return {
-      backgroundColor: UI_COLORS.softBlue,
-      color: UI_COLORS.info,
+      backgroundColor: '#E05A36', // Solid terracotta / orange (On Task)
+      color: '#FFFFFF',
       icon: 'progress-clock',
     };
   }
 
   if (status === 'flagged') {
     return {
-      backgroundColor: '#FEE2E2',
-      color: '#B91C1C',
+      backgroundColor: '#DC2626', // Solid vibrant red (Flagged)
+      color: '#FFFFFF',
       icon: 'flag-outline',
     };
   }
 
   if (status === 'rechecking') {
     return {
-      backgroundColor: '#F3E8FF',
-      color: '#7E22CE',
+      backgroundColor: '#7E22CE', // Solid vibrant purple (Rechecking)
+      color: '#FFFFFF',
       icon: 'sync',
     };
   }
 
   if (status === 'broadcast' || status === 'Team Broadcast') {
     return {
-      backgroundColor: '#EFF6FF',
-      color: '#1D4ED8',
+      backgroundColor: '#2563EB', // Solid vibrant blue
+      color: '#FFFFFF',
       icon: 'bullhorn-outline',
     };
   }
 
   if (status === 'reassignment_needed' || status === 'unassigned') {
     return {
-      backgroundColor: UI_COLORS.softRed,
-      color: UI_COLORS.danger,
+      backgroundColor: '#B91C1C', // Solid deep red
+      color: '#FFFFFF',
       icon: 'alert-octagon-outline',
     };
   }
 
   return {
-    backgroundColor: UI_COLORS.softOrange,
-    color: UI_COLORS.warning,
+    backgroundColor: '#D97706', // Solid warm amber
+    color: '#FFFFFF',
     icon: 'clock-alert-outline',
   };
 }
@@ -486,14 +486,14 @@ export function OperationBadge({
         styles.badge,
         {
           backgroundColor: tone.backgroundColor,
-          borderColor: tone.borderColor ?? `${tone.color}50`,
-          borderWidth: 1,
+          borderColor: tone.borderColor ?? 'transparent',
+          borderWidth: tone.borderColor ? 1 : 0,
         },
       ]}
     >
       <MaterialCommunityIcons
         name={tone.icon}
-        size={13}
+        size={12}
         color={tone.color}
         accessibilityElementsHidden={true}
         importantForAccessibility="no"
@@ -657,20 +657,21 @@ export const cardElevation = {
 
 const styles = StyleSheet.create({
   badge: {
-    minHeight: 26,
-    borderRadius: 20,
+    minHeight: 24,
+    borderRadius: 9999,
     paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingVertical: 3,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     alignSelf: 'flex-start',
-    borderWidth: 1,
   },
   badgeText: {
     ...KLIR_TYPOGRAPHY.badgeText,
     fontSize: 11,
     lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   metaPill: {
     minHeight: 26,

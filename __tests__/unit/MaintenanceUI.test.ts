@@ -15,8 +15,8 @@ describe('MaintenanceUI helper functions', () => {
     it('should return correct tone for "completed" status', () => {
       const tone = statusTone('completed');
       expect(tone).toEqual({
-        backgroundColor: UI_COLORS.softGreen,
-        color: UI_COLORS.success,
+        backgroundColor: '#2E7D32',
+        color: '#FFFFFF',
         icon: 'check-circle-outline',
       });
     });
@@ -24,8 +24,8 @@ describe('MaintenanceUI helper functions', () => {
     it('should return correct tone for "acknowledged" status', () => {
       const tone = statusTone('acknowledged');
       expect(tone).toEqual({
-        backgroundColor: UI_COLORS.softBlue,
-        color: UI_COLORS.info,
+        backgroundColor: '#E05A36',
+        color: '#FFFFFF',
         icon: 'progress-clock',
       });
     });
@@ -33,8 +33,8 @@ describe('MaintenanceUI helper functions', () => {
     it('should return correct tone for "reassignment_needed" status', () => {
       const tone = statusTone('reassignment_needed');
       expect(tone).toEqual({
-        backgroundColor: UI_COLORS.softRed,
-        color: UI_COLORS.danger,
+        backgroundColor: '#B91C1C',
+        color: '#FFFFFF',
         icon: 'alert-octagon-outline',
       });
     });
@@ -42,8 +42,8 @@ describe('MaintenanceUI helper functions', () => {
     it('should return correct tone for "unassigned" status', () => {
       const tone = statusTone('unassigned');
       expect(tone).toEqual({
-        backgroundColor: UI_COLORS.softRed,
-        color: UI_COLORS.danger,
+        backgroundColor: '#B91C1C',
+        color: '#FFFFFF',
         icon: 'alert-octagon-outline',
       });
     });
@@ -51,22 +51,22 @@ describe('MaintenanceUI helper functions', () => {
     it('should return correct tone for "assigned", "flagged", and "rechecking" statuses', () => {
       const assignedTone = statusTone('assigned');
       expect(assignedTone).toEqual({
-        backgroundColor: UI_COLORS.softOrange,
-        color: UI_COLORS.warning,
+        backgroundColor: '#D97706',
+        color: '#FFFFFF',
         icon: 'clock-alert-outline',
       });
 
       const flaggedTone = statusTone('flagged');
       expect(flaggedTone).toEqual({
-        backgroundColor: '#FEE2E2',
-        color: '#B91C1C',
+        backgroundColor: '#DC2626',
+        color: '#FFFFFF',
         icon: 'flag-outline',
       });
 
       const recheckingTone = statusTone('rechecking');
       expect(recheckingTone).toEqual({
-        backgroundColor: '#F3E8FF',
-        color: '#7E22CE',
+        backgroundColor: '#7E22CE',
+        color: '#FFFFFF',
         icon: 'sync',
       });
     });
