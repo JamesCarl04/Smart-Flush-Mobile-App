@@ -148,7 +148,6 @@ describe('InboxScreen Integration', () => {
     renderScreen();
 
     expect(screen.getByText("Today's Tasks")).toBeTruthy();
-    expect(screen.getByText('On Duty')).toBeTruthy();
 
     // Summary counts
     expect(screen.getByText('Pending')).toBeTruthy();

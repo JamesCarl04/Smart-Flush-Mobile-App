@@ -226,10 +226,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   {user?.building ? `${user.building} Facility` : 'SDCA Annex Facility'} • {user?.shift ?? '1st'} Shift
                 </Text>
               </View>
-              <View style={styles.onDutyPill}>
-                <View style={styles.onDutyDot} />
-                <Text style={styles.onDutyText}>On Duty</Text>
-              </View>
             </View>
 
             {/* 2-Column Bento KPI Metrics Grid */}
@@ -626,32 +622,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: '#64748B',
-  },
-  onDutyPill: {
-    minHeight: 26,
-    borderRadius: KLIR_RADII.tag,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: '#DCFCE7',
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-  },
-  onDutyDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#16A34A',
-  },
-  onDutyText: {
-    fontFamily: INTER_FONT,
-    color: '#15803D',
-    fontWeight: '800',
-    fontSize: 10,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
   },
   shiftPill: {
     minHeight: 24,

@@ -805,38 +805,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: KLIR_RADII.chip,
+    paddingVertical: 3,
+    borderRadius: 999,
     borderWidth: 1,
   },
   avatarPillPending: {
     backgroundColor: '#F8FAFC',
-    borderColor: '#CBD5E1',
+    borderColor: '#E2E8F0',
   },
   avatarPillAck: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#86EFAC',
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
   },
   avatarPillSubmitted: {
-    backgroundColor: '#DCFCE7',
-    borderColor: '#22C55E',
-  },
-  avatarCircleWrapper: {
-    position: 'relative',
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
   },
   avatarCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: KLIR_COLORS.primarySoft,
   },
   avatarCircleAck: {
-    backgroundColor: '#DCFCE7',
+    backgroundColor: '#2563EB',
   },
   avatarCircleSubmitted: {
     backgroundColor: '#16A34A',
+  },
+  avatarCirclePending: {
+    backgroundColor: '#94A3B8',
   },
   avatarText: {
     fontSize: 10,
@@ -844,10 +844,49 @@ const styles = StyleSheet.create({
     color: KLIR_COLORS.primaryDark,
   },
   avatarTextAck: {
-    color: '#15803D',
+    color: '#FFFFFF',
   },
   avatarTextSubmitted: {
     color: '#FFFFFF',
+  },
+  avatarTextPending: {
+    color: '#FFFFFF',
+  },
+  avatarLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: KLIR_COLORS.charcoal,
+  },
+  avatarLabelSubmitted: {
+    color: '#14532D',
+  },
+  avatarLabelAck: {
+    color: '#1E40AF',
+  },
+  avatarLabelPending: {
+    color: '#475569',
+  },
+  statusPillSubmitted: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 999,
+  },
+  statusPillTextSubmitted: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  statusPillAck: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    paddingHorizontal: 4,
+    paddingVertical: 1.5,
+    borderRadius: 999,
   },
   checkBadge: {
     position: 'absolute',
@@ -861,11 +900,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1.5,
     borderColor: '#FFFFFF',
-  },
-  avatarLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: KLIR_COLORS.charcoal,
   },
   broadcastPill: {
     flexDirection: 'row',
@@ -998,10 +1032,34 @@ export interface AssigneeAvatarClusterProps {
   currentUserName?: string | null;
 }
 
+export function cleanPersonName(name?: string | null): string {
+  if (!name) return '';
+  const cleaned = name.replace(/\s*\([^)]*\)/g, '').trim();
+  if (cleaned.includes('@')) {
+    const emailPrefix = cleaned.split('@')[0];
+    const parts = emailPrefix.split(/[._-]/).filter(Boolean);
+    return parts
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+      .join(' ');
+  }
+  return cleaned;
+}
+
 export function getInitials(name?: string | null): string {
   if (!name) return 'OP';
   // Remove parenthetical annotations like (Tech), (Supervisor), (Admin), (Lead), etc.
   const stripped = name.replace(/\([^)]*\)/g, '').trim();
+  if (!stripped) return 'OP';
+
+  if (stripped.includes('@')) {
+    const emailUser = stripped.split('@')[0];
+    const emailParts = emailUser.split(/[._-]/).filter(Boolean);
+    if (emailParts.length > 1) {
+      return (emailParts[0][0] + emailParts[emailParts.length - 1][0]).toUpperCase();
+    }
+    return emailUser.substring(0, 2).toUpperCase();
+  }
+
   // Split by whitespace and strip any remaining non-alphanumeric punctuation
   const words = stripped
     .split(/\s+/)
@@ -1045,39 +1103,46 @@ export function AssigneeAvatarCluster({
     ]),
   );
 
-  const resolveWorkerName = (uid: string): { displayName: string; firstName: string } => {
+  const resolveWorkerName = (
+    uid: string,
+  ): { displayName: string; firstName: string } => {
     // 1. Check if it matches current user
     if (currentUserId && (uid === currentUserId || uid === 'current-user')) {
-      const full = currentUserName || 'You';
+      const full = cleanPersonName(currentUserName) || 'You';
       return { displayName: full, firstName: full.split(' ')[0] };
     }
 
     // 2. Check task submissions
     const submissionName = task.submissions?.[uid]?.technicianName;
     if (submissionName) {
-      const cleaned = submissionName.replace(/\([^)]*\)/g, '').trim();
+      const cleaned = cleanPersonName(submissionName);
       return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
 
     // 3. Check people roster
     const person = people.find((p) => p.id === uid || p.email === uid);
     if (person?.displayName) {
-      const cleaned = person.displayName.replace(/\([^)]*\)/g, '').trim();
+      const cleaned = cleanPersonName(person.displayName);
       return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
     if (person?.email) {
-      const emailUser = person.email.split('@')[0];
-      return { displayName: emailUser, firstName: emailUser };
+      const cleaned = cleanPersonName(person.email);
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
 
     // 4. Format UID if it looks like an email or known ID
     if (uid.includes('@')) {
-      const emailUser = uid.split('@')[0];
-      return { displayName: emailUser, firstName: emailUser };
+      const cleaned = cleanPersonName(uid);
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
 
-    if (uid === task.assignedTo && currentUserName && (currentUserId == null || currentUserId === uid)) {
-      return { displayName: currentUserName, firstName: currentUserName.split(' ')[0] };
+    if (
+      uid === task.assignedTo &&
+      currentUserName &&
+      (currentUserId == null || currentUserId === uid)
+    ) {
+      const cleaned = cleanPersonName(currentUserName);
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
 
     if (uid === task.assignedTo) {
@@ -1134,9 +1199,15 @@ export function AssigneeAvatarCluster({
         <View style={styles.mobilizationChipsRow}>
           {responderUids.map((uid) => {
             const { displayName, firstName } = resolveWorkerName(uid);
-            const initials = getInitials(displayName === 'You' && currentUserName ? currentUserName : displayName);
+            const initials = getInitials(
+              displayName === 'You' && currentUserName
+                ? currentUserName
+                : displayName,
+            );
             const isDone = Boolean(
-              task.submissions?.[uid] || task.completedByMap?.[uid] || (task.status === 'completed' && task.completedBy === uid),
+              task.submissions?.[uid] ||
+                task.completedByMap?.[uid] ||
+                (task.status === 'completed' && task.completedBy === uid),
             );
 
             return (
@@ -1208,8 +1279,12 @@ export function AssigneeAvatarCluster({
   return (
     <View style={styles.avatarClusterRow}>
       {targetIds.map((uid) => {
-        const { displayName, firstName } = resolveWorkerName(uid);
-        const initials = getInitials(displayName === 'You' && currentUserName ? currentUserName : displayName);
+        const { displayName } = resolveWorkerName(uid);
+        const initials = getInitials(
+          displayName === 'You' && currentUserName
+            ? currentUserName
+            : displayName,
+        );
 
         const hasAcknowledged = Boolean(
           task.acknowledgedBy?.[uid] ||
@@ -1222,7 +1297,8 @@ export function AssigneeAvatarCluster({
           task.submissions?.[uid] ||
             task.completedByMap?.[uid] ||
             (task.status === 'completed' &&
-              (task.completedBy === uid || (task.completedBy == null && task.assignedTo === uid))),
+              (task.completedBy === uid ||
+                (task.completedBy == null && task.assignedTo === uid))),
         );
 
         const statusLabel = hasSubmitted
@@ -1246,47 +1322,64 @@ export function AssigneeAvatarCluster({
             accessibilityRole="summary"
             accessibilityLabel={`${displayName}: ${statusLabel}`}
           >
-            <View style={styles.avatarCircleWrapper}>
-              <View
+            <View
+              style={[
+                styles.avatarCircle,
+                hasSubmitted
+                  ? styles.avatarCircleSubmitted
+                  : hasAcknowledged
+                    ? styles.avatarCircleAck
+                    : styles.avatarCirclePending,
+              ]}
+            >
+              <Text
                 style={[
-                  styles.avatarCircle,
+                  styles.avatarText,
                   hasSubmitted
-                    ? styles.avatarCircleSubmitted
+                    ? styles.avatarTextSubmitted
                     : hasAcknowledged
-                      ? styles.avatarCircleAck
-                      : null,
+                      ? styles.avatarTextAck
+                      : styles.avatarTextPending,
                 ]}
               >
-                <Text
-                  style={[
-                    styles.avatarText,
-                    hasSubmitted
-                      ? styles.avatarTextSubmitted
-                      : hasAcknowledged
-                        ? styles.avatarTextAck
-                        : null,
-                  ]}
-                >
-                  {initials}
-                </Text>
-              </View>
-              {hasAcknowledged && (
-                <View style={styles.checkBadge}>
-                  <MaterialCommunityIcons
-                    name={hasSubmitted ? 'check-all' : 'check'}
-                    size={9}
-                    color="#FFFFFF"
-                  />
-                </View>
-              )}
+                {initials}
+              </Text>
             </View>
 
             {showNames && (
-              <Text style={styles.avatarLabel} numberOfLines={1}>
-                {firstName}
-                {hasSubmitted ? ' (Done)' : hasAcknowledged ? ' (Ack)' : ''}
+              <Text
+                style={[
+                  styles.avatarLabel,
+                  hasSubmitted
+                    ? styles.avatarLabelSubmitted
+                    : hasAcknowledged
+                      ? styles.avatarLabelAck
+                      : styles.avatarLabelPending,
+                ]}
+                numberOfLines={1}
+              >
+                {displayName}
               </Text>
             )}
+
+            {hasSubmitted ? (
+              <View style={styles.statusPillSubmitted}>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={12}
+                  color="#15803D"
+                />
+                <Text style={styles.statusPillTextSubmitted}>Done</Text>
+              </View>
+            ) : hasAcknowledged ? (
+              <View style={styles.statusPillAck}>
+                <MaterialCommunityIcons
+                  name="progress-clock"
+                  size={12}
+                  color="#2563EB"
+                />
+              </View>
+            ) : null}
           </View>
         );
       })}

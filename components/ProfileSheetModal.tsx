@@ -17,6 +17,7 @@ import {
   MetaPill,
   sharedShadow,
   getInitials,
+  cleanPersonName,
 } from './MaintenanceUI';
 import { TasksContext } from '../contexts/TasksContext';
 import { useAuth } from '../hooks/useAuth';
@@ -68,7 +69,18 @@ export function ProfileSheetModal({
 
   const roleLabel =
     role === 'supervisor' ? 'Facility Supervisor' : 'Facility Technician';
+  const cleanName =
+    cleanPersonName(user?.name) ||
+    (role === 'supervisor' ? 'Facility Supervisor' : 'Maintenance Personnel');
   const buildingLabel = user?.building || 'Main Campus / All Buildings';
+  const shiftLabel =
+    role === 'supervisor'
+      ? 'All Shifts • Command Hub'
+      : user?.shift
+        ? user.shift.toLowerCase().includes('shift')
+          ? `${user.shift} • Active Duty`
+          : `${user.shift} Shift • Active Duty`
+        : '1st Shift • Active Duty';
 
   return (
     <Modal
@@ -117,7 +129,7 @@ export function ProfileSheetModal({
                 </View>
 
                 <Text style={styles.workerName}>
-                  {user?.name || 'Maintenance Personnel'}
+                  {cleanName}
                 </Text>
 
                 <View style={styles.roleRow}>
@@ -167,7 +179,7 @@ export function ProfileSheetModal({
                   <View style={styles.detailTextBox}>
                     <Text style={styles.detailLabel}>Current Shift</Text>
                     <Text style={styles.detailValue}>
-                      1st Shift • Active Duty
+                      {shiftLabel}
                     </Text>
                   </View>
                 </View>
@@ -198,40 +210,43 @@ export function ProfileSheetModal({
                 </View>
               </View>
 
-              <Divider style={styles.divider} />
-
-              {/* QA / Diagnostics Simulation Section */}
-              <View style={styles.simulationSection}>
-                <Text style={styles.simulationHeader}>SYSTEM SIMULATOR</Text>
-                <TouchableOpacity
-                  onPress={handleSimulateHardwareAlert}
-                  style={styles.simulateAlertCard}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Simulate Hardware Failure Alert"
-                >
-                  <View style={styles.simulateIconBox}>
-                    <MaterialCommunityIcons
-                      name="alert-decagram"
-                      size={22}
-                      color="#B5121B"
-                    />
+              {/* QA / Diagnostics Simulation Section (Maintenance only) */}
+              {role !== 'supervisor' ? (
+                <>
+                  <Divider style={styles.divider} />
+                  <View style={styles.simulationSection}>
+                    <Text style={styles.simulationHeader}>SYSTEM SIMULATOR</Text>
+                    <TouchableOpacity
+                      onPress={handleSimulateHardwareAlert}
+                      style={styles.simulateAlertCard}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityLabel="Simulate Hardware Failure Alert"
+                    >
+                      <View style={styles.simulateIconBox}>
+                        <MaterialCommunityIcons
+                          name="alert-decagram"
+                          size={22}
+                          color="#B5121B"
+                        />
+                      </View>
+                      <View style={styles.simulateTextBox}>
+                        <Text style={styles.simulateTitle}>
+                          Test Hardware Alert
+                        </Text>
+                        <Text style={styles.simulateSubtitle}>
+                          Fires top push banner & creates urgent priority card
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons
+                        name="chevron-right"
+                        size={20}
+                        color="#B5121B"
+                      />
+                    </TouchableOpacity>
                   </View>
-                  <View style={styles.simulateTextBox}>
-                    <Text style={styles.simulateTitle}>
-                      Test Hardware Alert
-                    </Text>
-                    <Text style={styles.simulateSubtitle}>
-                      Fires top push banner & creates urgent priority card
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={20}
-                    color="#B5121B"
-                  />
-                </TouchableOpacity>
-              </View>
+                </>
+              ) : null}
 
               <Divider style={styles.divider} />
 

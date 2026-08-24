@@ -143,7 +143,6 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
     });
 
     expect(screen.getByText('2F • 2F Male Restroom • GB3 Building')).toBeTruthy();
-    expect(screen.getByText('1st Shift')).toBeTruthy();
     expect(screen.getAllByText('Flush Valve').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Continuous water flow and low water pressure.')).toBeTruthy();
     expect(screen.getByText('Acknowledge Task')).toBeTruthy();

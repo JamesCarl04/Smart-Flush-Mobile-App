@@ -286,10 +286,29 @@ describe('MaintenanceUI helper functions', () => {
       expect(getInitials('Justine Lopez (Tech)')).toBe('JL');
       expect(getInitials('Justine Lopez (Supervisor)')).toBe('JL');
       expect(getInitials('Justine Lopez')).toBe('JL');
+      expect(getInitials('Carlos Cruz (Tech)')).toBe('CC');
+      expect(getInitials('Maria Santos')).toBe('MS');
+      expect(getInitials('Alex Rivera')).toBe('AR');
       expect(getInitials('Justine')).toBe('JU');
+      expect(getInitials('justine.lopez@sdca.edu.ph')).toBe('JL');
+      expect(getInitials('carlos@sdca.edu.ph')).toBe('CA');
       expect(getInitials('')).toBe('OP');
       expect(getInitials(null)).toBe('OP');
       expect(getInitials(undefined)).toBe('OP');
+    });
+  });
+
+  describe('cleanPersonName', () => {
+    it('should strip parenthetical roles like (Tech) and clean names', () => {
+      const { cleanPersonName } = require('../../components/MaintenanceUI');
+      expect(cleanPersonName('Justine Lopez (Tech)')).toBe('Justine Lopez');
+      expect(cleanPersonName('Carlos Cruz (Tech)')).toBe('Carlos Cruz');
+      expect(cleanPersonName('Maria Santos (Supervisor)')).toBe('Maria Santos');
+      expect(cleanPersonName('Justine Lopez')).toBe('Justine Lopez');
+      expect(cleanPersonName('justine.lopez@sdca.edu.ph')).toBe('Justine Lopez');
+      expect(cleanPersonName('')).toBe('');
+      expect(cleanPersonName(null)).toBe('');
+      expect(cleanPersonName(undefined)).toBe('');
     });
   });
 });

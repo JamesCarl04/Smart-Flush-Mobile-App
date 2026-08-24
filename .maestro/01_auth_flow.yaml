@@ -30,7 +30,6 @@ appId: com.james.klir
 
 # 4. Verify Inbox Screen Loaded
 - assertVisible: "Today's Tasks"
-- assertVisible: "On Duty"
 - assertVisible: "Pending"
 
 # 5. Test Logout Flow

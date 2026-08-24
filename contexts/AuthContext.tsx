@@ -16,6 +16,7 @@ interface ProfileResponse {
     name?: unknown;
     role?: unknown;
     building?: unknown;
+    shift?: unknown;
   };
   error?: string;
 }
@@ -80,6 +81,8 @@ async function verifyUserProfile(
           : firebaseUser.displayName ?? firebaseUser.email ?? '',
     building:
       typeof payload.data?.building === 'string' ? payload.data.building : null,
+    shift:
+      typeof payload.data?.shift === 'string' ? payload.data.shift : null,
   };
 }
 

@@ -35,7 +35,7 @@ const TaskStack = createNativeStackNavigator<TaskStackParamList>();
 const SupervisorStack = createNativeStackNavigator<SupervisorStackParamList>();
 
 const sharedHeaderOptions = {
-  headerRight: () => <LogoutHeaderButton />,
+  headerRight: () => null,
   headerRightContainerStyle: {
     paddingRight: 12,
   },
@@ -57,7 +57,10 @@ function InboxStackNavigator(): React.JSX.Element {
       <InboxStack.Screen
         name="InboxHome"
         component={InboxScreen}
-        options={{ title: 'Inbox' }}
+        options={{
+          title: 'Inbox',
+          headerRight: () => <LogoutHeaderButton />,
+        }}
       />
       <InboxStack.Screen
         name="TaskDetail"
@@ -108,7 +111,10 @@ function SupervisorStackNavigator(): React.JSX.Element {
       <SupervisorStack.Screen
         name="SupervisorDashboard"
         component={SupervisorDashboardScreen}
-        options={{ title: 'Supervisor Dashboard' }}
+        options={{
+          title: 'Supervisor Dashboard',
+          headerRight: () => <LogoutHeaderButton />,
+        }}
       />
       <SupervisorStack.Screen
         name="TeamAvailability"

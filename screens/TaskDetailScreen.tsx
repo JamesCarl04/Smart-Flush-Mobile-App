@@ -660,43 +660,27 @@ export function TaskDetailScreen({
         {step === 'details' ? (
           <Card mode="elevated" style={[styles.heroCard, styles.cardElevation]}>
             <Card.Content style={styles.heroContent}>
-              {/* Top Row: Single Status Badge + Shift Pill */}
-              <View style={styles.headerTopRow}>
-                <OperationBadge
-                  label={
-                    task.status === 'completed'
-                      ? 'Completed'
-                      : task.status === 'acknowledged'
+              {/* Top Row: Status Badge (when in progress / not completed) */}
+              {task.status !== 'completed' ? (
+                <View style={styles.headerTopRow}>
+                  <OperationBadge
+                    label={
+                      task.status === 'acknowledged'
                         ? 'In Progress'
                         : getTaskDisplayStatus(task)
-                  }
-                  tone={
-                    task.status === 'completed'
-                      ? {
-                          backgroundColor: '#DCFCE7',
-                          color: '#16A34A',
-                          icon: 'check-circle-outline',
-                        }
-                      : task.status === 'acknowledged'
+                    }
+                    tone={
+                      task.status === 'acknowledged'
                         ? {
                             backgroundColor: '#FEF9E7',
                             color: '#C9A227',
                             icon: 'progress-clock',
                           }
                         : getTaskDisplayTone(task)
-                  }
-                />
-                <View style={styles.shiftPill}>
-                  <MaterialCommunityIcons
-                    name="clock-outline"
-                    size={12}
-                    color="#475569"
+                    }
                   />
-                  <Text style={styles.shiftPillText}>
-                    {`${task.shift ?? '1st'} Shift`}
-                  </Text>
                 </View>
-              </View>
+              ) : null}
 
               {/* Primary Restroom Headline */}
               <Text style={styles.locationHeadline}>

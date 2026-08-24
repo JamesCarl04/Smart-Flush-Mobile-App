@@ -35,6 +35,7 @@ import {
   MetaPill,
   OperationBadge,
   SquadCapacityPillBar,
+  cleanPersonName,
   getComponentMeta,
   getInitials,
   sharedShadow,
@@ -464,7 +465,7 @@ function getAssigneeName(
       p.id === assignedTo ||
       p.email?.toLowerCase() === assignedTo.toLowerCase(),
   );
-  return person ? person.displayName : assignedTo;
+  return person ? cleanPersonName(person.displayName) : assignedTo;
 }
 
 export function TeamAvailabilityScreen(): React.JSX.Element {
@@ -617,7 +618,7 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
                     </View>
                     <View style={{ gap: 2 }}>
                       <Text variant="titleMedium" style={styles.personName}>
-                        {item.displayName}
+                        {cleanPersonName(item.displayName)}
                       </Text>
                       <Text variant="bodyMedium" style={styles.personBuilding}>
                         {item.building ?? 'SDCA Annex Building'}
@@ -1000,10 +1001,10 @@ export function SupervisorTaskDetailScreen({
                     accessible={true}
                     accessibilityRole="radio"
                     accessibilityState={{ selected: isSelected }}
-                    accessibilityLabel={person.displayName}
+                    accessibilityLabel={cleanPersonName(person.displayName)}
                   >
                     <RadioButton.Item
-                      label={person.displayName}
+                      label={cleanPersonName(person.displayName)}
                       value={person.id}
                       color={KLIR_COLORS.primary}
                       labelStyle={styles.radioLabel}
