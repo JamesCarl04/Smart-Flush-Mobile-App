@@ -213,11 +213,9 @@ describe('TasksContext Integration', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+      // pendingCount: task-1 (assigned) + task-2 (unassigned) + task-3 (reassignment_needed) = 3
+      expect(screen.getByTestId('pending-count').props.children).toBe(3);
     });
-
-    // pendingCount: task-1 (assigned) + task-2 (unassigned) + task-3 (reassignment_needed) = 3
-    expect(screen.getByTestId('pending-count').props.children).toBe(3);
   });
 
   it('handles fetch error and allows clearing error via clearError()', async () => {

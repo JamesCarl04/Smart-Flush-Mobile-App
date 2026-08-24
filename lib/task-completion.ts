@@ -32,6 +32,8 @@ export interface OnlineCompletionInput {
   biometricVerified: boolean;
   completedAt: Date;
   completedBy: string;
+  isRecheck?: boolean;
+  recheckCount?: number;
 }
 
 export function secondsBetween(start: Date | null, end: Date): number | null {
@@ -74,6 +76,10 @@ export async function uploadTaskPhoto(
   kind: 'before' | 'after',
   capturedAt: Date,
 ): Promise<string> {
+  if (uri.startsWith('http://') || uri.startsWith('https://')) {
+    return uri;
+  }
+
   try {
     const timestamp = capturedAt.getTime();
     const photoRef = storage.ref(`tasks/${taskId}/${kind}_${timestamp}.jpg`);
@@ -109,9 +115,12 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   ]);
   const workDuration = secondsBetween(input.acknowledgedAt, input.completedAt);
   const totalTime = secondsBetween(input.createdAt, input.completedAt);
+  const nextRecheckCount = input.isRecheck
+    ? (input.recheckCount ?? 0) + 1
+    : input.recheckCount ?? 0;
 
   try {
-    const submissionPayload = {
+    const submissionPayload: Record<string, unknown> = {
       technicianUid: input.completedBy,
       technicianName: auth.currentUser?.displayName ?? input.completedBy,
       checklist: input.checklist,
@@ -123,9 +132,13 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       workDuration,
       completedAt: firestore.Timestamp.fromDate(input.completedAt),
       biometricVerified: input.biometricVerified,
+      recheckCount: nextRecheckCount,
+      recheckedAt: input.isRecheck
+        ? firestore.Timestamp.fromDate(input.completedAt)
+        : null,
     };
 
-    await db.collection('tasks').doc(input.taskId).update({
+    const updatePayload: Record<string, unknown> = {
       checklist: input.checklist,
       remarks: input.remarks,
       beforePhotoUrl,
@@ -135,6 +148,7 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       biometricVerified: input.biometricVerified,
       offlineSynced: false,
       status: 'completed',
+      inspectionStatus: 'pending_review',
       completedAt: firestore.Timestamp.fromDate(input.completedAt),
       completedBy: input.completedBy,
       [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt),
@@ -142,7 +156,15 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
       assignedTo: input.completedBy,
       workDuration,
       totalTime,
-    });
+    };
+
+    if (input.isRecheck) {
+      updatePayload.recheckCount = nextRecheckCount;
+      updatePayload.recheckedBy = input.completedBy;
+      updatePayload.recheckedAt = firestore.Timestamp.fromDate(input.completedAt);
+    }
+
+    await db.collection('tasks').doc(input.taskId).update(updatePayload);
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
     const code = err?.code ?? 'unknown';

@@ -140,6 +140,7 @@ function delay(ms: number): Promise<void> {
 
 import { AuthContext } from '../contexts/AuthContext';
 import { TasksContext } from '../contexts/TasksContext';
+import { ImageViewerModal } from './ImageViewerModal';
 
 export function TaskExecutionModal({
   visible,
@@ -163,6 +164,14 @@ export function TaskExecutionModal({
   const [remarks, setRemarks] = useState('');
   const [biometricVerified, setBiometricVerified] = useState(false);
   const [actionInFlight, setActionInFlight] = useState(false);
+  const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<string | null>(null);
+
+  const isRecheckMode = Boolean(
+    task &&
+      (task.status === 'flagged' ||
+        task.status === 'rechecking' ||
+        task.inspectionStatus === 'flagged'),
+  );
 
   // Stamping Overlay Stage
   const overlayRef = useRef<View>(null);
@@ -178,20 +187,35 @@ export function TaskExecutionModal({
 
     if (visible && task && (isOpening || isNewTask)) {
       currentTaskIdRef.current = task.id;
-      if (task.beforePhotoUrl) {
+
+      if (isRecheckMode) {
+        setBeforePhotoUri(task.beforePhotoUrl ?? null);
+        setBeforeCapturedAt(task.beforePhotoCapturedAt ?? new Date());
+        setAfterPhotoUri(null);
+        setAfterCapturedAt(null);
+        setStep('checklist');
+        setChecklist(task.checklist ? { ...task.checklist } : { ...EMPTY_CHECKLIST });
+        setRemarks(task.remarks ? `[Rectification] ` : '');
+        setBiometricVerified(false);
+      } else if (task.beforePhotoUrl) {
         setBeforePhotoUri(task.beforePhotoUrl);
         setBeforeCapturedAt(task.beforePhotoCapturedAt ?? new Date());
         setStep(task.afterPhotoUrl ? 'summary' : 'checklist');
+        setAfterPhotoUri(task.afterPhotoUrl ?? null);
+        setAfterCapturedAt(task.afterPhotoCapturedAt ?? null);
+        setChecklist(task.checklist ? { ...task.checklist } : { ...EMPTY_CHECKLIST });
+        setRemarks(task.remarks ?? '');
+        setBiometricVerified(Boolean(task.biometricVerified));
       } else {
         setStep('before_photo');
         setBeforePhotoUri(null);
         setBeforeCapturedAt(null);
+        setAfterPhotoUri(null);
+        setAfterCapturedAt(null);
+        setChecklist({ ...EMPTY_CHECKLIST });
+        setRemarks('');
+        setBiometricVerified(false);
       }
-      setAfterPhotoUri(task.afterPhotoUrl ?? null);
-      setAfterCapturedAt(task.afterPhotoCapturedAt ?? null);
-      setChecklist(task.checklist ? { ...task.checklist } : { ...EMPTY_CHECKLIST });
-      setRemarks(task.remarks ?? '');
-      setBiometricVerified(Boolean(task.biometricVerified));
       setActionInFlight(false);
     }
 
@@ -200,7 +224,7 @@ export function TaskExecutionModal({
     }
 
     prevVisibleRef.current = visible;
-  }, [visible, task?.id]);
+  }, [visible, task?.id, isRecheckMode]);
 
   const handleRequestClose = (): void => {
     if (beforePhotoUri && step !== 'before_photo') {
@@ -382,6 +406,8 @@ export function TaskExecutionModal({
           biometricVerified,
           completedAt,
           completedBy: uid,
+          isRecheck: isRecheckMode,
+          recheckCount: task.recheckCount ?? 0,
         });
       } else {
         await queueOfflineCompletion({
@@ -402,6 +428,7 @@ export function TaskExecutionModal({
       const updatedTask: Task = {
         ...task,
         status: 'completed',
+        inspectionStatus: 'pending_review',
         completedAt,
         completedBy: uid,
         beforePhotoUrl: beforePhotoUri,
@@ -411,10 +438,21 @@ export function TaskExecutionModal({
         checklist,
         remarks,
         biometricVerified,
+        recheckCount: isRecheckMode
+          ? (task.recheckCount ?? 0) + 1
+          : (task.recheckCount ?? 0),
+        recheckedBy: isRecheckMode ? uid : task.recheckedBy,
+        recheckedAt: isRecheckMode ? completedAt : task.recheckedAt,
       };
 
       if (onTaskCompleted) {
         onTaskCompleted(updatedTask);
+      }
+      if (isRecheckMode) {
+        Alert.alert(
+          'Re-inspection Submitted',
+          'The rectified task has been resubmitted for supervisor review.',
+        );
       }
       onDismiss();
     } catch (error) {
@@ -438,6 +476,61 @@ export function TaskExecutionModal({
 
   if (!task) return null;
 
+  const renderSupervisorFlagCard = () => {
+    if (!isRecheckMode || !task.flagReason) return null;
+    return (
+      <View style={styles.flagNoticeBanner}>
+        <View style={styles.flagNoticeHeader}>
+          <MaterialCommunityIcons name="alert-circle" size={20} color="#E11D48" />
+          <Text style={styles.flagNoticeTitle}>
+            Supervisor Flagged for Re-inspection
+            {task.recheckCount && task.recheckCount > 0
+              ? ` (Attempt #${task.recheckCount + 1})`
+              : ''}
+          </Text>
+        </View>
+        <Text style={styles.flagNoticeReason}>{task.flagReason}</Text>
+        <Text style={styles.flagNoticeMeta}>
+          Flagged by {task.inspectedByName ?? 'Supervisor'}
+          {task.inspectedAt ? ` • ${formatDate(task.inspectedAt)}` : ''}
+        </Text>
+        {task.flagPhotoUrls && task.flagPhotoUrls.length > 0 ? (
+          <View style={styles.flagPhotoGallery}>
+            <Text style={styles.flagPhotoGalleryLabel}>
+              Supervisor Attached Photo(s):
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.flagPhotoScroll}
+            >
+              {task.flagPhotoUrls.map((url, idx) => (
+                <TouchableOpacity
+                  key={url + idx}
+                  onPress={() => setSelectedViewerPhoto(url)}
+                  activeOpacity={0.8}
+                  style={styles.flagPhotoThumbWrapper}
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel="View supervisor flagged photo"
+                >
+                  <Image source={{ uri: url }} style={styles.flagPhotoThumb} />
+                  <View style={styles.zoomBadge}>
+                    <MaterialCommunityIcons
+                      name="magnify-plus-outline"
+                      size={14}
+                      color="#FFFFFF"
+                    />
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <Modal
       visible={visible}
@@ -450,11 +543,17 @@ export function TaskExecutionModal({
         <View style={styles.modalHeader}>
           <View style={styles.headerTitleBox}>
             <Text style={styles.stepTitle}>
-              {step === 'before_photo'
-                ? 'Step 1 of 3 • Proof Photo'
-                : step === 'checklist'
-                  ? 'Step 2 of 3 • Maintenance Checklist'
-                  : 'Step 3 of 3 • Completion Summary'}
+              {isRecheckMode
+                ? step === 'checklist'
+                  ? 'Step 1 of 3 • Review Checklist'
+                  : step === 'before_photo'
+                    ? 'Step 1 of 3 • Before Photo'
+                    : 'Step 3 of 3 • Resubmit Re-inspection'
+                : step === 'before_photo'
+                  ? 'Step 1 of 3 • Proof Photo'
+                  : step === 'checklist'
+                    ? 'Step 2 of 3 • Maintenance Checklist'
+                    : 'Step 3 of 3 • Completion Summary'}
             </Text>
             <Text style={styles.locationSubtitle}>
               {`${getRestroomLabel(task)} • ${task.location} (${task.building})`}
@@ -481,6 +580,9 @@ export function TaskExecutionModal({
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Supervisor Notice in Recheck Mode */}
+          {renderSupervisorFlagCard()}
+
           {/* STEP 1: BEFORE PHOTO */}
           {step === 'before_photo' ? (
             <View style={styles.stepContainer}>
@@ -596,7 +698,9 @@ export function TaskExecutionModal({
                       SDCA F-TGS 203 Checklist
                     </Text>
                     <Text style={styles.checklistSubtitle}>
-                      Mark all 10 items before taking the After photo.
+                      {isRecheckMode
+                        ? 'Review all 10 items and address supervisor feedback.'
+                        : 'Mark all 10 items before taking the After photo.'}
                     </Text>
                   </View>
                   <View style={styles.countBadge}>
@@ -650,19 +754,32 @@ export function TaskExecutionModal({
 
                 {/* Remarks Input */}
                 <TextInput
-                  label="Technician Remarks (Optional)"
+                  label={
+                    isRecheckMode
+                      ? 'Rectification Remarks / Actions Taken'
+                      : 'Technician Remarks (Optional)'
+                  }
                   value={remarks}
                   mode="outlined"
                   multiline
                   numberOfLines={3}
                   onChangeText={setRemarks}
+                  placeholder={
+                    isRecheckMode
+                      ? 'Describe what was fixed for the supervisor...'
+                      : 'Add any maintenance notes...'
+                  }
                   outlineColor="#CBD5E1"
                   activeOutlineColor={KLIR_COLORS.primary}
                   style={styles.remarksInput}
                 />
 
                 <KlirButton
-                  title="Take After Photo"
+                  title={
+                    isRecheckMode
+                      ? 'Take Rectified Proof Photo'
+                      : 'Take After Photo'
+                  }
                   variant="primary"
                   onPress={() => void handleCaptureAfterPhoto()}
                   icon="camera-flip-outline"
@@ -676,9 +793,15 @@ export function TaskExecutionModal({
           {step === 'summary' ? (
             <Card mode="elevated" style={[styles.stepCard, styles.cardElevation]}>
               <Card.Content style={styles.stepContent}>
-                <Text style={styles.summaryTitle}>Completion Verification</Text>
+                <Text style={styles.summaryTitle}>
+                  {isRecheckMode
+                    ? 'Rectification & Re-inspection Summary'
+                    : 'Completion Verification'}
+                </Text>
                 <Text style={styles.summarySubtitle}>
-                  Review your before & after proof photos and checklist summary.
+                  {isRecheckMode
+                    ? 'Review supervisor feedback, original condition, and your rectified proof photo.'
+                    : 'Review your before & after proof photos and checklist summary.'}
                 </Text>
 
                 {/* Side-by-Side Photo Comparison */}
@@ -690,7 +813,9 @@ export function TaskExecutionModal({
                         size={14}
                         color="#64748B"
                       />
-                      <Text style={styles.photoHeaderLabel}>BEFORE</Text>
+                      <Text style={styles.photoHeaderLabel}>
+                        {isRecheckMode ? 'INITIAL BEFORE' : 'BEFORE'}
+                      </Text>
                     </View>
                     {beforePhotoUri ? (
                       <View style={styles.photoWrapper}>
@@ -733,7 +858,7 @@ export function TaskExecutionModal({
                           { color: KLIR_COLORS.primary },
                         ]}
                       >
-                        AFTER
+                        {isRecheckMode ? 'RECTIFIED PROOF' : 'AFTER'}
                       </Text>
                     </View>
                     {afterPhotoUri ? (
@@ -743,7 +868,9 @@ export function TaskExecutionModal({
                           style={styles.comparePhoto}
                         />
                         <View style={styles.photoOverlayTag}>
-                          <Text style={styles.photoOverlayText}>After</Text>
+                          <Text style={styles.photoOverlayText}>
+                            {isRecheckMode ? 'Rectified' : 'After'}
+                          </Text>
                         </View>
                       </View>
                     ) : (
@@ -784,29 +911,72 @@ export function TaskExecutionModal({
                   </View>
                 </View>
 
-                {remarks ? (
-                  <View style={styles.remarksBox}>
-                    <Text style={styles.remarksBoxLabel}>Remarks</Text>
-                    <Text style={styles.remarksBoxText}>{remarks}</Text>
-                  </View>
-                ) : null}
+                {/* Editable Remarks on Summary */}
+                <TextInput
+                  label={
+                    isRecheckMode
+                      ? 'Rectification Remarks / Actions Taken'
+                      : 'Technician Remarks (Optional)'
+                  }
+                  value={remarks}
+                  mode="outlined"
+                  multiline
+                  numberOfLines={2}
+                  onChangeText={setRemarks}
+                  placeholder={
+                    isRecheckMode
+                      ? 'Describe actions taken to rectify the issue...'
+                      : 'Add any remarks...'
+                  }
+                  outlineColor="#CBD5E1"
+                  activeOutlineColor={KLIR_COLORS.primary}
+                  style={styles.remarksInput}
+                />
 
                 <Divider style={styles.divider} />
 
                 {/* Final Submit Button */}
                 <KlirButton
-                  title="Submit Completion"
+                  title={
+                    isRecheckMode ? 'Submit Re-inspection' : 'Submit Completion'
+                  }
                   variant="primary"
                   loading={actionInFlight}
                   disabled={actionInFlight}
                   onPress={() => void submitCompletion()}
-                  icon="cloud-upload-outline"
+                  icon={isRecheckMode ? 'send-check' : 'cloud-upload-outline'}
                   style={styles.ctaButton}
                 />
+
+                {/* Additional Helper Buttons */}
+                <View style={styles.summaryActionRow}>
+                  <KlirButton
+                    title="Retake Proof Photo"
+                    variant="outline"
+                    onPress={() => void handleCaptureAfterPhoto()}
+                    icon="camera-flip-outline"
+                    style={styles.secondaryButtonFlex}
+                  />
+                  <KlirButton
+                    title="Edit Checklist"
+                    variant="outline"
+                    onPress={() => setStep('checklist')}
+                    icon="playlist-edit"
+                    style={styles.secondaryButtonFlex}
+                  />
+                </View>
               </Card.Content>
             </Card>
           ) : null}
         </ScrollView>
+
+        {/* Zoomable Image Viewer Modal for Flagged Photos */}
+        <ImageViewerModal
+          visible={Boolean(selectedViewerPhoto)}
+          imageUrl={selectedViewerPhoto}
+          onDismiss={() => setSelectedViewerPhoto(null)}
+          caption="Supervisor Flagged Proof Photo"
+        />
 
         {/* Hidden offscreen stage for burning timestamp overlay */}
         <View ref={overlayRef} collapsable={false} style={styles.overlayStage}>
@@ -1250,6 +1420,86 @@ const styles = StyleSheet.create({
     fontSize: 30,
     fontWeight: '700',
     letterSpacing: 0.5,
+  },
+  flagNoticeBanner: {
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    borderRadius: 14,
+    padding: 14,
+    gap: 8,
+    marginBottom: 4,
+  },
+  flagNoticeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  flagNoticeTitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#9F1239',
+    flex: 1,
+  },
+  flagNoticeReason: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#881337',
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  flagNoticeMeta: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#BE123C',
+  },
+  flagPhotoGallery: {
+    marginTop: 4,
+    gap: 6,
+  },
+  flagPhotoGalleryLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9F1239',
+    textTransform: 'uppercase',
+  },
+  flagPhotoScroll: {
+    flexDirection: 'row',
+  },
+  flagPhotoThumbWrapper: {
+    width: 68,
+    height: 68,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginRight: 8,
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: '#FDA4AF',
+  },
+  flagPhotoThumb: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  zoomBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 4,
+    padding: 2,
+  },
+  summaryActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  secondaryButtonFlex: {
+    flex: 1,
+    borderRadius: 12,
   },
 });
 
