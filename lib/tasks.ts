@@ -423,7 +423,13 @@ export function parseTaskDocument(
     return null;
   }
 
-  if (!isTaskStatus(data.status)) {
+  const assignedTo = typeof data.assignedTo === 'string' && data.assignedTo.trim() ? data.assignedTo.trim() : null;
+  let rawStatus = data.status;
+  if (rawStatus === 'pending') {
+    rawStatus = assignedTo ? 'assigned' : 'unassigned';
+  }
+
+  if (!isTaskStatus(rawStatus)) {
     return null;
   }
 
@@ -441,23 +447,25 @@ export function parseTaskDocument(
   const assignedToIds = stringArray(data.assignedToIds);
 
   let status: TaskStatus = 'unassigned';
-  if (data.status === 'flagged') {
+  if (rawStatus === 'flagged') {
     status = 'flagged';
-  } else if (data.status === 'rechecking') {
+  } else if (rawStatus === 'rechecking') {
     status = 'rechecking';
-  } else if (data.status === 'reassignment_needed') {
+  } else if (rawStatus === 'reassignment_needed') {
     status = 'reassignment_needed';
+  } else if (rawStatus === 'completed') {
+    status = 'completed';
   } else if (completedAt || completedBy || Object.keys(submissions).length > 0) {
     // If all assigned technicians have submitted, mark completed
     if (assignedToIds.length > 0 && assignedToIds.every((uid) => Boolean(submissions[uid] || completedByMap[uid]))) {
       status = 'completed';
     } else if (completedAt || completedBy) {
       status = 'completed';
-    } else if (typeof data.status === 'string' && isTaskStatus(data.status)) {
-      status = data.status;
+    } else if (typeof rawStatus === 'string' && isTaskStatus(rawStatus)) {
+      status = rawStatus;
     }
-  } else if (typeof data.status === 'string' && isTaskStatus(data.status)) {
-    status = data.status;
+  } else if (typeof rawStatus === 'string' && isTaskStatus(rawStatus)) {
+    status = rawStatus;
   }
 
   return {

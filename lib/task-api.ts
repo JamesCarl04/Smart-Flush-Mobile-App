@@ -6,7 +6,7 @@ import {
   isTaskTriggerType,
   parseTaskDocument,
 } from './tasks';
-import type { Task, TaskChecklist } from '../types';
+import type { Task, TaskChecklist, TaskStatus } from '../types';
 
 interface TaskApiData {
   id?: unknown;
@@ -43,6 +43,17 @@ interface TaskApiData {
   reassignCount?: unknown;
   supervisorUid?: unknown;
   createdBy?: unknown;
+
+  // QA & Supervisor Audit Fields
+  inspectionStatus?: unknown;
+  inspectedBy?: unknown;
+  inspectedByName?: unknown;
+  inspectedAt?: unknown;
+  flagReason?: unknown;
+  flagPhotoUrls?: unknown;
+  recheckCount?: unknown;
+  recheckedBy?: unknown;
+  recheckedAt?: unknown;
 }
 
 function millisToDate(value: unknown): Date | null {
@@ -139,11 +150,21 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     rawStatus = assignedTo ? 'assigned' : 'unassigned';
   }
 
-  let status = isTaskStatus(rawStatus) ? rawStatus : 'unassigned';
-  if (completedAt || completedBy) {
+  let status: TaskStatus = 'unassigned';
+  if (rawStatus === 'flagged') {
+    status = 'flagged';
+  } else if (rawStatus === 'rechecking') {
+    status = 'rechecking';
+  } else if (rawStatus === 'reassignment_needed') {
+    status = 'reassignment_needed';
+  } else if (rawStatus === 'completed') {
     status = 'completed';
-  } else if (acknowledgedAt && status !== 'completed') {
+  } else if (completedAt || completedBy) {
+    status = 'completed';
+  } else if (acknowledgedAt) {
     status = 'acknowledged';
+  } else if (isTaskStatus(rawStatus)) {
+    status = rawStatus;
   }
 
   const rawObj = data as Record<string, unknown>;
@@ -210,6 +231,24 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     reassignCount: numberOrNull(data.reassignCount) ?? 0,
     supervisorUid: stringOrNull(data.supervisorUid),
     createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',
+
+    // QA & Supervisor Audit Fields
+    inspectionStatus:
+      data.inspectionStatus === 'approved' ||
+      data.inspectionStatus === 'flagged' ||
+      data.inspectionStatus === 'pending_review'
+        ? data.inspectionStatus
+        : undefined,
+    inspectedBy: stringOrNull(data.inspectedBy),
+    inspectedByName: stringOrNull(data.inspectedByName),
+    inspectedAt: millisToDate(data.inspectedAt),
+    flagReason: stringOrNull(data.flagReason),
+    flagPhotoUrls: Array.isArray(data.flagPhotoUrls)
+      ? data.flagPhotoUrls.filter((url): url is string => typeof url === 'string')
+      : undefined,
+    recheckCount: numberOrNull(data.recheckCount) ?? 0,
+    recheckedBy: stringOrNull(data.recheckedBy),
+    recheckedAt: millisToDate(data.recheckedAt),
   };
 }
 

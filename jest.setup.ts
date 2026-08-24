@@ -188,6 +188,7 @@ class MockFirestoreTimestamp {
 
 export const mockFirestoreDoc = {
   update: jest.fn().mockResolvedValue(undefined),
+  set: jest.fn().mockResolvedValue(undefined),
   get: jest.fn().mockResolvedValue({
     exists: true,
     data: () => ({ createdAt: new MockFirestoreTimestamp(new Date('2026-08-15T08:00:00Z')) }),

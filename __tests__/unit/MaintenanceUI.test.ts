@@ -48,7 +48,7 @@ describe('MaintenanceUI helper functions', () => {
       });
     });
 
-    it('should return correct tone for "assigned" and "flagged" statuses', () => {
+    it('should return correct tone for "assigned", "flagged", and "rechecking" statuses', () => {
       const assignedTone = statusTone('assigned');
       expect(assignedTone).toEqual({
         backgroundColor: UI_COLORS.softOrange,
@@ -58,9 +58,16 @@ describe('MaintenanceUI helper functions', () => {
 
       const flaggedTone = statusTone('flagged');
       expect(flaggedTone).toEqual({
-        backgroundColor: UI_COLORS.softOrange,
-        color: UI_COLORS.warning,
-        icon: 'clock-alert-outline',
+        backgroundColor: '#FEE2E2',
+        color: '#B91C1C',
+        icon: 'flag-outline',
+      });
+
+      const recheckingTone = statusTone('rechecking');
+      expect(recheckingTone).toEqual({
+        backgroundColor: '#F3E8FF',
+        color: '#7E22CE',
+        icon: 'sync',
       });
     });
   });

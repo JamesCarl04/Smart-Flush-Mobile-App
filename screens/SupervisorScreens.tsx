@@ -1046,7 +1046,15 @@ export function CompletedReviewsScreen({
 
   const completed = useMemo(() => {
     return tasks
-      .filter((task) => task.status === 'completed')
+      .filter(
+        (task) =>
+          task.status === 'completed' ||
+          task.status === 'flagged' ||
+          task.status === 'rechecking' ||
+          task.inspectionStatus === 'approved' ||
+          task.inspectionStatus === 'flagged' ||
+          Boolean(task.completedAt),
+      )
       .sort((a, b) => {
         const timeA = (a.completedAt ?? a.createdAt).getTime();
         const timeB = (b.completedAt ?? b.createdAt).getTime();
@@ -1083,30 +1091,57 @@ export function CompletedReviewsScreen({
               body="Completed tasks with photos and checklists will appear here."
             />
           }
-          renderItem={({ item }) => (
-            <Card
-              mode="elevated"
-              style={[styles.taskCard, styles.cardElevation]}
-              onPress={() =>
-                navigation.navigate('CompletedReviewDetail', { taskId: item.id })
-              }
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.location}, Completed`}
-              accessibilityHint="Double tap to view before and after proof and 10-point checklist"
-            >
-              <Card.Content style={styles.cardContent}>
-                <View style={styles.rowBetween}>
-                  <Text variant="titleMedium" style={styles.taskLocationTitle}>
-                    {item.location}
-                  </Text>
-                  <Chip
-                    style={{ backgroundColor: '#DCFCE7', borderRadius: KLIR_RADII.chip }}
-                    textStyle={[styles.chipText, { color: '#15803D' }]}
-                  >
-                    Completed
-                  </Chip>
-                </View>
+          renderItem={({ item }) => {
+            const isApproved = item.inspectionStatus === 'approved';
+            const isFlagged = item.inspectionStatus === 'flagged' || item.status === 'flagged';
+            const isRechecking = item.status === 'rechecking';
+
+            const chipBg = isApproved
+              ? '#DCFCE7'
+              : isFlagged
+                ? '#FEE2E2'
+                : isRechecking
+                  ? '#F3E8FF'
+                  : '#E0F2FE';
+            const chipTextColor = isApproved
+              ? '#15803D'
+              : isFlagged
+                ? '#B91C1C'
+                : isRechecking
+                  ? '#7E22CE'
+                  : '#0369A1';
+            const chipLabel = isApproved
+              ? '✓ Approved'
+              : isFlagged
+                ? '⚠️ Flagged'
+                : isRechecking
+                  ? '🔄 Rechecking'
+                  : 'Completed';
+
+            return (
+              <Card
+                mode="elevated"
+                style={[styles.taskCard, styles.cardElevation]}
+                onPress={() =>
+                  navigation.navigate('CompletedReviewDetail', { taskId: item.id })
+                }
+                accessible={true}
+                accessibilityRole="button"
+                accessibilityLabel={`${item.location}, ${chipLabel}`}
+                accessibilityHint="Double tap to view before and after proof and 10-point checklist"
+              >
+                <Card.Content style={styles.cardContent}>
+                  <View style={styles.rowBetween}>
+                    <Text variant="titleMedium" style={styles.taskLocationTitle}>
+                      {item.location}
+                    </Text>
+                    <Chip
+                      style={{ backgroundColor: chipBg, borderRadius: KLIR_RADII.chip }}
+                      textStyle={[styles.chipText, { color: chipTextColor }]}
+                    >
+                      {chipLabel}
+                    </Chip>
+                  </View>
 
                 <Text style={styles.taskDurationLine}>
                   {formatDate(item.completedAt ?? item.createdAt)} • {formatDuration(item.workDuration)}
@@ -1154,7 +1189,8 @@ export function CompletedReviewsScreen({
                 </View>
               </Card.Content>
             </Card>
-          )}
+          );
+        }}
         />
       )}
       <Snackbar visible={error !== null} onDismiss={clearError}>
@@ -1560,9 +1596,16 @@ export function CompletedReviewDetailScreen({
             {task.inspectionStatus === 'approved' ? (
               <View style={styles.approvedBanner}>
                 <MaterialCommunityIcons name="check-decagram" size={20} color="#16A34A" />
-                <Text style={styles.approvedBannerText}>
-                  Approved by {task.inspectedByName ?? 'Supervisor'}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.approvedBannerText}>
+                    Approved by {task.inspectedByName ?? 'Supervisor'}
+                  </Text>
+                  {task.inspectedAt ? (
+                    <Text style={{ fontSize: 11, color: '#15803D', marginTop: 2 }}>
+                      {formatDate(task.inspectedAt)}
+                    </Text>
+                  ) : null}
+                </View>
               </View>
             ) : null}
 
@@ -1572,43 +1615,67 @@ export function CompletedReviewDetailScreen({
                 <View style={{ flex: 1 }}>
                   <Text style={styles.flaggedBannerTitle}>Flagged for Re-inspection</Text>
                   <Text style={styles.flaggedBannerReason}>{task.flagReason}</Text>
+                  <Text style={{ fontSize: 11, color: '#991B1B', marginTop: 4 }}>
+                    By {task.inspectedByName ?? 'Supervisor'}{task.inspectedAt ? ` • ${formatDate(task.inspectedAt)}` : ''}
+                  </Text>
+                  {task.flagPhotoUrls && task.flagPhotoUrls.length > 0 ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+                      {task.flagPhotoUrls.map((url, idx) => (
+                        <TouchableOpacity
+                          key={idx}
+                          onPress={() => setSelectedViewerPhoto(url)}
+                          style={styles.photoThumbWrap}
+                        >
+                          <Image source={{ uri: url }} style={styles.thumbImage} />
+                          <View style={styles.photoZoomIconBadge}>
+                            <MaterialCommunityIcons name="magnify-plus" size={12} color="#FFFFFF" />
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
                 </View>
               </View>
             ) : null}
 
-            {/* Dual QA Action Buttons */}
-            <View style={styles.qaActionRow}>
-              <Button
-                mode="contained"
-                icon="check"
-                buttonColor={KLIR_COLORS.success}
-                textColor="#FFFFFF"
-                loading={approving}
-                disabled={approving || submittingFlag || task.inspectionStatus === 'approved'}
-                style={styles.approveButton}
-                contentStyle={styles.actionButtonContent}
-                labelStyle={styles.actionButtonLabel}
-                onPress={() => void handleApprove()}
-              >
-                {task.inspectionStatus === 'approved' ? 'Approved' : 'Approve Task'}
-              </Button>
+            {/* Dual QA Action Buttons — only shown when pending review */}
+            {task.inspectionStatus !== 'approved' &&
+            task.inspectionStatus !== 'flagged' &&
+            task.status !== 'flagged' ? (
+              <View style={styles.qaActionRow}>
+                <Button
+                  mode="contained"
+                  icon="check"
+                  buttonColor={KLIR_COLORS.success}
+                  textColor="#FFFFFF"
+                  loading={approving}
+                  disabled={approving || submittingFlag}
+                  style={styles.approveButton}
+                  contentStyle={styles.actionButtonContent}
+                  labelStyle={styles.actionButtonLabel}
+                  onPress={() => void handleApprove()}
+                >
+                  Approve Task
+                </Button>
 
-              <Button
-                mode="contained-tonal"
-                textColor={KLIR_COLORS.danger}
-                icon="flag-outline"
-                style={styles.flagButton}
-                contentStyle={styles.actionButtonContent}
-                labelStyle={styles.actionButtonLabel}
-                onPress={() => {
-                  setReason('Requires re-inspection');
-                  setFlagPhotos([]);
-                  setVisible(true);
-                }}
-              >
-                Flag for Re-inspection
-              </Button>
-            </View>
+                <Button
+                  mode="contained-tonal"
+                  textColor={KLIR_COLORS.danger}
+                  icon="flag-outline"
+                  style={styles.flagButton}
+                  contentStyle={styles.actionButtonContent}
+                  labelStyle={styles.actionButtonLabel}
+                  disabled={approving || submittingFlag}
+                  onPress={() => {
+                    setReason('Requires re-inspection');
+                    setFlagPhotos([]);
+                    setVisible(true);
+                  }}
+                >
+                  Flag for Re-inspection
+                </Button>
+              </View>
+            ) : null}
           </Card.Content>
         </Card>
       </ScrollView>

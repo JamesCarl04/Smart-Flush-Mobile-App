@@ -9,7 +9,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
 import { fetchTasks } from '../lib/task-api';
-import { parseTaskDocument } from '../lib/tasks';
+import { isBroadcastTask, parseTaskDocument } from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
@@ -98,14 +98,30 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     };
   }, [refreshTasks, user]);
 
-  const inboxTasks = tasks.filter((task) => task.status !== 'completed');
+  const inboxTasks = tasks.filter(
+    (task) =>
+      task.status !== 'completed' &&
+      (task.status === 'unassigned' ||
+        task.status === 'reassignment_needed' ||
+        task.assignedTo === user?.uid ||
+        task.assignedTo === user?.email ||
+        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+        isBroadcastTask(task) ||
+        task.completedBy === user?.uid ||
+        (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
+  );
+
   const historyTasks = tasks.filter(
     (task) =>
-      task.status === 'completed' &&
+      (task.status === 'completed' || Boolean(task.completedAt)) &&
       (!task.completedBy ||
         task.completedBy === user?.uid ||
-        task.assignedTo === user?.uid),
+        task.assignedTo === user?.uid ||
+        task.assignedTo === user?.email ||
+        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+        (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
   );
+
   const pendingCount = tasks.filter(
     (task) =>
       task.status === 'unassigned' ||

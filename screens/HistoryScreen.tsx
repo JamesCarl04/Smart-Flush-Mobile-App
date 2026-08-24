@@ -262,10 +262,18 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
               {/* Header Status & Finished Timestamp */}
               <View style={styles.cardHeader}>
                 <View style={styles.badgeRow}>
-                  <OperationBadge
-                    label={formatTaskStatus(item.status)}
-                    tone={statusTone(item.status)}
-                  />
+                  {item.inspectionStatus === 'approved' ? (
+                    <OperationBadge label="✓ Approved" tone={statusTone('completed')} />
+                  ) : item.inspectionStatus === 'flagged' || item.status === 'flagged' ? (
+                    <OperationBadge label="⚠️ Flagged for Recheck" tone={statusTone('flagged')} />
+                  ) : item.status === 'rechecking' ? (
+                    <OperationBadge label="🔄 Under Recheck" tone={statusTone('rechecking')} />
+                  ) : (
+                    <OperationBadge
+                      label={formatTaskStatus(item.status)}
+                      tone={statusTone(item.status)}
+                    />
+                  )}
                   {item.biometricVerified ? (
                     <View style={styles.biometricBadge}>
                       <MaterialCommunityIcons

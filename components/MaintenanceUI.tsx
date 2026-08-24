@@ -291,6 +291,22 @@ export function statusTone(status: Task['status'] | 'broadcast' | 'Team Broadcas
     };
   }
 
+  if (status === 'flagged') {
+    return {
+      backgroundColor: '#FEE2E2',
+      color: '#B91C1C',
+      icon: 'flag-outline',
+    };
+  }
+
+  if (status === 'rechecking') {
+    return {
+      backgroundColor: '#F3E8FF',
+      color: '#7E22CE',
+      icon: 'sync',
+    };
+  }
+
   if (status === 'broadcast' || status === 'Team Broadcast') {
     return {
       backgroundColor: '#EFF6FF',
