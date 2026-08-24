@@ -387,7 +387,7 @@ describe('Supervisor Screens Integration Suite', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText('Task flagged for re-inspection.')).toBeTruthy();
+        expect(mockNavigation.goBack).toHaveBeenCalled();
       });
     });
   });

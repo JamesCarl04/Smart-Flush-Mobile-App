@@ -93,7 +93,9 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   ).length;
 
   const flaggedTasksList = useMemo(() => {
-    return inboxTasks.filter((task) => task.status === 'flagged');
+    return inboxTasks.filter(
+      (task) => task.status === 'flagged' || task.inspectionStatus === 'flagged',
+    );
   }, [inboxTasks]);
 
   const activeTasksList = useMemo(() => {

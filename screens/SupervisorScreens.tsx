@@ -1201,6 +1201,7 @@ export function CompletedReviewsScreen({
 }
 
 export function CompletedReviewDetailScreen({
+  navigation,
   route,
 }: ReviewDetailProps): React.JSX.Element {
   const { user } = useAuth();
@@ -1328,9 +1329,11 @@ export function CompletedReviewDetailScreen({
         supervisorUid: user.uid,
         supervisorName: user.name,
       });
-      setMessage('Task approved successfully.');
+      Alert.alert('Task Approved', 'The maintenance task has been approved successfully.');
+      navigation.goBack();
     } catch (caught) {
-      setMessage(
+      Alert.alert(
+        'Approval Failed',
         caught instanceof Error ? caught.message : 'Failed to approve task.',
       );
     } finally {
@@ -1349,12 +1352,14 @@ export function CompletedReviewDetailScreen({
         supervisorName: user.name,
         flagPhotoUrls: flagPhotos,
       });
-      setMessage('Task flagged for re-inspection.');
       setVisible(false);
       setReason('');
       setFlagPhotos([]);
+      Alert.alert('Task Flagged', 'The task has been flagged for technician re-inspection.');
+      navigation.goBack();
     } catch (caught) {
-      setMessage(
+      Alert.alert(
+        'Flag Failed',
         caught instanceof Error ? caught.message : 'Failed to flag task.',
       );
     } finally {
