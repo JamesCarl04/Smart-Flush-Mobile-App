@@ -2,7 +2,9 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import {
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
@@ -513,6 +515,7 @@ export function TaskExecutionModal({
                   accessible={true}
                   accessibilityRole="button"
                   accessibilityLabel="View supervisor flagged photo"
+                  accessibilityHint="Double tap to view supervisor photo in full screen with zoom and pan"
                 >
                   <Image source={{ uri: url }} style={styles.flagPhotoThumb} />
                   <View style={styles.zoomBadge}>
@@ -539,6 +542,10 @@ export function TaskExecutionModal({
       onRequestClose={handleRequestClose}
     >
       <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardAvoid}
+        >
         {/* Modal Top Header */}
         <View style={styles.modalHeader}>
           <View style={styles.headerTitleBox}>
@@ -978,6 +985,8 @@ export function TaskExecutionModal({
           caption="Supervisor Flagged Proof Photo"
         />
 
+        </KeyboardAvoidingView>
+
         {/* Hidden offscreen stage for burning timestamp overlay */}
         <View ref={overlayRef} collapsable={false} style={styles.overlayStage}>
           {overlayUri ? (
@@ -998,6 +1007,9 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  keyboardAvoid: {
+    flex: 1,
   },
   cardElevation: {
     ...cardElevation,

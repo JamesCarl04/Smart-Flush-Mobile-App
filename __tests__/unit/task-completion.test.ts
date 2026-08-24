@@ -171,9 +171,11 @@ describe('task-completion utility', () => {
 
     it('should complete task online and call update for task and user documents', async () => {
       mockFirestoreDoc.update.mockResolvedValue(undefined);
+      mockFirestoreDoc.set.mockResolvedValue(undefined);
 
       await expect(completeTaskOnline(input)).resolves.toBeUndefined();
-      expect(mockFirestoreDoc.update).toHaveBeenCalledTimes(2);
+      expect(mockFirestoreDoc.update).toHaveBeenCalledTimes(1);
+      expect(mockFirestoreDoc.set).toHaveBeenCalledTimes(1);
     });
 
     it('should catch, log, and throw error when task update fails (permission-denied)', async () => {
@@ -200,10 +202,9 @@ describe('task-completion utility', () => {
       const permError = Object.assign(new Error('Permission denied on personnel doc.'), {
         code: 'permission-denied',
       });
-      // First update (task) succeeds, second (personnel) fails
-      mockFirestoreDoc.update
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(permError);
+      // First update (task) succeeds, set (personnel) fails
+      mockFirestoreDoc.update.mockResolvedValueOnce(undefined);
+      mockFirestoreDoc.set.mockRejectedValueOnce(permError);
 
       await expect(completeTaskOnline(input)).rejects.toThrow(
         '[Firestore Task Update] Error: Permission denied on personnel doc.',

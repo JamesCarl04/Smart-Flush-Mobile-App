@@ -477,6 +477,7 @@ export function OperationBadge({
     backgroundColor: string;
     color: string;
     icon: keyof typeof MaterialCommunityIcons.glyphMap;
+    borderColor?: string;
   };
 }): React.JSX.Element {
   return (
@@ -485,7 +486,8 @@ export function OperationBadge({
         styles.badge,
         {
           backgroundColor: tone.backgroundColor,
-          borderColor: `${tone.color}35`,
+          borderColor: tone.borderColor ?? `${tone.color}50`,
+          borderWidth: 1,
         },
       ]}
     >

@@ -177,11 +177,14 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   }
 
   try {
-    await db.collection('users').doc(input.completedBy).update({
-      isAvailable: true,
-      currentTaskId: null,
-      lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
-    });
+    await db.collection('users').doc(input.completedBy).set(
+      {
+        isAvailable: true,
+        currentTaskId: null,
+        lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
   } catch (error: unknown) {
     const err = error as { code?: string; message?: string };
     const code = err?.code ?? 'unknown';
