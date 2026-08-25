@@ -12,8 +12,10 @@ export type TaskStatus =
 export type TaskTriggerType =
   | 'manual'
   | 'hardware_failure'
+  | 'sensor_fault'
   | 'maintenance'
   | 'flush_count'
+  | 'water_overuse'
   | 'uv_complete';
 
 export type UserRole = 'maintenance' | 'supervisor';

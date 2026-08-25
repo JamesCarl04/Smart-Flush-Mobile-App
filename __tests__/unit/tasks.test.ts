@@ -75,7 +75,15 @@ describe('tasks utility', () => {
 
   describe('isTaskTriggerType', () => {
     it('should return true for all valid trigger types', () => {
-      const validTriggers: TaskTriggerType[] = ['manual', 'hardware_failure', 'maintenance'];
+      const validTriggers: TaskTriggerType[] = [
+        'manual',
+        'hardware_failure',
+        'sensor_fault',
+        'maintenance',
+        'flush_count',
+        'water_overuse',
+        'uv_complete',
+      ];
       validTriggers.forEach((trigger) => {
         expect(isTaskTriggerType(trigger)).toBe(true);
       });
@@ -103,7 +111,11 @@ describe('tasks utility', () => {
   describe('formatTaskTrigger', () => {
     it('should format trigger types into human-readable labels', () => {
       expect(formatTaskTrigger('hardware_failure')).toBe('Hardware failure');
+      expect(formatTaskTrigger('sensor_fault')).toBe('Sensor fault');
       expect(formatTaskTrigger('maintenance')).toBe('Maintenance');
+      expect(formatTaskTrigger('flush_count')).toBe('Flush threshold');
+      expect(formatTaskTrigger('water_overuse')).toBe('Water overuse');
+      expect(formatTaskTrigger('uv_complete')).toBe('UV cycle alert');
       expect(formatTaskTrigger('manual')).toBe('Manual');
     });
   });

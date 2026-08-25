@@ -168,8 +168,10 @@ export function isTaskTriggerType(value: unknown): value is TaskTriggerType {
   return (
     value === 'manual' ||
     value === 'hardware_failure' ||
+    value === 'sensor_fault' ||
     value === 'maintenance' ||
     value === 'flush_count' ||
+    value === 'water_overuse' ||
     value === 'uv_complete'
   );
 }
@@ -271,8 +273,16 @@ export function formatTaskTrigger(triggerType: TaskTriggerType): string {
     return 'Flush threshold';
   }
 
+  if (triggerType === 'water_overuse') {
+    return 'Water overuse';
+  }
+
   if (triggerType === 'uv_complete') {
-    return 'UV Sanitization';
+    return 'UV cycle alert';
+  }
+
+  if (triggerType === 'sensor_fault') {
+    return 'Sensor fault';
   }
 
   return 'Manual';

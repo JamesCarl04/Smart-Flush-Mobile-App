@@ -143,6 +143,17 @@ describe('MaintenanceUI helper functions', () => {
       });
     });
 
+    it.each([
+      ['flush_count', 'Flush Threshold', 'counter'],
+      ['water_overuse', 'Water Overuse', 'water-alert'],
+      ['uv_complete', 'UV Cycle Alert', 'lightbulb-alert-outline'],
+      ['sensor_fault', 'Sensor Fault', 'radar'],
+    ] as const)('should provide a distinct, actionable badge for %s', (trigger, label, icon) => {
+      const tone = taskTriggerTone(trigger);
+      expect(tone.label).toBe(label);
+      expect(tone.icon).toBe(icon);
+    });
+
     it('should return blue tone for "manual" or default', () => {
       const toneManual = taskTriggerTone('manual');
       expect(toneManual).toEqual({

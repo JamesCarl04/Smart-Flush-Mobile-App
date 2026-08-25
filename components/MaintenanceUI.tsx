@@ -235,6 +235,42 @@ export function taskTriggerTone(triggerType?: TaskTriggerType | null): {
     };
   }
 
+  if (triggerType === 'flush_count') {
+    return {
+      label: 'Flush Threshold',
+      backgroundColor: UI_COLORS.softGold,
+      color: UI_COLORS.goldDark,
+      icon: 'counter',
+    };
+  }
+
+  if (triggerType === 'water_overuse') {
+    return {
+      label: 'Water Overuse',
+      backgroundColor: UI_COLORS.softOrange,
+      color: '#C2410C',
+      icon: 'water-alert',
+    };
+  }
+
+  if (triggerType === 'uv_complete') {
+    return {
+      label: 'UV Cycle Alert',
+      backgroundColor: UI_COLORS.softGold,
+      color: UI_COLORS.goldDark,
+      icon: 'lightbulb-alert-outline',
+    };
+  }
+
+  if (triggerType === 'sensor_fault') {
+    return {
+      label: 'Sensor Fault',
+      backgroundColor: UI_COLORS.softRed,
+      color: UI_COLORS.danger,
+      icon: 'radar',
+    };
+  }
+
   return {
     label: 'Manual Request',
     backgroundColor: UI_COLORS.softBlue,
@@ -351,13 +387,18 @@ export function getTaskPriority(task: Task | null | undefined): TaskPriorityLeve
 
   if (
     task.triggerType === 'hardware_failure' ||
+    task.triggerType === 'sensor_fault' ||
     task.triggerType === 'maintenance' ||
     task.status === 'reassignment_needed'
   ) {
     return 'critical';
   }
 
-  if (task.triggerType === 'flush_count' || task.triggerType === 'uv_complete') {
+  if (
+    task.triggerType === 'flush_count' ||
+    task.triggerType === 'water_overuse' ||
+    task.triggerType === 'uv_complete'
+  ) {
     return 'high';
   }
 
@@ -427,6 +468,7 @@ export function urgencyTone(
     status === 'reassignment_needed' ||
     status === 'unassigned' ||
     triggerType === 'hardware_failure' ||
+    triggerType === 'sensor_fault' ||
     triggerType === 'maintenance'
   ) {
     return {
@@ -440,6 +482,7 @@ export function urgencyTone(
   if (
     status === 'assigned' ||
     triggerType === 'flush_count' ||
+    triggerType === 'water_overuse' ||
     triggerType === 'uv_complete'
   ) {
     return {
@@ -1386,5 +1429,4 @@ export function AssigneeAvatarCluster({
     </View>
   );
 }
-
 
