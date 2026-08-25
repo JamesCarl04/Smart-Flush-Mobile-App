@@ -7,6 +7,7 @@ import {
   queueOfflineCompletion,
   readOfflineCompletions,
   secondsBetween,
+  syncOfflineCompletions,
   uploadTaskPhoto,
   type CompletionBundle,
   type OnlineCompletionInput,
@@ -15,6 +16,32 @@ import { EMPTY_CHECKLIST } from '../../lib/tasks';
 import { mockFirestoreDoc, mockStorageRef } from '../../jest.setup';
 
 describe('task-completion utility', () => {
+  const sampleBundle1: CompletionBundle = {
+    taskId: 'task-101',
+    completedAt: '2026-08-15T10:00:00.000Z',
+    acknowledgedAt: '2026-08-15T09:50:00.000Z',
+    checklist: { ...EMPTY_CHECKLIST, cleanWindows: 'done' },
+    remarks: 'Cleaned and inspected',
+    beforePhotoLocalUri: 'file:///mock/before.jpg',
+    afterPhotoLocalUri: 'file:///mock/after.jpg',
+    biometricVerified: true,
+    completedBy: 'user-123',
+    offlineSynced: false,
+  };
+
+  const sampleBundle2: CompletionBundle = {
+    taskId: 'task-102',
+    completedAt: '2026-08-15T11:00:00.000Z',
+    acknowledgedAt: null,
+    checklist: { ...EMPTY_CHECKLIST },
+    remarks: 'Fixed pipe',
+    beforePhotoLocalUri: 'file:///mock/before2.jpg',
+    afterPhotoLocalUri: 'file:///mock/after2.jpg',
+    biometricVerified: false,
+    completedBy: 'user-123',
+    offlineSynced: false,
+  };
+
   beforeEach(async () => {
     jest.clearAllMocks();
     await AsyncStorage.clear();
@@ -51,31 +78,6 @@ describe('task-completion utility', () => {
   });
 
   describe('readOfflineCompletions and queueOfflineCompletion', () => {
-    const sampleBundle1: CompletionBundle = {
-      taskId: 'task-101',
-      completedAt: '2026-08-15T10:00:00.000Z',
-      acknowledgedAt: '2026-08-15T09:50:00.000Z',
-      checklist: { ...EMPTY_CHECKLIST, cleanWindows: 'done' },
-      remarks: 'Cleaned and inspected',
-      beforePhotoLocalUri: 'file:///mock/before.jpg',
-      afterPhotoLocalUri: 'file:///mock/after.jpg',
-      biometricVerified: true,
-      completedBy: 'user-123',
-      offlineSynced: false,
-    };
-
-    const sampleBundle2: CompletionBundle = {
-      taskId: 'task-102',
-      completedAt: '2026-08-15T11:00:00.000Z',
-      acknowledgedAt: null,
-      checklist: { ...EMPTY_CHECKLIST },
-      remarks: 'Fixed pipe',
-      beforePhotoLocalUri: 'file:///mock/before2.jpg',
-      afterPhotoLocalUri: 'file:///mock/after2.jpg',
-      biometricVerified: false,
-      completedBy: 'user-123',
-      offlineSynced: false,
-    };
 
     it('should return an empty array if no offline tasks are stored', () => {
       return expect(readOfflineCompletions()).resolves.toEqual([]);
@@ -274,6 +276,51 @@ describe('task-completion utility', () => {
       );
 
       errorSpy.mockRestore();
+    });
+  });
+
+  describe('syncOfflineCompletions', () => {
+    it('should upload before, after, and additional area photos when syncing offline completions', async () => {
+      mockStorageRef.putFile.mockResolvedValue({ state: 'success' });
+      mockStorageRef.getDownloadURL.mockResolvedValue('https://storage.example.com/photo.jpg');
+      mockFirestoreDoc.get.mockResolvedValue({
+        data: () => ({ createdAt: '2026-08-15T08:00:00.000Z' }),
+      });
+      mockFirestoreDoc.update.mockResolvedValue(undefined);
+
+      const bundleWithAreaPhotos: CompletionBundle = {
+        ...sampleBundle1,
+        taskId: 'task-sync-1',
+        additionalPhotos: [
+          {
+            id: 'area-1',
+            areaTag: 'Stall 1',
+            localUri: 'file:///cache/area1.jpg',
+            capturedAt: '2026-08-15T08:15:00.000Z',
+          },
+        ],
+      };
+
+      await queueOfflineCompletion(bundleWithAreaPhotos);
+      const syncedCount = await syncOfflineCompletions();
+
+      expect(syncedCount).toBe(1);
+      expect(mockFirestoreDoc.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'completed',
+          offlineSynced: true,
+          additionalPhotos: [
+            expect.objectContaining({
+              id: 'area-1',
+              areaTag: 'Stall 1',
+              photoUrl: 'https://storage.example.com/photo.jpg',
+            }),
+          ],
+        }),
+      );
+
+      const remaining = await readOfflineCompletions();
+      expect(remaining).toHaveLength(0);
     });
   });
 });

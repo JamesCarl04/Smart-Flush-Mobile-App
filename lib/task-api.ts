@@ -4,6 +4,8 @@ import {
   EMPTY_CHECKLIST,
   isTaskStatus,
   isTaskTriggerType,
+  parseAreaPhotos,
+  parseSubmissions,
   parseTaskDocument,
 } from './tasks';
 import type { Task, TaskChecklist, TaskStatus } from '../types';
@@ -37,6 +39,8 @@ interface TaskApiData {
   beforePhotoCapturedAt?: unknown;
   afterPhotoUrl?: unknown;
   afterPhotoCapturedAt?: unknown;
+  additionalPhotos?: unknown;
+  submissions?: unknown;
   biometricVerified?: unknown;
   offlineSynced?: unknown;
   completedBy?: unknown;
@@ -225,6 +229,8 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     beforePhotoCapturedAt: millisToDate(data.beforePhotoCapturedAt),
     afterPhotoUrl: stringOrNull(data.afterPhotoUrl),
     afterPhotoCapturedAt: millisToDate(data.afterPhotoCapturedAt),
+    additionalPhotos: parseAreaPhotos(data.additionalPhotos),
+    submissions: parseSubmissions(data.submissions),
     biometricVerified: data.biometricVerified === true,
     offlineSynced: data.offlineSynced === true,
     completedBy,

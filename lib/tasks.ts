@@ -90,7 +90,7 @@ function parseTimestampMap(value: unknown): Record<string, Date> {
   return result;
 }
 
-function parseAreaPhotos(value: unknown): AreaPhoto[] {
+export function parseAreaPhotos(value: unknown): AreaPhoto[] {
   if (!Array.isArray(value)) {
     return [];
   }
@@ -109,7 +109,7 @@ function parseAreaPhotos(value: unknown): AreaPhoto[] {
     .filter((p): p is AreaPhoto => p !== null);
 }
 
-function parseSubmissions(value: unknown): Record<string, TaskSubmission> {
+export function parseSubmissions(value: unknown): Record<string, TaskSubmission> {
   if (!value || typeof value !== 'object') {
     return {};
   }
@@ -265,6 +265,14 @@ export function formatTaskTrigger(triggerType: TaskTriggerType): string {
 
   if (triggerType === 'maintenance') {
     return 'Maintenance';
+  }
+
+  if (triggerType === 'flush_count') {
+    return 'Flush threshold';
+  }
+
+  if (triggerType === 'uv_complete') {
+    return 'UV Sanitization';
   }
 
   return 'Manual';

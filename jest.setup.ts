@@ -352,6 +352,35 @@ jest.mock('@expo/vector-icons', () => {
   };
 });
 
+// 12. Mock Expo Print, Sharing, and FileSystem
+jest.mock('expo-print', () => ({
+  printToFileAsync: jest.fn().mockResolvedValue({
+    uri: 'file:///mock/cache/klir-report-mock.pdf',
+    numberOfPages: 2,
+  }),
+  printAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+jest.mock('expo-sharing', () => ({
+  isAvailableAsync: jest.fn().mockResolvedValue(true),
+  shareAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
+const mockFileSystem = {
+  documentDirectory: 'file:///mock/documents/',
+  cacheDirectory: 'file:///mock/cache/',
+  writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
+  readAsStringAsync: jest.fn().mockResolvedValue('mock content'),
+  deleteAsync: jest.fn().mockResolvedValue(undefined),
+  EncodingType: {
+    UTF8: 'utf8',
+    Base64: 'base64',
+  },
+};
+
+jest.mock('expo-file-system', () => mockFileSystem);
+jest.mock('expo-file-system/legacy', () => mockFileSystem);
+
 // Global fetch mock helper
 global.fetch = jest.fn();
 

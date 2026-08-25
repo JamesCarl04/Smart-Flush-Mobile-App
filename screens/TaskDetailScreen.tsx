@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -17,6 +17,7 @@ import {
   TextInput,
 } from 'react-native-paper';
 
+import { ImageViewerModal } from '../components/ImageViewerModal';
 import { KlirButton } from '../components/KlirButton';
 import {
   AssigneeAvatarCluster,
@@ -50,6 +51,7 @@ import { getRestroomLabel } from '../lib/restrooms';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import type {
+  AreaPhoto,
   ChecklistValue,
   HistoryStackParamList,
   InboxStackParamList,
@@ -259,6 +261,8 @@ export function TaskDetailScreen({
   const [afterPhotoUri, setAfterPhotoUri] = useState<string | null>(null);
   const [afterCapturedAt, setAfterCapturedAt] = useState<Date | null>(null);
   const [biometricVerified, setBiometricVerified] = useState(false);
+  const [selectedViewerPhoto, setSelectedViewerPhoto] = useState<string | null>(null);
+  const [viewerCaption, setViewerCaption] = useState<string | null>(null);
   const [overlayUri, setOverlayUri] = useState<string | null>(null);
   const [overlayText, setOverlayText] = useState('');
   const overlayRef = useRef<View>(null);
@@ -268,6 +272,35 @@ export function TaskDetailScreen({
     () => tasks.find((currentTask) => currentTask.id === taskId) ?? null,
     [taskId, tasks],
   );
+
+  const displayAdditionalPhotos = useMemo<AreaPhoto[]>(() => {
+    if (!task) return [];
+    if (task.additionalPhotos && task.additionalPhotos.length > 0) {
+      return task.additionalPhotos;
+    }
+    if (task.submissions) {
+      const userSubmission = user?.uid ? task.submissions[user.uid] : null;
+      if (
+        userSubmission?.additionalPhotos &&
+        userSubmission.additionalPhotos.length > 0
+      ) {
+        return userSubmission.additionalPhotos;
+      }
+      const collected: AreaPhoto[] = [];
+      for (const sub of Object.values(task.submissions)) {
+        if (
+          Array.isArray(sub.additionalPhotos) &&
+          sub.additionalPhotos.length > 0
+        ) {
+          collected.push(...sub.additionalPhotos);
+        }
+      }
+      if (collected.length > 0) {
+        return collected;
+      }
+    }
+    return [];
+  }, [task, user?.uid]);
 
   useEffect(() => {
     if (!cachedTask) {
@@ -812,7 +845,16 @@ export function TaskDetailScreen({
                     <Text style={styles.comparisonLabel}>BEFORE</Text>
                   </View>
                   {task.beforePhotoUrl ? (
-                    <View style={styles.photoWrapper}>
+                    <TouchableOpacity
+                      style={styles.photoWrapper}
+                      onPress={() => {
+                        setSelectedViewerPhoto(task.beforePhotoUrl ?? null);
+                        setViewerCaption('Before Photo');
+                      }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel="View Before photo fullscreen"
+                    >
                       <Image
                         source={{ uri: task.beforePhotoUrl }}
                         style={styles.comparisonPhoto}
@@ -820,7 +862,22 @@ export function TaskDetailScreen({
                       <View style={styles.photoOverlayTag}>
                         <Text style={styles.photoOverlayText}>Before</Text>
                       </View>
-                    </View>
+                      <View
+                        style={{
+                          position: 'absolute',
+                          bottom: 6,
+                          right: 6,
+                          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                          borderRadius: 12,
+                          width: 22,
+                          height: 22,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <MaterialCommunityIcons name="magnify-plus" size={13} color="#FFFFFF" />
+                      </View>
+                    </TouchableOpacity>
                   ) : (
                     <View style={styles.photoPlaceholder}>
                       <Text style={styles.photoPlaceholderText}>
@@ -858,7 +915,16 @@ export function TaskDetailScreen({
                     </Text>
                   </View>
                   {task.afterPhotoUrl ? (
-                    <View style={styles.photoWrapper}>
+                    <TouchableOpacity
+                      style={styles.photoWrapper}
+                      onPress={() => {
+                        setSelectedViewerPhoto(task.afterPhotoUrl ?? null);
+                        setViewerCaption('After Photo');
+                      }}
+                      accessible={true}
+                      accessibilityRole="button"
+                      accessibilityLabel="View After photo fullscreen"
+                    >
                       <Image
                         source={{ uri: task.afterPhotoUrl }}
                         style={styles.comparisonPhoto}
@@ -866,7 +932,22 @@ export function TaskDetailScreen({
                       <View style={styles.photoOverlayTag}>
                         <Text style={styles.photoOverlayText}>After</Text>
                       </View>
-                    </View>
+                      <View
+                        style={{
+                          position: 'absolute',
+                          bottom: 6,
+                          right: 6,
+                          backgroundColor: 'rgba(15, 23, 42, 0.75)',
+                          borderRadius: 12,
+                          width: 22,
+                          height: 22,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <MaterialCommunityIcons name="magnify-plus" size={13} color="#FFFFFF" />
+                      </View>
+                    </TouchableOpacity>
                   ) : (
                     <View style={styles.photoPlaceholder}>
                       <Text style={styles.photoPlaceholderText}>
@@ -881,6 +962,107 @@ export function TaskDetailScreen({
                   ) : null}
                 </View>
               </View>
+
+              {/* Additional Area Photos Carousel */}
+              {displayAdditionalPhotos.length > 0 ? (
+                <View style={{ marginTop: 14 }}>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <MaterialCommunityIcons
+                        name="camera-burst"
+                        size={16}
+                        color={KLIR_COLORS.primary}
+                      />
+                      <Text style={styles.subSectionTitle}>
+                        Additional Area Proofs
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        backgroundColor: '#EDE9FE',
+                        paddingHorizontal: 8,
+                        paddingVertical: 2,
+                        borderRadius: 12,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: '700',
+                          color: '#6D28D9',
+                        }}
+                      >
+                        {displayAdditionalPhotos.length}{' '}
+                        {displayAdditionalPhotos.length === 1 ? 'Area' : 'Areas'}
+                      </Text>
+                    </View>
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 10 }}
+                  >
+                    {displayAdditionalPhotos.map((areaPhoto) => (
+                      <TouchableOpacity
+                        key={areaPhoto.id}
+                        onPress={() => {
+                          setSelectedViewerPhoto(areaPhoto.photoUrl);
+                          setViewerCaption(`${areaPhoto.areaTag} Photo`);
+                        }}
+                        style={{
+                          width: 130,
+                          borderRadius: 8,
+                          overflow: 'hidden',
+                          borderWidth: 1,
+                          borderColor: '#CBD5E1',
+                          backgroundColor: '#FFFFFF',
+                        }}
+                        accessible={true}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View ${areaPhoto.areaTag} photo`}
+                      >
+                        <Image
+                          source={{ uri: areaPhoto.photoUrl }}
+                          style={{ width: 130, height: 95 }}
+                        />
+                        <View
+                          style={{
+                            padding: 6,
+                            backgroundColor: '#0F172A',
+                            flexDirection: 'row',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <Text
+                            style={{
+                              color: '#FFFFFF',
+                              fontSize: 11,
+                              fontWeight: '700',
+                              flex: 1,
+                            }}
+                            numberOfLines={1}
+                          >
+                            {areaPhoto.areaTag}
+                          </Text>
+                          <MaterialCommunityIcons
+                            name="magnify-plus"
+                            size={12}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              ) : null}
 
               <Divider style={{ marginVertical: 4 }} />
 
@@ -957,7 +1139,7 @@ export function TaskDetailScreen({
                   />
                 ) : (
                   <KlirButton
-                    title="Check All as Done (1-Tap)"
+                    title="Check All as Done"
                     variant="primary"
                     onPress={handleCheckAllAsDone}
                     icon="check-all"
@@ -1186,6 +1368,16 @@ export function TaskDetailScreen({
           </View>
         ) : null}
       </View>
+
+      <ImageViewerModal
+        visible={selectedViewerPhoto !== null}
+        imageUrl={selectedViewerPhoto}
+        caption={viewerCaption}
+        onDismiss={() => {
+          setSelectedViewerPhoto(null);
+          setViewerCaption(null);
+        }}
+      />
 
       <Snackbar
         visible={snackbarMessage !== null}

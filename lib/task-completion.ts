@@ -6,6 +6,13 @@ import type { TaskChecklist } from '../types';
 
 const OFFLINE_TASKS_KEY = 'offline_tasks';
 
+export interface AreaPhotoBundleInput {
+  id: string;
+  areaTag: string;
+  localUri: string;
+  capturedAt: string;
+}
+
 export interface CompletionBundle {
   taskId: string;
   completedAt: string;
@@ -14,6 +21,7 @@ export interface CompletionBundle {
   remarks: string;
   beforePhotoLocalUri: string;
   afterPhotoLocalUri: string;
+  additionalPhotos?: AreaPhotoBundleInput[];
   biometricVerified: boolean;
   completedBy: string;
   offlineSynced: false;
@@ -301,7 +309,7 @@ export async function syncOfflineCompletions(
       const acknowledgedAt = item.acknowledgedAt
         ? new Date(item.acknowledgedAt)
         : null;
-      const [beforePhotoUrl, afterPhotoUrl] = await Promise.all([
+      const [beforePhotoUrl, afterPhotoUrl, additionalUploadedPhotos] = await Promise.all([
         uploadTaskPhoto(
           item.taskId,
           item.beforePhotoLocalUri,
@@ -313,6 +321,23 @@ export async function syncOfflineCompletions(
           item.afterPhotoLocalUri,
           'after',
           completedAt,
+        ),
+        Promise.all(
+          (item.additionalPhotos || []).map(async (photo) => {
+            const photoCapturedAt = new Date(photo.capturedAt);
+            const photoUrl = await uploadTaskPhoto(
+              item.taskId,
+              photo.localUri,
+              `area_${photo.id}` as any,
+              photoCapturedAt,
+            );
+            return {
+              id: photo.id,
+              areaTag: photo.areaTag,
+              photoUrl,
+              capturedAt: firestore.Timestamp.fromDate(photoCapturedAt),
+            };
+          }),
         ),
       ]);
 
@@ -328,6 +353,7 @@ export async function syncOfflineCompletions(
         beforePhotoCapturedAt: firestore.Timestamp.fromDate(completedAt),
         afterPhotoUrl,
         afterPhotoCapturedAt: firestore.Timestamp.fromDate(completedAt),
+        additionalPhotos: additionalUploadedPhotos,
         biometricVerified: item.biometricVerified,
         offlineSynced: true,
         status: 'completed',

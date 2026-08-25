@@ -199,7 +199,10 @@ export function SupervisorProvider({
                           ? data.displayName.trim()
                           : data.email ?? doc.id,
                       email: typeof data.email === 'string' ? data.email : null,
-                      isAvailable: data.isAvailable !== false,
+                      isAvailable: data.status !== 'offline' && data.isOnline !== false,
+                      isOnline: data.isOnline !== false,
+                      status: typeof data.status === 'string' ? data.status : null,
+                      isActive: data.isActive !== false,
                       currentTaskId:
                         typeof data.currentTaskId === 'string'
                           ? data.currentTaskId

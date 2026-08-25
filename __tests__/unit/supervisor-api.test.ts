@@ -238,10 +238,57 @@ describe('supervisor-api utility', () => {
       expect(activeTask).toBeNull();
     });
 
-    it('should return offline when isAvailable is false and no active task', () => {
-      const offlinePerson = { ...samplePerson, isAvailable: false };
+    it('should return available when a task was deleted and person currentTaskId is stale', () => {
+      const personWithDeletedTask = { ...samplePerson, currentTaskId: 'deleted-task-404' };
+      const { status, activeTask } = getPersonOperationalStatus(personWithDeletedTask, []);
+      expect(status).toBe('available');
+      expect(activeTask).toBeNull();
+    });
+
+    it('should universally match active task by assignedToIds, email, acknowledgedBy, or recheckedBy', () => {
+      const taskWithIds: any = {
+        id: 'task-multi-1',
+        status: 'assigned',
+        assignedToIds: ['tech-1'],
+      };
+      expect(getPersonOperationalStatus(samplePerson, [taskWithIds]).status).toBe('on_task');
+
+      const taskWithEmail: any = {
+        id: 'task-email-1',
+        status: 'acknowledged',
+        assignedTo: 'justine@example.com',
+      };
+      expect(getPersonOperationalStatus(samplePerson, [taskWithEmail]).status).toBe('on_task');
+
+      const taskWithAckBy: any = {
+        id: 'task-ack-1',
+        status: 'acknowledged',
+        acknowledgedBy: { 'tech-1': '2026-08-25T10:00:00Z' },
+      };
+      expect(getPersonOperationalStatus(samplePerson, [taskWithAckBy]).status).toBe('on_task');
+
+      const taskWithRecheck: any = {
+        id: 'task-recheck-1',
+        status: 'rechecking',
+        recheckedBy: 'tech-1',
+      };
+      expect(getPersonOperationalStatus(samplePerson, [taskWithRecheck]).status).toBe('on_task');
+    });
+
+    it('should return offline when isOnline is false or status is offline and no active task', () => {
+      const offlinePerson = { ...samplePerson, isOnline: false };
       const { status, activeTask } = getPersonOperationalStatus(offlinePerson, []);
       expect(status).toBe('offline');
+      expect(activeTask).toBeNull();
+
+      const statusOfflinePerson = { ...samplePerson, status: 'offline' };
+      expect(getPersonOperationalStatus(statusOfflinePerson, []).status).toBe('offline');
+    });
+
+    it('should return available when person has no active tasks even if legacy isAvailable was false', () => {
+      const personWithStaleOccupancy = { ...samplePerson, isAvailable: false };
+      const { status, activeTask } = getPersonOperationalStatus(personWithStaleOccupancy, []);
+      expect(status).toBe('available');
       expect(activeTask).toBeNull();
     });
   });

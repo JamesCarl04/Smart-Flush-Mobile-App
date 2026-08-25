@@ -68,6 +68,7 @@ const mockPersonnel: supervisorApi.MaintenancePerson[] = [
     displayName: 'Pedro Reyes',
     email: 'pedro@smartflush.com',
     isAvailable: false,
+    status: 'offline',
     currentTaskId: null,
     shift: '1st',
     building: 'GB3 Building',
@@ -419,7 +420,8 @@ describe('Supervisor Screens Integration Suite', () => {
       expect(screen.getByText('Avg Resolution Time')).toBeTruthy();
       expect(screen.getByText('Photo Proof')).toBeTruthy();
       expect(screen.getByText('Biometric Verified')).toBeTruthy();
-      expect(screen.getByText('Export CSV Report')).toBeTruthy();
+      expect(screen.getByText('Executive Compliance & Audit Exports')).toBeTruthy();
+      expect(screen.getByText('Export PDF Report')).toBeTruthy();
       expect(screen.getByText('Export CSV')).toBeTruthy();
     });
   });

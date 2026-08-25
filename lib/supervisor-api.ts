@@ -8,6 +8,9 @@ export interface MaintenancePerson {
   displayName: string;
   email: string | null;
   isAvailable: boolean;
+  isOnline?: boolean | null;
+  status?: string | null;
+  isActive?: boolean | null;
   currentTaskId: string | null;
   shift: string | null;
   building: string | null;
@@ -32,7 +35,10 @@ export async function fetchMaintenancePersonnel(): Promise<MaintenancePerson[]> 
                 ? data.displayName.trim()
                 : data.email ?? doc.id,
             email: typeof data.email === 'string' ? data.email : null,
-            isAvailable: data.isAvailable !== false,
+            isAvailable: data.status !== 'offline' && data.isOnline !== false,
+            isOnline: data.isOnline !== false,
+            status: typeof data.status === 'string' ? data.status : null,
+            isActive: data.isActive !== false,
             currentTaskId: typeof data.currentTaskId === 'string' ? data.currentTaskId : null,
             shift: typeof data.shift === 'string' ? data.shift : '1st',
             building: typeof data.building === 'string' ? data.building : 'SDCA Annex Building',
@@ -148,27 +154,31 @@ export function getPersonOperationalStatus(
         (candidate.id === person.currentTaskId ||
           candidate.assignedTo === person.id ||
           candidate.assignedTo === person.email ||
-          (candidate.acknowledgedBy && person.id in candidate.acknowledgedBy)),
+          (candidate.assignedToIds &&
+            (candidate.assignedToIds.includes(person.id) ||
+              (person.email && candidate.assignedToIds.includes(person.email)))) ||
+          (candidate.acknowledgedBy &&
+            (person.id in candidate.acknowledgedBy ||
+              (person.email && person.email in candidate.acknowledgedBy))) ||
+          candidate.recheckedBy === person.id ||
+          candidate.recheckedBy === person.email),
     ) ?? null;
 
   if (activeTask !== null) {
     return { status: 'on_task', activeTask };
   }
 
-  // If person has a currentTaskId that has not been completed
-  if (person.currentTaskId) {
-    const isCompleted = tasks.some(
-      (t) => t.id === person.currentTaskId && t.status === 'completed',
-    );
-    if (!isCompleted) {
-      return { status: 'on_task', activeTask: null };
-    }
+  // If the technician is explicitly marked off-duty/inactive/offline
+  if (
+    person.isOnline === false ||
+    person.status === 'offline' ||
+    person.status === 'inactive' ||
+    person.isActive === false
+  ) {
+    return { status: 'offline', activeTask: null };
   }
 
-  if (person.isAvailable !== false) {
-    return { status: 'available', activeTask: null };
-  }
-
-  return { status: 'offline', activeTask: null };
+  // Any active technician on duty with no current work order is Available
+  return { status: 'available', activeTask: null };
 }
 

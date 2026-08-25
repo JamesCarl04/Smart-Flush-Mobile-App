@@ -127,6 +127,8 @@ export interface AuthContextValue {
 export interface TasksContextValue {
   tasks: Task[];
   inboxTasks: Task[];
+  activeTasks: Task[];
+  activeTasksCount: number;
   historyTasks: Task[];
   pendingCount: number;
   loading: boolean;

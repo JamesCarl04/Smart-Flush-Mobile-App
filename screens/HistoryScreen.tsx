@@ -376,6 +376,12 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                   label={formatTaskComponent(item.component)}
                 />
                 <MetaPill icon="image-check-outline" label="Proof submitted" />
+                {item.additionalPhotos && item.additionalPhotos.length > 0 ? (
+                  <MetaPill
+                    icon="camera-burst"
+                    label={`+${item.additionalPhotos.length} areas`}
+                  />
+                ) : null}
                 {item.offlineSynced ? (
                   <MetaPill icon="cloud-check-outline" label="Offline synced" />
                 ) : null}

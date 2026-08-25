@@ -153,7 +153,7 @@ function SupervisorStackNavigator(): React.JSX.Element {
 export function MainNavigator(): React.JSX.Element {
   const theme = useTheme();
   const { role } = useAuth();
-  const { pendingCount } = useTasks();
+  const { pendingCount, activeTasksCount } = useTasks();
 
   if (role !== 'maintenance') {
     return <SupervisorStackNavigator />;
@@ -229,7 +229,7 @@ export function MainNavigator(): React.JSX.Element {
         component={TaskStackNavigator}
         options={{
           title: 'Active Task',
-          tabBarBadge: pendingCount > 0 ? pendingCount : undefined,
+          tabBarBadge: activeTasksCount > 0 ? activeTasksCount : undefined,
           tabBarBadgeStyle: {
             backgroundColor: theme.colors.error,
             color: theme.colors.onError,

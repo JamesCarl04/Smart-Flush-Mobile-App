@@ -158,4 +158,66 @@ describe('TaskExecutionModal', () => {
     expect(getByText('Step 2 of 3 • Maintenance Checklist')).toBeTruthy();
     expect(queryByText('Step 1 of 3 • Proof Photo')).toBeNull();
   });
+
+  it('checks all items with "Check All as Done" and captures additional area photos in Step 3', async () => {
+    const onDismiss = jest.fn();
+    const { getByText, getByLabelText, queryByText } = renderWithPaper(
+      <TaskExecutionModal
+        visible={true}
+        task={mockTask}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    // 1. Complete Step 1
+    fireEvent.press(getByText('Take Proof Photo'));
+
+    await waitFor(() => {
+      expect(getByText('Step 2 of 3 • Maintenance Checklist')).toBeTruthy();
+    });
+
+    // 2. Tap "Check All as Done"
+    const checkAllBtn = getByText('Check All as Done');
+    expect(checkAllBtn).toBeTruthy();
+    fireEvent.press(checkAllBtn);
+
+    // 3. Complete Step 2 by taking after photo
+    const takeAfterPhotoBtn = getByText('Take After Photo');
+    fireEvent.press(takeAfterPhotoBtn);
+
+    await waitFor(() => {
+      expect(getByText('Step 3 of 3 • Completion Summary')).toBeTruthy();
+      expect(getByText('Additional Area Photos (0/3)')).toBeTruthy();
+    });
+
+    // 4. Tap "+ Add Area"
+    const addAreaBtn = getByLabelText('Add area photo');
+    fireEvent.press(addAreaBtn);
+
+    // 5. Verify Area Picker dialog appears
+    await waitFor(() => {
+      expect(getByText('Select Restroom Area')).toBeTruthy();
+      expect(getByText('Stall 1')).toBeTruthy();
+      expect(getByText('Urinals')).toBeTruthy();
+      expect(getByText('Sink & Counter')).toBeTruthy();
+    });
+
+    // 6. Select "Stall 1"
+    fireEvent.press(getByLabelText('Capture photo for Stall 1'));
+
+    // 7. Verify photo was added to feed
+    await waitFor(() => {
+      expect(getByText('Additional Area Photos (1/3)')).toBeTruthy();
+      expect(getByText('Stall 1')).toBeTruthy();
+    });
+
+    // 8. Delete area photo
+    const deleteBtn = getByLabelText('Remove Stall 1 photo');
+    fireEvent.press(deleteBtn);
+
+    await waitFor(() => {
+      expect(getByText('Additional Area Photos (0/3)')).toBeTruthy();
+      expect(queryByText('Stall 1')).toBeNull();
+    });
+  });
 });

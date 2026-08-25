@@ -23,7 +23,6 @@ import {
   taskTriggerTone,
 } from '../components/MaintenanceUI';
 import { FlaggedRemarksModal } from '../components/FlaggedRemarksModal';
-import { TaskExecutionModal } from '../components/TaskExecutionModal';
 import { AuthContext } from '../contexts/AuthContext';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask, acceptRecheckTask } from '../lib/task-api';
@@ -160,14 +159,25 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     return baseTasks;
   }, [activeFilter, inboxTasks, activeTasksList, flaggedTasksList, priorityTask]);
 
-  const [executingTask, setExecutingTask] = useState<Task | null>(null);
   const [flaggedTaskToReview, setFlaggedTaskToReview] = useState<Task | null>(null);
   const [actionInFlightId, setActionInFlightId] = useState<string | null>(null);
   const [acceptingRecheck, setAcceptingRecheck] = useState(false);
 
+  const navigateToActiveTaskWorkspace = (taskId: string): void => {
+    const parentNav = navigation.getParent<any>();
+    if (parentNav) {
+      parentNav.navigate('TaskTab', {
+        screen: 'ActiveTask',
+        params: { taskId },
+      });
+    } else {
+      navigation.navigate('TaskDetail', { taskId });
+    }
+  };
+
   const handleStartTask = async (task: Task): Promise<void> => {
     if (task.status === 'acknowledged' || task.status === 'rechecking') {
-      setExecutingTask(task);
+      navigateToActiveTaskWorkspace(task.id);
       return;
     }
 
@@ -180,11 +190,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     try {
       await acknowledgeTask(task.id);
       await refreshTasks();
-      setExecutingTask({
-        ...task,
-        status: 'acknowledged',
-        acknowledgedAt: new Date(),
-      });
+      navigateToActiveTaskWorkspace(task.id);
     } catch {
       // Handled by refresh error
     } finally {
@@ -203,12 +209,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
       });
       await refreshTasks();
       setFlaggedTaskToReview(null);
-      setExecutingTask({
-        ...task,
-        status: 'rechecking',
-        recheckedBy: user.uid,
-        recheckedAt: new Date(),
-      });
+      navigateToActiveTaskWorkspace(task.id);
     } catch {
       // Handled by refresh error
     } finally {
@@ -555,7 +556,7 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                 <KlirButton
                   title="Resume Recheck & Open Camera"
                   variant="primary"
-                  onPress={() => setExecutingTask(item)}
+                  onPress={() => navigateToActiveTaskWorkspace(item.id)}
                   icon="camera-outline"
                   style={styles.taskActionButton}
                 />
@@ -592,16 +593,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
         loading={acceptingRecheck}
         onDismiss={() => setFlaggedTaskToReview(null)}
         onAcceptRecheck={(task) => void handleAcceptRecheck(task)}
-      />
-
-      {/* Slide-Up Task Execution Modal */}
-      <TaskExecutionModal
-        visible={executingTask !== null}
-        task={executingTask}
-        onDismiss={() => setExecutingTask(null)}
-        onTaskCompleted={() => {
-          void refreshTasks();
-        }}
       />
 
       <Snackbar visible={errorMessage !== null} onDismiss={clearError}>

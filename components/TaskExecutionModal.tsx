@@ -503,6 +503,12 @@ export function TaskExecutionModal({
           remarks,
           beforePhotoLocalUri: beforePhotoUri,
           afterPhotoLocalUri: afterPhotoUri,
+          additionalPhotos: additionalAreaPhotos.map((p) => ({
+            id: p.id,
+            areaTag: p.areaTag,
+            localUri: p.localUri,
+            capturedAt: p.capturedAt.toISOString(),
+          })),
           biometricVerified,
           completedBy: uid,
           offlineSynced: false,
@@ -817,7 +823,7 @@ export function TaskExecutionModal({
                     />
                   ) : (
                     <KlirButton
-                      title="Check All as Done (1-Tap)"
+                      title="Check All as Done"
                       variant="primary"
                       onPress={handleCheckAllAsDone}
                       icon="check-all"
@@ -1187,55 +1193,121 @@ export function TaskExecutionModal({
           caption="Supervisor Flagged Proof Photo"
         />
 
-        {/* Select Area Tag Dialog Modal */}
-        <Portal>
-          <Dialog
-            visible={areaPickerVisible}
-            onDismiss={() => setAreaPickerVisible(false)}
-            style={{ backgroundColor: '#FFFFFF', borderRadius: 16 }}
+        {/* Select Area Tag Dialog Modal (Rendered directly in native modal layer to avoid Portal occlusion) */}
+        <Modal
+          visible={areaPickerVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setAreaPickerVisible(false)}
+          statusBarTranslucent={true}
+        >
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: 'rgba(15, 23, 42, 0.65)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 20,
+            }}
           >
-            <Dialog.Title style={{ fontWeight: '800', color: '#0F172A', fontSize: 17 }}>
-              Select Restroom Area
-            </Dialog.Title>
-            <Dialog.Content style={{ gap: 8 }}>
-              <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 4 }}>
+            <View
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 20,
+                padding: 20,
+                width: '100%',
+                maxWidth: 420,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.25,
+                shadowRadius: 16,
+                elevation: 10,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 6,
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="camera-marker"
+                  size={22}
+                  color={KLIR_COLORS.primary}
+                />
+                <Text
+                  style={{
+                    fontWeight: '800',
+                    color: '#0F172A',
+                    fontSize: 18,
+                  }}
+                >
+                  Select Restroom Area
+                </Text>
+              </View>
+              <Text style={{ color: '#64748B', fontSize: 13, marginBottom: 14 }}>
                 Choose which part of the restroom this photo documents:
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginBottom: 16,
+                }}
+              >
                 {AREA_TAG_OPTIONS.map((tag) => (
                   <TouchableOpacity
                     key={tag}
                     onPress={() => void handleCaptureAreaPhoto(tag)}
                     style={{
-                      paddingVertical: 8,
-                      paddingHorizontal: 12,
-                      borderRadius: 8,
-                      backgroundColor: '#F1F5F9',
-                      borderWidth: 1,
-                      borderColor: '#CBD5E1',
+                      paddingVertical: 10,
+                      paddingHorizontal: 14,
+                      borderRadius: 10,
+                      backgroundColor: '#F8FAFC',
+                      borderWidth: 1.5,
+                      borderColor: '#E2E8F0',
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
                     }}
                     accessible={true}
                     accessibilityRole="button"
                     accessibilityLabel={`Capture photo for ${tag}`}
+                    activeOpacity={0.7}
                   >
-                    <Text style={{ color: '#1E293B', fontWeight: '700', fontSize: 12 }}>
+                    <MaterialCommunityIcons
+                      name="camera-plus-outline"
+                      size={14}
+                      color={KLIR_COLORS.primary}
+                    />
+                    <Text
+                      style={{
+                        color: '#1E293B',
+                        fontWeight: '700',
+                        fontSize: 13,
+                      }}
+                    >
                       {tag}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
-            </Dialog.Content>
-            <Dialog.Actions>
-              <Button
-                mode="text"
-                onPress={() => setAreaPickerVisible(false)}
-                textColor="#64748B"
-              >
-                Cancel
-              </Button>
-            </Dialog.Actions>
-          </Dialog>
-        </Portal>
+              <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+                <Button
+                  mode="text"
+                  onPress={() => setAreaPickerVisible(false)}
+                  textColor="#64748B"
+                  labelStyle={{ fontWeight: '700' }}
+                >
+                  Cancel
+                </Button>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         </KeyboardAvoidingView>
 

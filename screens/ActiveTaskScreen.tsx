@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Card, Snackbar, Text } from 'react-native-paper';
@@ -43,13 +43,20 @@ function formatDate(date: Date | null | undefined): string {
   }).format(date);
 }
 
-function EmptyTaskPanel(): React.JSX.Element {
+function EmptyTaskPanel({ onGoToInbox }: { onGoToInbox: () => void }): React.JSX.Element {
   return (
     <View style={styles.centerState}>
       <EmptyOperationState
         icon="clipboard-text-search-outline"
-        title="No active task"
-        body="No tasks need your attention right now. New assigned tasks will appear in your Inbox."
+        title="No active task in progress"
+        body="You have no tasks currently in progress. Tap 'Acknowledge & Start' on any task in your Inbox to begin working."
+      />
+      <KlirButton
+        title="View Inbox Tasks"
+        variant="primary"
+        icon="bell-outline"
+        onPress={onGoToInbox}
+        style={styles.emptyGoInboxBtn}
       />
     </View>
   );
@@ -57,26 +64,21 @@ function EmptyTaskPanel(): React.JSX.Element {
 
 export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, inboxTasks, loading, refreshTasks } = useTasks();
-  const selectedTaskId = route.params?.taskId;
+  const { activeTasks, loading, refreshTasks } = useTasks();
+  const routeTaskId = route.params?.taskId;
+  const [selectedTaskIdState, setSelectedTaskIdState] = useState<string | null>(null);
 
   const activeTask = useMemo(() => {
-    const selectedTask = selectedTaskId
-      ? tasks.find((task) => task.id === selectedTaskId)
-      : null;
-
-    if (selectedTask) {
-      return selectedTask;
+    if (selectedTaskIdState) {
+      const match = activeTasks.find((task) => task.id === selectedTaskIdState);
+      if (match) return match;
     }
-
-    return (
-      inboxTasks.find((task) => task.status === 'acknowledged') ??
-      inboxTasks.find((task) => task.status === 'assigned') ??
-      inboxTasks.find((task) => task.status === 'unassigned') ??
-      inboxTasks.find((task) => task.status === 'reassignment_needed') ??
-      null
-    );
-  }, [inboxTasks, selectedTaskId, tasks]);
+    if (routeTaskId) {
+      const match = activeTasks.find((task) => task.id === routeTaskId);
+      if (match) return match;
+    }
+    return activeTasks[0] ?? null;
+  }, [activeTasks, routeTaskId, selectedTaskIdState]);
 
   const [executionModalVisible, setExecutionModalVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
@@ -84,7 +86,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
 
   const handleAction = async (): Promise<void> => {
     if (!activeTask) return;
-    if (activeTask.status !== 'acknowledged') {
+    if (activeTask.status !== 'acknowledged' && activeTask.status !== 'rechecking') {
       setActionInFlight(true);
       try {
         await acknowledgeTask(activeTask.id);
@@ -102,17 +104,70 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
     }
   };
 
-  if (loading) {
+  if (loading && activeTasks.length === 0) {
     return <TaskDetailSkeleton />;
   }
 
   if (!activeTask) {
-    return <EmptyTaskPanel />;
+    return (
+      <EmptyTaskPanel
+        onGoToInbox={() => {
+          const parentNav = navigation.getParent<any>();
+          if (parentNav) {
+            parentNav.navigate('InboxTab');
+          }
+        }}
+      />
+    );
   }
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+        {/* Multi-Active Task Switcher Bar */}
+        {activeTasks.length > 1 ? (
+          <View style={styles.multiTaskSelectorContainer}>
+            <Text style={styles.multiTaskSelectorTitle}>
+              Active Tasks ({activeTasks.length}):
+            </Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.multiTaskTabsRow}
+            >
+              {activeTasks.map((t) => {
+                const isSelected = t.id === activeTask.id;
+                return (
+                  <TouchableOpacity
+                    key={t.id}
+                    onPress={() => setSelectedTaskIdState(t.id)}
+                    activeOpacity={0.75}
+                    style={[
+                      styles.multiTaskTabPill,
+                      isSelected && styles.multiTaskTabPillActive,
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name={isSelected ? 'clipboard-check' : 'clipboard-outline'}
+                      size={14}
+                      color={isSelected ? '#FFFFFF' : '#475569'}
+                    />
+                    <Text
+                      style={[
+                        styles.multiTaskTabPillText,
+                        isSelected && styles.multiTaskTabPillTextActive,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {getRestroomLabel(t)}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        ) : null}
+
         {/* Unified Hero Action Card */}
         <Card mode="elevated" style={[styles.heroCard, styles.cardElevation]}>
           <Card.Content style={styles.heroContent}>
@@ -188,7 +243,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
             {/* Direct Action Button */}
             <KlirButton
               title={
-                activeTask.status === 'acknowledged'
+                activeTask.status === 'acknowledged' || activeTask.status === 'rechecking'
                   ? 'Resume Task & Open Camera'
                   : 'Acknowledge & Start Task'
               }
@@ -196,7 +251,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
               loading={actionInFlight}
               disabled={actionInFlight}
               icon={
-                activeTask.status === 'acknowledged'
+                activeTask.status === 'acknowledged' || activeTask.status === 'rechecking'
                   ? 'camera-outline'
                   : 'clipboard-check-outline'
               }
@@ -214,6 +269,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
         onDismiss={() => setExecutionModalVisible(false)}
         onTaskCompleted={() => {
           setSnackbarMessage('Task completed successfully.');
+          setExecutionModalVisible(false);
           void refreshTasks();
         }}
       />
@@ -239,6 +295,53 @@ const styles = StyleSheet.create({
     paddingBottom: 32,
     gap: KLIR_SPACING.md,
     backgroundColor: '#F8FAFC',
+  },
+  emptyGoInboxBtn: {
+    marginTop: 14,
+    minWidth: 180,
+    borderRadius: 12,
+  },
+  multiTaskSelectorContainer: {
+    gap: 6,
+    marginBottom: 4,
+  },
+  multiTaskSelectorTitle: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#334155',
+    letterSpacing: 0.2,
+  },
+  multiTaskTabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 2,
+  },
+  multiTaskTabPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    maxWidth: 220,
+  },
+  multiTaskTabPillActive: {
+    backgroundColor: KLIR_COLORS.primary,
+    borderColor: KLIR_COLORS.primary,
+  },
+  multiTaskTabPillText: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  multiTaskTabPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '800',
   },
   cardElevation: {
     ...cardElevation,

@@ -48,6 +48,7 @@ import { ImageViewerModal } from '../components/ImageViewerModal';
 import { KlirButton } from '../components/KlirButton';
 import { useAuth } from '../hooks/useAuth';
 import { useSupervisorContext } from '../contexts/SupervisorContext';
+import { exportReportCSV, exportReportPDF } from '../lib/report-export';
 import { auth, db } from '../lib/firebase';
 import {
   approveTask,
@@ -67,7 +68,7 @@ import {
   isBroadcastTask,
   parseTaskDocument,
 } from '../lib/tasks';
-import type { SupervisorStackParamList, Task } from '../types';
+import type { AreaPhoto, SupervisorStackParamList, Task } from '../types';
 
 type DashboardProps = NativeStackScreenProps<
   SupervisorStackParamList,
@@ -161,9 +162,9 @@ export function SupervisorDashboardScreen({
 
   const activeToday = useMemo(() => {
     return tasks.filter(
-      (task) => task.createdAt >= today && task.status !== 'completed',
+      (task) => task.status !== 'completed',
     );
-  }, [tasks, today]);
+  }, [tasks]);
 
   const unassigned = useMemo(() => {
     return activeToday.filter(
@@ -750,62 +751,74 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
                     <View style={styles.personAvatarBox}>
                       <Text style={styles.personAvatarText}>{initials}</Text>
                     </View>
-                    <View style={{ gap: 2 }}>
-                      <Text variant="titleMedium" style={styles.personName}>
+                    <View style={styles.personTextColumn}>
+                      <Text variant="titleMedium" style={styles.personName} numberOfLines={1}>
                         {cleanPersonName(item.displayName)}
                       </Text>
-                      <Text variant="bodyMedium" style={styles.personBuilding}>
+                      <Text variant="bodyMedium" style={styles.personBuilding} numberOfLines={1}>
                         {item.building ?? 'SDCA Annex Building'}
                         {item.shift ? ` • ${item.shift} Shift` : ''}
                       </Text>
                     </View>
                   </View>
 
-                  <Chip
-                    style={{
-                      backgroundColor: isOnTask
-                        ? '#FEE2E2'
+                  <View
+                    style={[
+                      styles.teamStatusPill,
+                      isOnTask
+                        ? styles.teamStatusPillOnTask
                         : isAvailable
-                          ? '#DCFCE7'
-                          : '#F1F5F9',
-                      borderRadius: KLIR_RADII.chip,
-                    }}
-                    textStyle={[
-                      styles.chipText,
-                      {
-                        color: isOnTask
-                          ? '#991B1B'
-                          : isAvailable
-                            ? '#15803D'
-                            : '#475569',
-                      },
+                          ? styles.teamStatusPillAvailable
+                          : styles.teamStatusPillOffline,
                     ]}
                   >
-                    {isOnTask
-                      ? 'On Task'
-                      : isAvailable
-                        ? 'Available'
-                        : 'Offline'}
-                  </Chip>
+                    <View
+                      style={[
+                        styles.teamStatusDot,
+                        isOnTask
+                          ? styles.teamStatusDotOnTask
+                          : isAvailable
+                            ? styles.teamStatusDotAvailable
+                            : styles.teamStatusDotOffline,
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.teamStatusPillText,
+                        isOnTask
+                          ? styles.teamStatusPillTextOnTask
+                          : isAvailable
+                            ? styles.teamStatusPillTextAvailable
+                            : styles.teamStatusPillTextOffline,
+                      ]}
+                    >
+                      {isOnTask
+                        ? 'On Task'
+                        : isAvailable
+                          ? 'Available'
+                          : 'Offline'}
+                    </Text>
+                  </View>
                 </View>
 
                 {activeTask ? (
                   <View style={styles.activeTaskCallout}>
                     <MaterialCommunityIcons
-                      name="map-marker-outline"
-                      size={15}
+                      name="map-marker-radius"
+                      size={16}
                       color="#B45309"
-                      style={{ marginTop: 2 }}
+                      style={{ marginTop: 1 }}
                     />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text variant="bodySmall" style={styles.calloutTitle}>
-                        Working on: {activeTask.location} • {activeTask.message}
+                      <Text style={styles.calloutTitle}>
+                        {activeTask.location}
+                      </Text>
+                      <Text style={styles.calloutText} numberOfLines={2}>
+                        {activeTask.message || 'Sanitation maintenance in progress'}
                       </Text>
                     </View>
                   </View>
-                ) : (
-                  <Text style={styles.personReadySubtitle}>Available for tasks</Text>
-                )}
+                ) : null}
               </Card.Content>
             </Card>
           );
@@ -1044,7 +1057,9 @@ export function SupervisorTaskDetailScreen({
   const { user } = useAuth();
   const { tasks, people, refresh, error, clearError } = useSupervisorData();
   const task = tasks.find((candidate) => candidate.id === route.params.taskId);
-  const availablePeople = people.filter((person) => person.isAvailable);
+  const availablePeople = people.filter(
+    (person) => getPersonOperationalStatus(person, tasks).status === 'available',
+  );
   const [assignee, setAssignee] = useState('');
   const [reason, setReason] = useState('Manual reassignment');
   const [submitting, setSubmitting] = useState(false);
@@ -1312,7 +1327,7 @@ export function CompletedReviewsScreen({
                       {item.location}
                     </Text>
                     <Chip
-                      style={{ backgroundColor: chipBg, borderRadius: KLIR_RADII.chip }}
+                      style={{ backgroundColor: chipBg, borderRadius: KLIR_RADII.chip, flexShrink: 0 }}
                       textStyle={[styles.chipText, { color: chipTextColor }]}
                     >
                       {chipLabel}
@@ -1408,6 +1423,36 @@ export function CompletedReviewDetailScreen({
     }
   }, [submissionUids, selectedTechUid]);
 
+  const activeSubmission =
+    selectedTechUid && task?.submissions
+      ? task.submissions[selectedTechUid]
+      : null;
+
+  const displayAdditionalPhotos = useMemo<AreaPhoto[]>(() => {
+    if (!task) return [];
+    if (
+      activeSubmission?.additionalPhotos &&
+      activeSubmission.additionalPhotos.length > 0
+    ) {
+      return activeSubmission.additionalPhotos;
+    }
+    if (task.additionalPhotos && task.additionalPhotos.length > 0) {
+      return task.additionalPhotos;
+    }
+    if (task.submissions) {
+      const collected: AreaPhoto[] = [];
+      for (const sub of Object.values(task.submissions)) {
+        if (Array.isArray(sub.additionalPhotos) && sub.additionalPhotos.length > 0) {
+          collected.push(...sub.additionalPhotos);
+        }
+      }
+      if (collected.length > 0) {
+        return collected;
+      }
+    }
+    return [];
+  }, [activeSubmission, task]);
+
   if (!task) {
     return (
       <View style={styles.screen}>
@@ -1419,11 +1464,6 @@ export function CompletedReviewDetailScreen({
       </View>
     );
   }
-
-  const activeSubmission =
-    selectedTechUid && task.submissions
-      ? task.submissions[selectedTechUid]
-      : null;
 
   const displayBeforePhoto =
     activeSubmission?.beforePhotoUrl ?? task.beforePhotoUrl;
@@ -1711,18 +1751,24 @@ export function CompletedReviewDetailScreen({
         </View>
 
         {/* Additional Area Photos Carousel */}
-        {((activeSubmission?.additionalPhotos && activeSubmission.additionalPhotos.length > 0) ||
-          (task.additionalPhotos && task.additionalPhotos.length > 0)) ? (
+        {displayAdditionalPhotos.length > 0 ? (
           <Card mode="elevated" style={[styles.personCard, styles.cardElevation, { marginTop: 12 }]}>
             <Card.Content style={styles.cardContent}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                <MaterialCommunityIcons name="camera-burst" size={18} color={KLIR_COLORS.primary} />
-                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                  Additional Area Proofs
-                </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <MaterialCommunityIcons name="camera-burst" size={18} color={KLIR_COLORS.primary} />
+                  <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                    Additional Area Proofs
+                  </Text>
+                </View>
+                <View style={{ backgroundColor: '#EDE9FE', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#6D28D9' }}>
+                    {displayAdditionalPhotos.length} {displayAdditionalPhotos.length === 1 ? 'Area' : 'Areas'}
+                  </Text>
+                </View>
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-                {(activeSubmission?.additionalPhotos || task.additionalPhotos || []).map((areaPhoto) => (
+                {displayAdditionalPhotos.map((areaPhoto) => (
                   <TouchableOpacity
                     key={areaPhoto.id}
                     onPress={() => setSelectedViewerPhoto(areaPhoto.photoUrl)}
@@ -2021,8 +2067,9 @@ export function SupervisorReportsScreen({
   navigation,
 }: ReportsProps): React.JSX.Element {
   const { tasks, people, loading, refresh } = useSupervisorData();
+  const { user } = useAuth();
   const [timeframe, setTimeframe] = useState<ReportTimeframe>('today');
-  const [exporting, setExporting] = useState(false);
+  const [exportingType, setExportingType] = useState<'pdf' | 'csv' | null>(null);
 
   const completedTasks = useMemo(() => {
     return tasks.filter((t) => t.status === 'completed');
@@ -2064,6 +2111,8 @@ export function SupervisorReportsScreen({
   const metrics = useMemo(() => {
     const total = filteredTasks.length;
     let totalDurationSeconds = 0;
+    let totalResponseSeconds = 0;
+    let responseCount = 0;
     let photoPairsCount = 0;
     let biometricCount = 0;
     let approvedCount = 0;
@@ -2071,6 +2120,10 @@ export function SupervisorReportsScreen({
 
     for (const t of filteredTasks) {
       if (t.workDuration) totalDurationSeconds += t.workDuration;
+      if (t.responseTime) {
+        totalResponseSeconds += t.responseTime;
+        responseCount += 1;
+      }
       if (t.beforePhotoUrl && t.afterPhotoUrl) photoPairsCount += 1;
       if (t.biometricVerified) biometricCount += 1;
       if (t.inspectionStatus === 'approved') approvedCount += 1;
@@ -2080,6 +2133,8 @@ export function SupervisorReportsScreen({
     const pendingAuditCount = total - (approvedCount + flaggedCount);
     const avgDurationSeconds =
       total > 0 ? Math.round(totalDurationSeconds / total) : 0;
+    const avgResponseSeconds =
+      responseCount > 0 ? Math.round(totalResponseSeconds / responseCount) : 0;
     const biometricPct =
       total > 0 ? Math.round((biometricCount / total) * 100) : 0;
     const complianceRate =
@@ -2090,6 +2145,7 @@ export function SupervisorReportsScreen({
     return {
       total,
       avgDuration: formatDuration(avgDurationSeconds),
+      avgResponse: formatDuration(avgResponseSeconds),
       photoPairsCount,
       biometricPct: `${biometricPct}%`,
       approvedCount,
@@ -2098,6 +2154,42 @@ export function SupervisorReportsScreen({
       complianceRate: `${complianceRate}%`,
     };
   }, [filteredTasks]);
+
+  const timeframeTabs: Array<{ id: ReportTimeframe; label: string }> = [
+    { id: 'today', label: 'Today' },
+    { id: 'week', label: 'This Week' },
+    { id: 'month', label: 'This Month' },
+    { id: 'year', label: 'This Year' },
+    { id: 'all', label: 'All Time' },
+  ];
+
+  const handleExportPDF = async (): Promise<void> => {
+    if (filteredTasks.length === 0) {
+      Alert.alert(
+        'No Records',
+        'There are no completed tasks in this timeframe to export.',
+      );
+      return;
+    }
+
+    setExportingType('pdf');
+    try {
+      const currentTab = timeframeTabs.find((t) => t.id === timeframe);
+      await exportReportPDF({
+        timeframeLabel: currentTab?.label ?? 'All Time',
+        supervisorName: user?.name ?? user?.email ?? 'Facility Supervisor',
+        building: user?.building ?? 'SDCA Annex Building',
+        generatedAt: new Date(),
+        tasks: filteredTasks,
+        people,
+        metrics,
+      });
+    } catch {
+      Alert.alert('Export Failed', 'Unable to generate or share PDF report.');
+    } finally {
+      setExportingType(null);
+    }
+  };
 
   const handleExportCSV = async (): Promise<void> => {
     if (filteredTasks.length === 0) {
@@ -2108,85 +2200,21 @@ export function SupervisorReportsScreen({
       return;
     }
 
-    setExporting(true);
+    setExportingType('csv');
     try {
-      const headers = [
-        'Task ID',
-        'Restroom / Location',
-        'Floor',
-        'Building',
-        'Component',
-        'Trigger Type',
-        'Technician(s)',
-        'Created At',
-        'Completed At',
-        'Work Duration (Seconds)',
-        'Biometric Verified',
-        'Inspection Status',
-        'Inspected By',
-        'Inspected At',
-        'Flag Reason',
-        'Recheck Count',
-        'Remarks',
-      ];
-
-      const rows = filteredTasks.map((t) => {
-        const assignee = getAssigneeName(
-          t.completedBy ?? t.assignedTo,
-          people,
-        );
-        const createdAtStr = t.createdAt.toISOString();
-        const completedAtStr = t.completedAt
-          ? t.completedAt.toISOString()
-          : 'N/A';
-        const remarksClean = `"${(t.remarks || '').replace(/"/g, '""')}"`;
-        const locClean = `"${(t.location || t.restroomName || '').replace(/"/g, '""')}"`;
-        const inspStatus = t.inspectionStatus ?? (t.status === 'flagged' ? 'flagged' : 'pending_review');
-        const inspByName = `"${(t.inspectedByName || t.inspectedBy || 'N/A').replace(/"/g, '""')}"`;
-        const inspAtStr = t.inspectedAt ? t.inspectedAt.toISOString() : 'N/A';
-        const flagReasonClean = `"${(t.flagReason || '').replace(/"/g, '""')}"`;
-
-        return [
-          t.id,
-          locClean,
-          t.floor,
-          t.building,
-          t.component,
-          t.triggerType,
-          `"${assignee.replace(/"/g, '""')}"`,
-          createdAtStr,
-          completedAtStr,
-          t.workDuration ?? 0,
-          t.biometricVerified ? 'Yes' : 'No',
-          inspStatus,
-          inspByName,
-          inspAtStr,
-          flagReasonClean,
-          t.recheckCount ?? 0,
-          remarksClean,
-        ].join(',');
-      });
-
-      const csvContent = [headers.join(','), ...rows].join('\n');
-
-      await Share.share({
-        title: `Smart Flush Operations Log - ${timeframe.toUpperCase()}`,
-        message: csvContent,
+      const currentTab = timeframeTabs.find((t) => t.id === timeframe);
+      await exportReportCSV({
+        timeframe,
+        timeframeLabel: currentTab?.label ?? 'All Time',
+        tasks: filteredTasks,
+        people,
       });
     } catch {
-      Alert.alert('Export Failed', 'Unable to share CSV report.');
+      Alert.alert('Export Failed', 'Unable to generate or share CSV spreadsheet.');
     } finally {
-      setExporting(false);
+      setExportingType(null);
     }
   };
-
-  const timeframeTabs: Array<{ id: ReportTimeframe; label: string }> = [
-    { id: 'today', label: 'Today' },
-    { id: 'week', label: 'This Week' },
-    { id: 'month', label: 'This Month' },
-    { id: 'year', label: 'This Year' },
-    { id: 'all', label: 'All Time' },
-  ];
 
   return (
     <View style={styles.screen}>
@@ -2325,32 +2353,44 @@ export function SupervisorReportsScreen({
         </View>
 
         {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Export Report</Text>
+        <Text style={styles.sectionHeaderTitle}>Export Reports</Text>
 
         {/* Export Operations Action Card */}
         <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
           <Card.Content style={styles.cardContent}>
-            <View style={styles.rowBetween}>
-              <View style={{ flex: 1, gap: 3 }}>
+            <View style={{ gap: 12 }}>
+              <View style={{ gap: 3 }}>
                 <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                  Export CSV Report
+                  Executive Compliance & Audit Exports
                 </Text>
                 <Text style={styles.metricFooterText}>
-                  Download task history and data for{' '}
-                  {
-                    timeframeTabs.find((t) => t.id === timeframe)?.label
-                  }
+                  Generate formatted PDF compliance summaries or export raw CSV data for{' '}
+                  <Text style={{ fontWeight: '700', color: '#0F172A' }}>
+                    {timeframeTabs.find((t) => t.id === timeframe)?.label}
+                  </Text>{' '}
+                  ({filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'})
                 </Text>
               </View>
-              <KlirButton
-                title="Export CSV"
-                variant="primary"
-                icon="file-download-outline"
-                loading={exporting}
-                disabled={exporting || filteredTasks.length === 0}
-                onPress={() => void handleExportCSV()}
-                style={styles.cardElevation}
-              />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <KlirButton
+                  title="Export PDF Report"
+                  variant="primary"
+                  icon="file-pdf-box"
+                  loading={exportingType === 'pdf'}
+                  disabled={exportingType !== null || filteredTasks.length === 0}
+                  onPress={() => void handleExportPDF()}
+                  style={[{ flex: 1.2 }, styles.cardElevation]}
+                />
+                <KlirButton
+                  title="Export CSV"
+                  variant="outline"
+                  icon="file-delimited-outline"
+                  loading={exportingType === 'csv'}
+                  disabled={exportingType !== null || filteredTasks.length === 0}
+                  onPress={() => void handleExportCSV()}
+                  style={[{ flex: 1 }, styles.cardElevation]}
+                />
+              </View>
             </View>
           </Card.Content>
         </Card>
@@ -2561,6 +2601,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 9999,
     alignSelf: 'flex-start',
+    flexShrink: 0,
   },
   teamBadgeAvailable: {
     backgroundColor: '#2E7D32', // Solid forest green
@@ -2597,6 +2638,58 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     color: '#FFFFFF',
+  },
+  teamStatusPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexShrink: 0,
+    alignSelf: 'center',
+  },
+  teamStatusPillAvailable: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+  },
+  teamStatusPillOnTask: {
+    backgroundColor: '#FEE2E2',
+    borderColor: '#FECACA',
+  },
+  teamStatusPillOffline: {
+    backgroundColor: '#F1F5F9',
+    borderColor: '#E2E8F0',
+  },
+  teamStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  teamStatusDotAvailable: {
+    backgroundColor: '#16A34A',
+  },
+  teamStatusDotOnTask: {
+    backgroundColor: '#DC2626',
+  },
+  teamStatusDotOffline: {
+    backgroundColor: '#94A3B8',
+  },
+  teamStatusPillText: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  teamStatusPillTextAvailable: {
+    color: '#15803D',
+  },
+  teamStatusPillTextOnTask: {
+    color: '#991B1B',
+  },
+  teamStatusPillTextOffline: {
+    color: '#475569',
   },
 
   // Grouped Menu Action List
@@ -2784,6 +2877,11 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 16,
   },
+  personTextColumn: {
+    flex: 1,
+    gap: 2,
+    justifyContent: 'center',
+  },
   personBuilding: {
     fontFamily: INTER_FONT,
     color: '#64748B',
@@ -2871,6 +2969,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
     fontSize: 17,
+    flex: 1,
+    flexShrink: 1,
   },
   taskComponentText: {
     fontFamily: INTER_FONT,
@@ -2913,6 +3013,8 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#0F172A',
     fontSize: 20,
+    flex: 1,
+    flexShrink: 1,
   },
   taskMessageContainer: {
     flexDirection: 'row',

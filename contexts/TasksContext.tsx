@@ -172,8 +172,11 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     (task) =>
       task.status !== 'completed' &&
       (task.status === 'unassigned' ||
+        task.status === 'assigned' ||
         task.status === 'reassignment_needed' ||
         task.status === 'flagged' ||
+        task.status === 'acknowledged' ||
+        task.status === 'rechecking' ||
         task.assignedTo === user?.uid ||
         task.assignedTo === user?.email ||
         (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
@@ -181,6 +184,19 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         task.completedBy === user?.uid ||
         (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
   );
+
+  const activeTasks = inboxTasks.filter(
+    (task) =>
+      (task.status === 'acknowledged' || task.status === 'rechecking') &&
+      (task.assignedTo === user?.uid ||
+        task.assignedTo === user?.email ||
+        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+        isBroadcastTask(task) ||
+        (task.acknowledgedBy && Boolean(task.acknowledgedBy[user?.uid ?? ''])) ||
+        task.recheckedBy === user?.uid),
+  );
+
+  const activeTasksCount = activeTasks.length;
 
   const historyTasks = tasks.filter(
     (task) =>
@@ -193,11 +209,12 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
   );
 
-  const pendingCount = tasks.filter(
+  const pendingCount = inboxTasks.filter(
     (task) =>
       task.status === 'unassigned' ||
       task.status === 'assigned' ||
-      task.status === 'reassignment_needed',
+      task.status === 'reassignment_needed' ||
+      task.status === 'flagged',
   ).length;
 
   return (
@@ -205,6 +222,8 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       value={{
         tasks,
         inboxTasks,
+        activeTasks,
+        activeTasksCount,
         historyTasks,
         pendingCount,
         loading,
