@@ -26,6 +26,15 @@ interface TaskApiData {
   message?: unknown;
   status?: unknown;
   assignedTo?: unknown;
+  assignedToIds?: unknown;
+  isBroadcast?: unknown;
+  assignmentType?: unknown;
+  automationRuleId?: unknown;
+  automationTrigger?: unknown;
+  assignmentSource?: unknown;
+  requiresSupervisorAssignment?: unknown;
+  autoAssignmentEligibleAt?: unknown;
+  cycleCountAtTrigger?: unknown;
   createdAt?: unknown;
   assignedAt?: unknown;
   acknowledgedAt?: unknown;
@@ -215,6 +224,23 @@ function parseTaskApiData(data: TaskApiData): Task | null {
         : rawObj.assignmentType === 'team'
           ? 'team'
           : 'individual',
+    automationRuleId: stringOrNull(rawObj.automationRuleId),
+    automationTrigger:
+      rawObj.automationTrigger === 'ultrasonic_sensor_fault' ||
+      rawObj.automationTrigger === 'water_overuse' ||
+      rawObj.automationTrigger === 'no_water_after_flush' ||
+      rawObj.automationTrigger === 'maintenance_due'
+        ? rawObj.automationTrigger
+        : undefined,
+    assignmentSource:
+      rawObj.assignmentSource === 'initial_auto' ||
+      rawObj.assignmentSource === 'supervisor' ||
+      rawObj.assignmentSource === 'retry_auto'
+        ? rawObj.assignmentSource
+        : undefined,
+    requiresSupervisorAssignment: rawObj.requiresSupervisorAssignment === true,
+    autoAssignmentEligibleAt: millisToDate(rawObj.autoAssignmentEligibleAt),
+    cycleCountAtTrigger: numberOrNull(rawObj.cycleCountAtTrigger),
     status,
     createdAt,
     assignedAt: millisToDate(data.assignedAt),
@@ -259,21 +285,6 @@ function parseTaskApiData(data: TaskApiData): Task | null {
 }
 
 export async function fetchTasks(): Promise<Task[]> {
-  try {
-    const snapshot = await db.collection('tasks').get();
-    if (snapshot && !snapshot.empty) {
-      const parsed = snapshot.docs
-        .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
-        .filter((task): task is Task => task !== null)
-        .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
-      if (parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch (error) {
-    console.warn('[task-api] Direct Firestore fetchTasks failed, falling back to API:', error);
-  }
-
   const response = await apiFetch<TaskApiData[]>('/api/tasks');
 
   if (!response.success || !Array.isArray(response.data)) {

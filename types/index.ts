@@ -16,7 +16,16 @@ export type TaskTriggerType =
   | 'maintenance'
   | 'flush_count'
   | 'water_overuse'
+  | 'water_no_flow'
   | 'uv_complete';
+
+export type AutomationTrigger =
+  | 'ultrasonic_sensor_fault'
+  | 'water_overuse'
+  | 'no_water_after_flush'
+  | 'maintenance_due';
+
+export type AssignmentSource = 'initial_auto' | 'supervisor' | 'retry_auto';
 
 export type UserRole = 'maintenance' | 'supervisor';
 export type ChecklistValue = 'unchecked' | 'done' | 'na';
@@ -73,6 +82,12 @@ export interface Task {
   assignedToIds?: string[];
   isBroadcast?: boolean;
   assignmentType?: 'broadcast' | 'individual' | 'team';
+  automationRuleId?: string | null;
+  automationTrigger?: AutomationTrigger;
+  assignmentSource?: AssignmentSource;
+  requiresSupervisorAssignment?: boolean;
+  autoAssignmentEligibleAt?: Date | null;
+  cycleCountAtTrigger?: number | null;
   status: TaskStatus;
   createdAt: Date;
   assignedAt?: Date | null;

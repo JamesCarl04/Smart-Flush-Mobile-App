@@ -30,6 +30,12 @@ type TaskDocumentShape = {
   assignedToIds?: unknown;
   isBroadcast?: unknown;
   assignmentType?: unknown;
+  automationRuleId?: unknown;
+  automationTrigger?: unknown;
+  assignmentSource?: unknown;
+  requiresSupervisorAssignment?: unknown;
+  autoAssignmentEligibleAt?: FirestoreDateValue;
+  cycleCountAtTrigger?: unknown;
   createdAt?: FirestoreDateValue;
   assignedAt?: FirestoreDateValue;
   acknowledgedAt?: FirestoreDateValue;
@@ -136,7 +142,7 @@ export function parseSubmissions(value: unknown): Record<string, TaskSubmission>
   return result;
 }
 
-function toDate(value: FirestoreDateValue): Date | null {
+function toDate(value: unknown): Date | null {
   if (!value) {
     return null;
   }
@@ -147,6 +153,16 @@ function toDate(value: FirestoreDateValue): Date | null {
 
   if (value instanceof Timestamp) {
     return value.toDate();
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    'toDate' in value &&
+    typeof value.toDate === 'function'
+  ) {
+    const date = value.toDate();
+    return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
   }
 
   return null;
@@ -172,6 +188,7 @@ export function isTaskTriggerType(value: unknown): value is TaskTriggerType {
     value === 'maintenance' ||
     value === 'flush_count' ||
     value === 'water_overuse' ||
+    value === 'water_no_flow' ||
     value === 'uv_complete'
   );
 }
@@ -275,6 +292,10 @@ export function formatTaskTrigger(triggerType: TaskTriggerType): string {
 
   if (triggerType === 'water_overuse') {
     return 'Water overuse';
+  }
+
+  if (triggerType === 'water_no_flow') {
+    return 'No water after flush';
   }
 
   if (triggerType === 'uv_complete') {
@@ -553,6 +574,23 @@ export function parseTaskDocument(
         : data.assignmentType === 'team'
           ? 'team'
           : 'individual',
+    automationRuleId: stringOrNull(data.automationRuleId),
+    automationTrigger:
+      data.automationTrigger === 'ultrasonic_sensor_fault' ||
+      data.automationTrigger === 'water_overuse' ||
+      data.automationTrigger === 'no_water_after_flush' ||
+      data.automationTrigger === 'maintenance_due'
+        ? data.automationTrigger
+        : undefined,
+    assignmentSource:
+      data.assignmentSource === 'initial_auto' ||
+      data.assignmentSource === 'supervisor' ||
+      data.assignmentSource === 'retry_auto'
+        ? data.assignmentSource
+        : undefined,
+    requiresSupervisorAssignment: data.requiresSupervisorAssignment === true,
+    autoAssignmentEligibleAt: toDate(data.autoAssignmentEligibleAt),
+    cycleCountAtTrigger: numberOrNull(data.cycleCountAtTrigger),
     status,
     createdAt,
     assignedAt: toDate(data.assignedAt),

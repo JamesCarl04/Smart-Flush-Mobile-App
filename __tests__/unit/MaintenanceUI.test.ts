@@ -146,6 +146,7 @@ describe('MaintenanceUI helper functions', () => {
     it.each([
       ['flush_count', 'Flush Threshold', 'counter'],
       ['water_overuse', 'Water Overuse', 'water-alert'],
+      ['water_no_flow', 'No Water After Flush', 'water-off-outline'],
       ['uv_complete', 'UV Cycle Alert', 'lightbulb-alert-outline'],
       ['sensor_fault', 'Sensor Fault', 'radar'],
     ] as const)('should provide a distinct, actionable badge for %s', (trigger, label, icon) => {

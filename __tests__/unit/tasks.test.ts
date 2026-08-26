@@ -82,6 +82,7 @@ describe('tasks utility', () => {
         'maintenance',
         'flush_count',
         'water_overuse',
+        'water_no_flow',
         'uv_complete',
       ];
       validTriggers.forEach((trigger) => {
@@ -115,8 +116,39 @@ describe('tasks utility', () => {
       expect(formatTaskTrigger('maintenance')).toBe('Maintenance');
       expect(formatTaskTrigger('flush_count')).toBe('Flush threshold');
       expect(formatTaskTrigger('water_overuse')).toBe('Water overuse');
+      expect(formatTaskTrigger('water_no_flow')).toBe('No water after flush');
       expect(formatTaskTrigger('uv_complete')).toBe('UV cycle alert');
       expect(formatTaskTrigger('manual')).toBe('Manual');
+    });
+
+    it('parses automation metadata for a no-water task', () => {
+      const task = parseTaskDocument('task-dry-flow', {
+        deviceId: 'toilet-01',
+        message: 'No water detected after flush.',
+        createdAt: new Date('2026-08-15T08:00:00.000Z'),
+        triggerType: 'water_no_flow',
+        status: 'unassigned',
+        assignedTo: null,
+        assignedToIds: [],
+        isBroadcast: false,
+        automationRuleId: 'rule-dry-flow',
+        automationTrigger: 'no_water_after_flush',
+        assignmentSource: 'initial_auto',
+        requiresSupervisorAssignment: true,
+        autoAssignmentEligibleAt: Timestamp.fromDate(new Date('2026-08-15T08:01:00.000Z')),
+        cycleCountAtTrigger: 2,
+      });
+
+      expect(task).toEqual(expect.objectContaining({
+        triggerType: 'water_no_flow',
+        isBroadcast: false,
+        automationRuleId: 'rule-dry-flow',
+        automationTrigger: 'no_water_after_flush',
+        assignmentSource: 'initial_auto',
+        requiresSupervisorAssignment: true,
+        autoAssignmentEligibleAt: new Date('2026-08-15T08:01:00.000Z'),
+        cycleCountAtTrigger: 2,
+      }));
     });
   });
 
@@ -232,6 +264,16 @@ describe('tasks utility', () => {
       expect(task?.assignedAt).toBe(assignedDate);
       expect(task?.acknowledgedAt).toBe(ackDate);
       expect(task?.completedAt).toBe(completedDate);
+    });
+
+    it('parses native React Native Firebase timestamp objects structurally', () => {
+      const date = new Date('2026-08-15T08:00:00.000Z');
+      const task = parseTaskDocument('task-native-timestamp', {
+        ...baseValidDoc,
+        createdAt: { toDate: () => date } as any,
+      });
+
+      expect(task?.createdAt).toEqual(date);
     });
 
     it('should apply correct fallbacks for null/missing fields (location, building, floor, shift, component, reassignCount, createdBy)', () => {

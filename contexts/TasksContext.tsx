@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
 import {
   createContext,
   useCallback,
@@ -14,7 +15,7 @@ import { isBroadcastTask, parseTaskDocument } from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
-const TASKS_CACHE_KEY = '@klir:technician_tasks';
+const TASKS_CACHE_KEY_PREFIX = '@klir:tasks';
 
 function deduplicateTasks(taskList: Task[]): Task[] {
   const map = new Map<string, Task>();
@@ -45,7 +46,7 @@ function hydrateCachedTask(raw: any): Task {
 }
 
 export function TasksProvider({ children }: PropsWithChildren): React.JSX.Element {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -53,9 +54,11 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   // 1. Instant 0ms cache hydration on initial mount
   useEffect(() => {
     let isMounted = true;
+    if (!user) return () => { isMounted = false; };
+    const cacheKey = `${TASKS_CACHE_KEY_PREFIX}:${role ?? 'unknown'}:${user.uid}`;
     void (async () => {
       try {
-        const cached = await AsyncStorage.getItem(TASKS_CACHE_KEY);
+        const cached = await AsyncStorage.getItem(cacheKey);
         if (cached && isMounted) {
           const parsed = JSON.parse(cached);
           if (Array.isArray(parsed) && parsed.length > 0) {
@@ -71,15 +74,17 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [role, user]);
 
   const saveCache = useCallback((nextTasks: Task[]) => {
+    if (!user) return;
     try {
-      void AsyncStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(nextTasks));
+      const cacheKey = `${TASKS_CACHE_KEY_PREFIX}:${role ?? 'unknown'}:${user.uid}`;
+      void AsyncStorage.setItem(cacheKey, JSON.stringify(nextTasks));
     } catch {
       // ignore cache write failures
     }
-  }, []);
+  }, [role, user]);
 
   const refreshTasks = useCallback(async (): Promise<void> => {
     if (!user) {
@@ -125,31 +130,53 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
     void refreshTasks();
 
-    let unsubscribe: (() => void) | undefined;
+    const unsubscribers: Array<() => void> = [];
     try {
       if (typeof db?.collection === 'function') {
-        const query = db.collection('tasks');
-        if (typeof query?.onSnapshot === 'function') {
-          unsubscribe = query.onSnapshot(
-            (snapshot) => {
-              if (snapshot && !snapshot.empty) {
-                const parsed = snapshot.docs
+        const collection = db.collection('tasks');
+        const queryEntries: Array<{
+          key: string;
+          query: FirebaseFirestoreTypes.Query;
+        }> = [];
+        if (role === 'supervisor') {
+          queryEntries.push({ key: 'supervisor-all', query: collection });
+        } else if (typeof collection?.where === 'function') {
+          queryEntries.push(
+            { key: 'assigned-ids', query: collection.where('assignedToIds', 'array-contains', user.uid) },
+            { key: 'assigned-uid', query: collection.where('assignedTo', '==', user.uid) },
+            { key: 'broadcast', query: collection.where('isBroadcast', '==', true) },
+          );
+          if (user.email) {
+            queryEntries.push({ key: 'assigned-email', query: collection.where('assignedTo', '==', user.email) });
+          }
+        }
+
+        const queryResults = new Map<string, Task[]>();
+        const publishMergedResults = () => {
+          const merged = deduplicateTasks(Array.from(queryResults.values()).flat());
+          setTasks(merged);
+          saveCache(merged);
+          setLoading(false);
+          setErrorMessage(null);
+        };
+
+        for (const { key, query } of queryEntries) {
+          if (typeof query?.onSnapshot !== 'function') continue;
+          const unsubscribe = query.onSnapshot(
+            (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+              if (snapshot) {
+                const parsed = (snapshot.docs ?? [])
                   .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
                   .filter((task): task is Task => task !== null);
-                const deduped = deduplicateTasks(parsed);
-                setTasks(deduped);
-                saveCache(deduped);
-                setLoading(false);
-                setErrorMessage(null);
-              } else if (snapshot && snapshot.empty) {
-                setTasks([]);
-                setLoading(false);
+                queryResults.set(key, parsed);
+                publishMergedResults();
               }
             },
-            (error) => {
+            (error: Error) => {
               console.warn('[TasksContext] onSnapshot error, falling back to polling:', error);
             },
           );
+          if (typeof unsubscribe === 'function') unsubscribers.push(unsubscribe);
         }
       }
     } catch (err) {
@@ -161,17 +188,15 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     }, 10000);
 
     return () => {
-      if (typeof unsubscribe === 'function') {
-        unsubscribe();
-      }
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
       clearInterval(intervalId);
     };
-  }, [refreshTasks, saveCache, user]);
+  }, [refreshTasks, role, saveCache, user]);
 
   const inboxTasks = tasks.filter(
     (task) =>
       task.status !== 'completed' &&
-      (task.status === 'unassigned' ||
+      ((task.status === 'unassigned' && isBroadcastTask(task)) ||
         task.status === 'assigned' ||
         task.status === 'reassignment_needed' ||
         task.status === 'flagged' ||

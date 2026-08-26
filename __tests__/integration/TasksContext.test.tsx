@@ -9,6 +9,7 @@ import { TasksProvider } from '../../contexts/TasksContext';
 import { useTasks } from '../../hooks/useTasks';
 import * as taskApi from '../../lib/task-api';
 import * as useAuthHook from '../../hooks/useAuth';
+import { db } from '../../lib/firebase';
 import type { Task } from '../../types';
 
 jest.mock('../../lib/task-api');
@@ -83,6 +84,7 @@ const mockTasksData: Task[] = [
     triggerType: 'maintenance',
     message: 'Refill soap dispenser',
     assignedTo: null,
+    isBroadcast: true,
     status: 'unassigned',
     createdAt: new Date('2026-08-15T02:00:00Z'),
     createdBy: 'system',
@@ -219,6 +221,55 @@ describe('TasksContext Integration', () => {
       // pendingCount: task-1 (assigned) + task-2 (unassigned) + task-3 (reassignment_needed) = 3
       expect(screen.getByTestId('pending-count').props.children).toBe(3);
     });
+  });
+
+  it('keeps supervisor-only unassigned automation tasks out of a technician inbox', async () => {
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([
+      ...mockTasksData,
+      {
+        ...mockTasksData[1],
+        id: 'task-supervisor-only',
+        isBroadcast: false,
+        assignmentType: 'individual',
+        automationTrigger: 'no_water_after_flush',
+        requiresSupervisorAssignment: true,
+      },
+    ]);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('loading').props.children).toBe('IDLE'));
+    expect(screen.queryByTestId('inbox-task-supervisor-only')).toBeNull();
+    expect(screen.getByTestId('inbox-task-2')).toBeTruthy();
+  });
+
+  it('subscribes technicians only through assignment and explicit-broadcast queries', async () => {
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([]);
+    const onSnapshot = jest.fn(() => jest.fn());
+    const where = jest.fn(() => ({ onSnapshot }));
+    const broadOnSnapshot = jest.fn();
+    (db.collection as jest.Mock).mockReturnValueOnce({ where, onSnapshot: broadOnSnapshot });
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => expect(where).toHaveBeenCalledTimes(4));
+    expect(where).toHaveBeenCalledWith('assignedToIds', 'array-contains', 'user-tech-1');
+    expect(where).toHaveBeenCalledWith('assignedTo', '==', 'user-tech-1');
+    expect(where).toHaveBeenCalledWith('assignedTo', '==', 'tech1@smartflush.com');
+    expect(where).toHaveBeenCalledWith('isBroadcast', '==', true);
+    expect(broadOnSnapshot).not.toHaveBeenCalled();
   });
 
   it('handles fetch error and allows clearing error via clearError()', async () => {

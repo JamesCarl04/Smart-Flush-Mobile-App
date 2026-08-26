@@ -384,6 +384,9 @@ export function TaskDetailScreen({
         await db.collection('tasks').doc(task.id).update({
           status: 'acknowledged',
           assignedTo: uid,
+          assignedToIds: [uid],
+          isBroadcast: false,
+          assignmentType: 'individual',
           acknowledgedAt: firestore.Timestamp.fromDate(acknowledgedAt),
           [`acknowledgedBy.${uid}`]: firestore.Timestamp.fromDate(acknowledgedAt),
         });
@@ -1885,4 +1888,3 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-

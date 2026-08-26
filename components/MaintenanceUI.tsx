@@ -253,6 +253,15 @@ export function taskTriggerTone(triggerType?: TaskTriggerType | null): {
     };
   }
 
+  if (triggerType === 'water_no_flow') {
+    return {
+      label: 'No Water After Flush',
+      backgroundColor: UI_COLORS.softRed,
+      color: UI_COLORS.danger,
+      icon: 'water-off-outline',
+    };
+  }
+
   if (triggerType === 'uv_complete') {
     return {
       label: 'UV Cycle Alert',
@@ -388,6 +397,7 @@ export function getTaskPriority(task: Task | null | undefined): TaskPriorityLeve
   if (
     task.triggerType === 'hardware_failure' ||
     task.triggerType === 'sensor_fault' ||
+    task.triggerType === 'water_no_flow' ||
     task.triggerType === 'maintenance' ||
     task.status === 'reassignment_needed'
   ) {
@@ -469,6 +479,7 @@ export function urgencyTone(
     status === 'unassigned' ||
     triggerType === 'hardware_failure' ||
     triggerType === 'sensor_fault' ||
+    triggerType === 'water_no_flow' ||
     triggerType === 'maintenance'
   ) {
     return {
@@ -1429,4 +1440,3 @@ export function AssigneeAvatarCluster({
     </View>
   );
 }
-
