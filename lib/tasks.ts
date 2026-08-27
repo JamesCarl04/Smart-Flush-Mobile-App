@@ -277,13 +277,18 @@ export function formatTaskStatus(status: TaskStatus): string {
   return 'Reassignment needed';
 }
 
-export function formatTaskTrigger(triggerType: TaskTriggerType): string {
+export function formatTaskTrigger(
+  triggerType: TaskTriggerType,
+  automationTrigger?: Task['automationTrigger'],
+): string {
   if (triggerType === 'hardware_failure') {
     return 'Hardware failure';
   }
 
   if (triggerType === 'maintenance') {
-    return 'Maintenance';
+    return automationTrigger === 'maintenance_due'
+      ? 'Routine Toilet Check'
+      : 'Maintenance';
   }
 
   if (triggerType === 'flush_count') {
@@ -303,7 +308,7 @@ export function formatTaskTrigger(triggerType: TaskTriggerType): string {
   }
 
   if (triggerType === 'sensor_fault') {
-    return 'Sensor fault';
+    return 'Ultrasonic Sensor Fault';
   }
 
   return 'Manual';

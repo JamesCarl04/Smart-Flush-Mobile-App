@@ -133,7 +133,7 @@ describe('MaintenanceUI helper functions', () => {
       });
     });
 
-    it('should return orange tone for "maintenance"', () => {
+    it('should return orange tone for non-automated "maintenance"', () => {
       const tone = taskTriggerTone('maintenance');
       expect(tone).toEqual({
         label: 'Maintenance',
@@ -143,12 +143,18 @@ describe('MaintenanceUI helper functions', () => {
       });
     });
 
+    it('labels routine maintenance checks explicitly', () => {
+      expect(taskTriggerTone('maintenance', 'maintenance_due').label).toBe(
+        'Routine Toilet Check',
+      );
+    });
+
     it.each([
       ['flush_count', 'Flush Threshold', 'counter'],
       ['water_overuse', 'Water Overuse', 'water-alert'],
       ['water_no_flow', 'No Water After Flush', 'water-off-outline'],
       ['uv_complete', 'UV Cycle Alert', 'lightbulb-alert-outline'],
-      ['sensor_fault', 'Sensor Fault', 'radar'],
+      ['sensor_fault', 'Ultrasonic Sensor Fault', 'radar'],
     ] as const)('should provide a distinct, actionable badge for %s', (trigger, label, icon) => {
       const tone = taskTriggerTone(trigger);
       expect(tone.label).toBe(label);

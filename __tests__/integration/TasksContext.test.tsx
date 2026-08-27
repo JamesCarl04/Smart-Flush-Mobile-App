@@ -249,6 +249,42 @@ describe('TasksContext Integration', () => {
     expect(screen.getByTestId('inbox-task-2')).toBeTruthy();
   });
 
+  it('keeps supervisor-only unassigned automation tasks in a supervisor inbox', async () => {
+    (useAuthHook.useAuth as jest.Mock).mockReturnValue({
+      user: {
+        uid: 'user-supervisor-1',
+        email: 'supervisor@smartflush.com',
+        role: 'supervisor',
+        name: 'Sam Supervisor',
+        building: 'GB3',
+      },
+      role: 'supervisor',
+      loading: false,
+      logout: jest.fn(),
+    });
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([
+      {
+        ...mockTasksData[1],
+        id: 'task-supervisor-only',
+        isBroadcast: false,
+        assignmentType: 'individual',
+        automationTrigger: 'maintenance_due',
+        requiresSupervisorAssignment: true,
+      },
+    ]);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('loading').props.children).toBe('IDLE'));
+    expect(screen.getByTestId('inbox-task-supervisor-only')).toBeTruthy();
+  });
+
   it('subscribes technicians only through assignment and explicit-broadcast queries', async () => {
     (taskApi.fetchTasks as jest.Mock).mockResolvedValue([]);
     const onSnapshot = jest.fn(() => jest.fn());

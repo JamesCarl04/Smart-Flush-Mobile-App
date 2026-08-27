@@ -112,13 +112,14 @@ describe('tasks utility', () => {
   describe('formatTaskTrigger', () => {
     it('should format trigger types into human-readable labels', () => {
       expect(formatTaskTrigger('hardware_failure')).toBe('Hardware failure');
-      expect(formatTaskTrigger('sensor_fault')).toBe('Sensor fault');
+      expect(formatTaskTrigger('sensor_fault')).toBe('Ultrasonic Sensor Fault');
       expect(formatTaskTrigger('maintenance')).toBe('Maintenance');
       expect(formatTaskTrigger('flush_count')).toBe('Flush threshold');
       expect(formatTaskTrigger('water_overuse')).toBe('Water overuse');
       expect(formatTaskTrigger('water_no_flow')).toBe('No water after flush');
       expect(formatTaskTrigger('uv_complete')).toBe('UV cycle alert');
       expect(formatTaskTrigger('manual')).toBe('Manual');
+      expect(formatTaskTrigger('maintenance', 'maintenance_due')).toBe('Routine Toilet Check');
     });
 
     it('parses automation metadata for a no-water task', () => {

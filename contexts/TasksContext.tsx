@@ -196,7 +196,8 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const inboxTasks = tasks.filter(
     (task) =>
       task.status !== 'completed' &&
-      ((task.status === 'unassigned' && isBroadcastTask(task)) ||
+      ((task.status === 'unassigned' &&
+        (role === 'supervisor' || isBroadcastTask(task))) ||
         task.status === 'assigned' ||
         task.status === 'reassignment_needed' ||
         task.status === 'flagged' ||

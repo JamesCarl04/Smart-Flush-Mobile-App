@@ -479,6 +479,21 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                       tone={taskTriggerTone('hardware_failure')}
                     />
                   ) : null}
+                  {item.triggerType === 'sensor_fault' ||
+                  item.triggerType === 'water_overuse' ||
+                  (item.triggerType === 'maintenance' &&
+                    item.automationTrigger === 'maintenance_due') ? (
+                    <OperationBadge
+                      label={taskTriggerTone(
+                        item.triggerType,
+                        item.automationTrigger,
+                      ).label}
+                      tone={taskTriggerTone(
+                        item.triggerType,
+                        item.automationTrigger,
+                      )}
+                    />
+                  ) : null}
                 </View>
                 <View style={styles.relativeTimeBadge}>
                   <MaterialCommunityIcons

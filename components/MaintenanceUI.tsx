@@ -2,8 +2,8 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
-import { formatTaskComponent, isBroadcastTask, isHardwareFailureComponent } from '../lib/tasks';
-import type { Task, TaskTriggerType } from '../types';
+import { formatTaskComponent, formatTaskTrigger, isBroadcastTask, isHardwareFailureComponent } from '../lib/tasks';
+import type { AutomationTrigger, Task, TaskTriggerType } from '../types';
 
 export const INTER_FONT = Platform.select({
   ios: 'Inter',
@@ -211,7 +211,10 @@ export function getComponentMeta(component?: string | null): {
   return { label, icon, isHardware };
 }
 
-export function taskTriggerTone(triggerType?: TaskTriggerType | null): {
+export function taskTriggerTone(
+  triggerType?: TaskTriggerType | null,
+  automationTrigger?: AutomationTrigger,
+): {
   label: string;
   backgroundColor: string;
   color: string;
@@ -228,7 +231,7 @@ export function taskTriggerTone(triggerType?: TaskTriggerType | null): {
 
   if (triggerType === 'maintenance') {
     return {
-      label: 'Maintenance',
+      label: formatTaskTrigger(triggerType, automationTrigger),
       backgroundColor: UI_COLORS.softOrange,
       color: '#C2410C',
       icon: 'wrench-outline',
@@ -273,7 +276,7 @@ export function taskTriggerTone(triggerType?: TaskTriggerType | null): {
 
   if (triggerType === 'sensor_fault') {
     return {
-      label: 'Sensor Fault',
+      label: 'Ultrasonic Sensor Fault',
       backgroundColor: UI_COLORS.softRed,
       color: UI_COLORS.danger,
       icon: 'radar',
