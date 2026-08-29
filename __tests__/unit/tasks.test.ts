@@ -84,6 +84,7 @@ describe('tasks utility', () => {
         'water_overuse',
         'water_no_flow',
         'uv_complete',
+        'student_report',
       ];
       validTriggers.forEach((trigger) => {
         expect(isTaskTriggerType(trigger)).toBe(true);
@@ -118,6 +119,7 @@ describe('tasks utility', () => {
       expect(formatTaskTrigger('water_overuse')).toBe('Water overuse');
       expect(formatTaskTrigger('water_no_flow')).toBe('No water after flush');
       expect(formatTaskTrigger('uv_complete')).toBe('UV cycle alert');
+      expect(formatTaskTrigger('student_report')).toBe('Student report');
       expect(formatTaskTrigger('manual')).toBe('Manual');
       expect(formatTaskTrigger('maintenance', 'maintenance_due')).toBe('Routine Toilet Check');
     });
@@ -149,6 +151,28 @@ describe('tasks utility', () => {
         requiresSupervisorAssignment: true,
         autoAssignmentEligibleAt: new Date('2026-08-15T08:01:00.000Z'),
         cycleCountAtTrigger: 2,
+      }));
+    });
+
+    it('parses an unassigned student_report task from public issue reports', () => {
+      const task = parseTaskDocument('task-report-01', {
+        deviceId: 'toilet-01',
+        message: 'Clogged drain reported by student.',
+        createdAt: new Date('2026-08-29T10:00:00.000Z'),
+        triggerType: 'student_report',
+        status: 'unassigned',
+        assignedTo: null,
+        assignedToIds: [],
+        isBroadcast: false,
+        requiresSupervisorAssignment: true,
+      });
+
+      expect(task).not.toBeNull();
+      expect(task).toEqual(expect.objectContaining({
+        id: 'task-report-01',
+        triggerType: 'student_report',
+        status: 'unassigned',
+        requiresSupervisorAssignment: true,
       }));
     });
   });

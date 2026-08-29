@@ -189,7 +189,8 @@ export function isTaskTriggerType(value: unknown): value is TaskTriggerType {
     value === 'flush_count' ||
     value === 'water_overuse' ||
     value === 'water_no_flow' ||
-    value === 'uv_complete'
+    value === 'uv_complete' ||
+    value === 'student_report'
   );
 }
 
@@ -309,6 +310,10 @@ export function formatTaskTrigger(
 
   if (triggerType === 'sensor_fault') {
     return 'Ultrasonic Sensor Fault';
+  }
+
+  if (triggerType === 'student_report') {
+    return 'Student report';
   }
 
   return 'Manual';

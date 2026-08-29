@@ -17,7 +17,8 @@ export type TaskTriggerType =
   | 'flush_count'
   | 'water_overuse'
   | 'water_no_flow'
-  | 'uv_complete';
+  | 'uv_complete'
+  | 'student_report';
 
 export type AutomationTrigger =
   | 'ultrasonic_sensor_fault'
