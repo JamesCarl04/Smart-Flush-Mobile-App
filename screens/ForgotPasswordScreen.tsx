@@ -84,13 +84,6 @@ export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.container}>
           {/* Header */}
           <View style={styles.header}>
-            <View style={styles.iconCircle}>
-              <MaterialCommunityIcons
-                name="lock-reset"
-                size={34}
-                color={KLIR_COLORS.primary}
-              />
-            </View>
             <Text style={styles.title}>Reset Password</Text>
             <Text style={styles.subtitle}>
               Enter your registered email address to receive reset instructions.
@@ -200,17 +193,6 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     gap: 8,
-  },
-  iconCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: KLIR_COLORS.primarySurface,
-    borderWidth: 1,
-    borderColor: KLIR_COLORS.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
   },
   title: {
     ...KLIR_TYPOGRAPHY.h2,

@@ -47,7 +47,7 @@ describe('LoginScreen Integration', () => {
 
     expect(screen.getByText('KLIR')).toBeTruthy();
     expect(screen.getByText('Facility Operations')).toBeTruthy();
-    expect(screen.getAllByText('Sign in').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Login').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Email').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Password').length).toBeGreaterThan(0);
     expect(screen.getByText('Forgot password')).toBeTruthy();
@@ -56,7 +56,7 @@ describe('LoginScreen Integration', () => {
   it('validates and displays error when email or password is empty', async () => {
     renderScreen();
 
-    const signInButton = screen.getByRole('button', { name: /sign in/i });
+    const signInButton = screen.getByRole('button', { name: /login/i });
 
     // Both empty
     fireEvent.press(signInButton);
@@ -113,7 +113,7 @@ describe('LoginScreen Integration', () => {
     );
     fireEvent.changeText(getPasswordInput(), 'validPass#2026');
 
-    const signInButton = screen.getByRole('button', { name: /sign in/i });
+    const signInButton = screen.getByRole('button', { name: /login/i });
     fireEvent.press(signInButton);
 
     await waitFor(() => {
@@ -138,7 +138,7 @@ describe('LoginScreen Integration', () => {
 
     fireEvent.changeText(getEmailInput(), 'tech@smartflush.com');
     fireEvent.changeText(getPasswordInput(), 'wrongPass');
-    fireEvent.press(screen.getByRole('button', { name: /sign in/i }));
+    fireEvent.press(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
       expect(
@@ -163,7 +163,7 @@ describe('LoginScreen Integration', () => {
       'nonexistent@smartflush.com',
     );
     fireEvent.changeText(getPasswordInput(), 'password123');
-    fireEvent.press(screen.getByRole('button', { name: /sign in/i }));
+    fireEvent.press(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
       expect(
@@ -185,7 +185,7 @@ describe('LoginScreen Integration', () => {
 
     fireEvent.changeText(getEmailInput(), 'tech@smartflush.com');
     fireEvent.changeText(getPasswordInput(), 'badcreds');
-    fireEvent.press(screen.getByRole('button', { name: /sign in/i }));
+    fireEvent.press(screen.getByRole('button', { name: /login/i }));
 
     await waitFor(() => {
       expect(

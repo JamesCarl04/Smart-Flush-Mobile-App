@@ -4,14 +4,14 @@ appId: com.james.klir
     clearState: true
 
 # 1. Worker login
-- assertVisible: "Sign in"
+- assertVisible: "Login"
 - tapOn: "Email"
 - inputText: "technician@smartflush.com"
 - hideKeyboard
 - tapOn: "Password"
 - inputText: "TechnicianPass123"
 - hideKeyboard
-- tapOn: "Sign in"
+- tapOn: "Login"
 
 # 2. Open urgent task from Inbox
 - assertVisible: "Today's Tasks"

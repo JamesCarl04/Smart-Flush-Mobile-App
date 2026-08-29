@@ -59,7 +59,7 @@ function getLoginErrorMessage(error: unknown): string {
     return 'Network connection failed. Please check your internet connection and try again.';
   }
 
-  return 'Unable to sign in right now. Please try again.';
+  return 'Unable to log in right now. Please try again.';
 }
 
 export function LoginScreen({ navigation }: Props): React.JSX.Element {
@@ -175,7 +175,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       const saved = await AsyncStorage.getItem(BIOMETRIC_VAULT_KEY);
       if (!saved) {
         setErrorMessage(
-          'Please sign in with your email and password first to enable biometric login.',
+          'Please log in with your email and password first to enable biometric login.',
         );
         return;
       }
@@ -189,7 +189,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
       if (!parsed?.email || !parsed?.password) {
         setErrorMessage(
-          'Please sign in with your email and password first to enable biometric login.',
+          'Please log in with your email and password first to enable biometric login.',
         );
         return;
       }
@@ -207,7 +207,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
     } catch {
       setSubmitting(false);
       setAwaitingRoleValidation(false);
-      setErrorMessage('Biometric verification failed. Please sign in manually.');
+      setErrorMessage('Biometric verification failed. Please log in manually.');
     }
   };
 
@@ -226,13 +226,6 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         <View style={styles.container}>
           {/* Top Brand Header */}
           <View style={styles.brandHeader}>
-            <View style={styles.brandBadge}>
-              <MaterialCommunityIcons
-                name="shield-check"
-                size={34}
-                color={KLIR_COLORS.primary}
-              />
-            </View>
             <Text style={styles.brandTitle}>KLIR</Text>
             <Text style={styles.brandSubtitle}>Facility Operations</Text>
           </View>
@@ -298,7 +291,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
             {/* Actions */}
             <View style={styles.actionStack}>
               <KlirButton
-                title="Sign in"
+                title="Login"
                 variant="primary"
                 loading={isBusy}
                 disabled={isBusy}
@@ -309,7 +302,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
               {biometricsAvailable ? (
                 <KlirButton
-                  title={hasSavedCredentials ? `Unlock with ${biometricType}` : `Sign in with ${biometricType}`}
+                  title={hasSavedCredentials ? `Unlock with ${biometricType}` : `Login with ${biometricType}`}
                   variant="secondary"
                   icon="fingerprint"
                   disabled={isBusy}
@@ -328,19 +321,6 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
                 <Text style={styles.forgotPasswordText}>Forgot password</Text>
               </TouchableOpacity>
             </View>
-          </View>
-
-          {/* Security Footer */}
-          <View style={styles.footer}>
-            <MaterialCommunityIcons
-              name="lock-outline"
-              size={13}
-              color={KLIR_COLORS.slateLight}
-              style={styles.footerIcon}
-            />
-            <Text style={styles.footerText}>
-              Authorized personnel only. Encrypted dispatch connection.
-            </Text>
           </View>
         </View>
       </ScrollView>
@@ -368,17 +348,6 @@ const styles = StyleSheet.create({
   brandHeader: {
     alignItems: 'center',
     gap: 8,
-  },
-  brandBadge: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: KLIR_COLORS.primarySurface,
-    borderWidth: 1,
-    borderColor: KLIR_COLORS.primaryBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
   },
   brandTitle: {
     ...KLIR_TYPOGRAPHY.h1,
@@ -435,22 +404,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: KLIR_COLORS.primary,
-  },
-  footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 8,
-  },
-  footerIcon: {
-    marginTop: 1,
-  },
-  footerText: {
-    fontSize: 12,
-    color: KLIR_COLORS.slateLight,
-    textAlign: 'center',
-    lineHeight: 18,
   },
 });
 

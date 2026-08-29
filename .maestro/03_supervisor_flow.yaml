@@ -4,14 +4,14 @@ appId: com.james.klir
     clearState: true
 
 # 1. Supervisor Login
-- assertVisible: "Sign in"
+- assertVisible: "Login"
 - tapOn: "Email"
 - inputText: "supervisor@smartflush.com"
 - hideKeyboard
 - tapOn: "Password"
 - inputText: "SupervisorPass123"
 - hideKeyboard
-- tapOn: "Sign in"
+- tapOn: "Login"
 
 # 2. Inspect Supervisor Dashboard Operational Counters
 - assertVisible: "Total active tasks today"

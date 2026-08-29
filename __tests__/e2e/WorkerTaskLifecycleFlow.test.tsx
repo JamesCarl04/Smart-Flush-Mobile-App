@@ -168,11 +168,11 @@ describe('Worker Task Lifecycle Flow E2E', () => {
 
     // Step 1: User logs in with maintenance credentials
     expect(await screen.findByText('KLIR')).toBeTruthy();
-    expect(screen.getAllByText('Sign in').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Login').length).toBeGreaterThan(0);
 
     const emailInput = screen.getAllByTestId('text-input-outlined')[0];
     const passwordInput = screen.getAllByTestId('text-input-outlined')[1];
-    const signInButton = screen.getByRole('button', { name: /sign in/i });
+    const signInButton = screen.getByRole('button', { name: /login/i });
 
     fireEvent.changeText(emailInput, 'technician@smartflush.com');
     fireEvent.changeText(passwordInput, 'ValidPassword123');
