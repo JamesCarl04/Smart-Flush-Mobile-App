@@ -34,6 +34,7 @@ export interface KlirButtonProps {
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
   iconPosition?: 'left' | 'right';
   iconSize?: number;
+  containerStyle?: StyleProp<ViewStyle>;
   style?: StyleProp<ViewStyle>;
   textStyle?: StyleProp<TextStyle>;
   testID?: string;
@@ -51,6 +52,7 @@ export function KlirButton({
   icon,
   iconPosition = 'left',
   iconSize = 20,
+  containerStyle,
   style,
   textStyle,
   testID,
@@ -96,7 +98,9 @@ export function KlirButton({
   const textColor = getTextColor();
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View
+      style={[{ transform: [{ scale: scaleAnim }] }, containerStyle]}
+    >
       <Pressable
         testID={testID}
         accessibilityRole="button"
@@ -173,10 +177,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    minWidth: 0,
   },
   text: {
     ...KLIR_TYPOGRAPHY.button,
     textAlign: 'center',
+    flexShrink: 1,
   },
   leftIcon: {
     marginRight: 2,

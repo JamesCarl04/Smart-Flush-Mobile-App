@@ -1,5 +1,7 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { StyleSheet } from 'react-native';
 import { PaperProvider } from 'react-native-paper';
 
 import {
@@ -199,6 +201,9 @@ describe('Supervisor Screens Integration Suite', () => {
       // Personnel breakdown: 1 available (Juan), 1 on task (Maria), 1 offline (Pedro)
       expect(screen.getByText('Team Availability')).toBeTruthy();
       expect(screen.getByText('1 available, 1 on task, 1 offline')).toBeTruthy();
+      expect(screen.getAllByText('1 Available').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('1 On Task').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('1 Offline').length).toBeGreaterThan(0);
 
       // Unassigned tasks: task-unassigned-2 -> 1
       expect(screen.getByText('Unassigned')).toBeTruthy();
@@ -423,6 +428,46 @@ describe('Supervisor Screens Integration Suite', () => {
       expect(screen.getByText('Executive Compliance & Audit Exports')).toBeTruthy();
       expect(screen.getByText('Export PDF Report')).toBeTruthy();
       expect(screen.getByText('Export CSV')).toBeTruthy();
+
+      const exportActions = screen.getByTestId('supervisor-export-actions');
+      expect(StyleSheet.flatten(exportActions.props.style)).toMatchObject({
+        width: '100%',
+      });
+
+      const pdfButton = screen.getByTestId('supervisor-export-pdf');
+      const pdfContainer = (pdfButton as any).parent;
+      expect(StyleSheet.flatten(pdfContainer?.props.style)).toMatchObject({
+        width: '100%',
+        minWidth: 0,
+      });
+    });
+
+    it('keeps export actions disabled when the timeframe has no completed tasks', async () => {
+      await AsyncStorage.clear();
+      (supervisorApi.fetchSupervisorTasks as jest.Mock).mockResolvedValue([]);
+
+      renderWithSupervisor(
+        <SupervisorReportsScreen
+          navigation={mockNavigation}
+          route={{
+            key: 'SupervisorReports-empty',
+            name: 'SupervisorReports',
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('No completed tasks')).toBeTruthy();
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('supervisor-export-pdf').props.accessibilityState).toMatchObject({
+          disabled: true,
+        });
+        expect(screen.getByTestId('supervisor-export-csv').props.accessibilityState).toMatchObject({
+          disabled: true,
+        });
+      });
     });
   });
 });

@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -2068,8 +2069,10 @@ export function SupervisorReportsScreen({
 }: ReportsProps): React.JSX.Element {
   const { tasks, people, loading, refresh } = useSupervisorData();
   const { user } = useAuth();
+  const { width: windowWidth } = useWindowDimensions();
   const [timeframe, setTimeframe] = useState<ReportTimeframe>('today');
   const [exportingType, setExportingType] = useState<'pdf' | 'csv' | null>(null);
+  const isCompactWidth = windowWidth < 420;
 
   const completedTasks = useMemo(() => {
     return tasks.filter((t) => t.status === 'completed');
@@ -2353,7 +2356,12 @@ export function SupervisorReportsScreen({
         </View>
 
         {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Export Reports</Text>
+        <Text
+          style={styles.sectionHeaderTitle}
+          accessibilityRole="header"
+        >
+          Export Reports
+        </Text>
 
         {/* Export Operations Action Card */}
         <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
@@ -2371,24 +2379,42 @@ export function SupervisorReportsScreen({
                   ({filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'})
                 </Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View
+                testID="supervisor-export-actions"
+                style={[
+                  styles.exportActions,
+                  isCompactWidth && styles.exportActionsStacked,
+                ]}
+              >
                 <KlirButton
+                  testID="supervisor-export-pdf"
                   title="Export PDF Report"
                   variant="primary"
                   icon="file-pdf-box"
                   loading={exportingType === 'pdf'}
                   disabled={exportingType !== null || filteredTasks.length === 0}
                   onPress={() => void handleExportPDF()}
-                  style={[{ flex: 1.2 }, styles.cardElevation]}
+                  containerStyle={[
+                    styles.exportButtonContainer,
+                    !isCompactWidth && styles.exportButtonContainerWide,
+                  ]}
+                  style={[styles.exportButton, styles.cardElevation]}
+                  textStyle={styles.exportButtonText}
                 />
                 <KlirButton
+                  testID="supervisor-export-csv"
                   title="Export CSV"
                   variant="outline"
                   icon="file-delimited-outline"
                   loading={exportingType === 'csv'}
                   disabled={exportingType !== null || filteredTasks.length === 0}
                   onPress={() => void handleExportCSV()}
-                  style={[{ flex: 1 }, styles.cardElevation]}
+                  containerStyle={[
+                    styles.exportButtonContainer,
+                    !isCompactWidth && styles.exportButtonContainerWide,
+                  ]}
+                  style={[styles.exportButton, styles.cardElevation]}
+                  textStyle={styles.exportButtonText}
                 />
               </View>
             </View>
@@ -2548,6 +2574,30 @@ const styles = StyleSheet.create({
   standardMetricTile: {
     backgroundColor: '#FFFFFF',
     borderColor: '#EAECF0',
+  },
+  exportActions: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  exportActionsStacked: {
+    flexDirection: 'column',
+  },
+  exportButtonContainer: {
+    minWidth: 0,
+    width: '100%',
+    alignSelf: 'stretch',
+  },
+  exportButtonContainerWide: {
+    flex: 1,
+  },
+  exportButton: {
+    width: '100%',
+    minWidth: 0,
+    paddingHorizontal: 12,
+  },
+  exportButtonText: {
+    flexShrink: 1,
   },
   urgentMetricTile: {
     backgroundColor: '#FFFBFB',

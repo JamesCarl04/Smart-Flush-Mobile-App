@@ -70,6 +70,8 @@ export interface Task {
   alertId?: string | null;
   deviceId: string;
   restroomName?: string | null;
+  stallId?: string | null;
+  stallNumber?: string | null;
   type: 'maintenance' | 'cleaning';
   component: string;
   location: string;

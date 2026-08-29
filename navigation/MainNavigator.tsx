@@ -144,7 +144,10 @@ function SupervisorStackNavigator(): React.JSX.Element {
       <SupervisorStack.Screen
         name="SupervisorReports"
         component={SupervisorReportsScreen}
-        options={{ title: 'Operations Audit Log' }}
+        options={{
+          title: 'Export Reports',
+          headerTitle: () => null,
+        }}
       />
     </SupervisorStack.Navigator>
   );
