@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   },
 
   outline: {
-    backgroundColor: 'transparent',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.5,
     borderColor: KLIR_COLORS.primary,
   },

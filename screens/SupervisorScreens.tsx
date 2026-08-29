@@ -2364,10 +2364,10 @@ export function SupervisorReportsScreen({
             <View style={{ gap: 12 }}>
               <View style={{ gap: 3 }}>
                 <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                  Executive Compliance & Audit Exports
+                  Export Reports
                 </Text>
                 <Text style={styles.metricFooterText}>
-                  Generate formatted PDF compliance summaries or export raw CSV data for{' '}
+                  Download PDF summaries or export spreadsheet data for{' '}
                   <Text style={{ fontWeight: '700', color: '#0F172A' }}>
                     {timeframeTabs.find((t) => t.id === timeframe)?.label}
                   </Text>{' '}
@@ -2393,7 +2393,7 @@ export function SupervisorReportsScreen({
                     styles.exportButtonContainer,
                     !isCompactWidth && styles.exportButtonContainerWide,
                   ]}
-                  style={[styles.exportButton, styles.cardElevation]}
+                  style={styles.exportButton}
                   textStyle={styles.exportButtonText}
                 />
                 <KlirButton
@@ -2408,7 +2408,7 @@ export function SupervisorReportsScreen({
                     styles.exportButtonContainer,
                     !isCompactWidth && styles.exportButtonContainerWide,
                   ]}
-                  style={[styles.exportButton, styles.cardElevation]}
+                  style={styles.exportButton}
                   textStyle={styles.exportButtonText}
                 />
               </View>

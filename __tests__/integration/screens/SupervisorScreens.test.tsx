@@ -424,7 +424,7 @@ describe('Supervisor Screens Integration Suite', () => {
       expect(screen.getByText('Avg Resolution Time')).toBeTruthy();
       expect(screen.getByText('Photo Proof')).toBeTruthy();
       expect(screen.getByText('Biometric Verified')).toBeTruthy();
-      expect(screen.getByText('Executive Compliance & Audit Exports')).toBeTruthy();
+      expect(screen.getAllByText('Export Reports').length).toBeGreaterThan(0);
       expect(screen.getByText('Export PDF Report')).toBeTruthy();
       expect(screen.getByText('Export CSV')).toBeTruthy();
 

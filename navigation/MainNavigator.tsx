@@ -145,8 +145,7 @@ function SupervisorStackNavigator(): React.JSX.Element {
         name="SupervisorReports"
         component={SupervisorReportsScreen}
         options={{
-          title: 'Export Reports',
-          headerTitle: () => null,
+          title: 'Reports & Export',
         }}
       />
     </SupervisorStack.Navigator>
