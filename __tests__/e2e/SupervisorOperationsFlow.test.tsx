@@ -233,7 +233,7 @@ describe('Supervisor Operations Flow E2E', () => {
     // Step 1 & 2: Supervisor logs in and views operational dashboard stats
     expect(await screen.findByText('Active Tasks', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('Team Availability', {}, { timeout: 15000 })).toBeTruthy();
-    expect(await screen.findByText('1 available, 1 on task, 0 offline', {}, { timeout: 15000 })).toBeTruthy();
+    expect((await screen.findAllByText('1 Available', {}, { timeout: 15000 })).length).toBeGreaterThan(0);
     expect(screen.getByText('Unassigned')).toBeTruthy();
 
     // Step 3: Check Team Availability

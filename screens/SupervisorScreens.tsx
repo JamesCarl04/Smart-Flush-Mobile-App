@@ -343,11 +343,6 @@ export function SupervisorDashboardScreen({
               <Text variant="labelLarge" style={styles.metricLabel}>
                 Team Availability
               </Text>
-              <Text variant="titleLarge" style={styles.teamSummaryText}>
-                {isColdLoading && people.length === 0
-                  ? 'Loading team...'
-                  : `${staffStats.available} available, ${staffStats.onTask} on task, ${staffStats.offline} offline`}
-              </Text>
               <SquadCapacityPillBar
                 available={staffStats.available}
                 onTask={staffStats.onTask}

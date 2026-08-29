@@ -200,7 +200,6 @@ describe('Supervisor Screens Integration Suite', () => {
 
       // Personnel breakdown: 1 available (Juan), 1 on task (Maria), 1 offline (Pedro)
       expect(screen.getByText('Team Availability')).toBeTruthy();
-      expect(screen.getByText('1 available, 1 on task, 1 offline')).toBeTruthy();
       expect(screen.getAllByText('1 Available').length).toBeGreaterThan(0);
       expect(screen.getAllByText('1 On Task').length).toBeGreaterThan(0);
       expect(screen.getAllByText('1 Offline').length).toBeGreaterThan(0);
