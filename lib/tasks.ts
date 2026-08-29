@@ -283,7 +283,7 @@ export function formatTaskTrigger(
   automationTrigger?: Task['automationTrigger'],
 ): string {
   if (triggerType === 'hardware_failure') {
-    return 'Hardware failure';
+    return 'Hardware Issue';
   }
 
   if (triggerType === 'maintenance') {
@@ -293,11 +293,11 @@ export function formatTaskTrigger(
   }
 
   if (triggerType === 'flush_count') {
-    return 'Flush threshold';
+    return 'High Usage Check';
   }
 
   if (triggerType === 'water_overuse') {
-    return 'Water overuse';
+    return 'High Water Usage';
   }
 
   if (triggerType === 'water_no_flow') {
@@ -305,18 +305,18 @@ export function formatTaskTrigger(
   }
 
   if (triggerType === 'uv_complete') {
-    return 'UV cycle alert';
+    return 'UV Cleaning Check';
   }
 
   if (triggerType === 'sensor_fault') {
-    return 'Ultrasonic Sensor Fault';
+    return 'Occupancy Sensor Issue';
   }
 
   if (triggerType === 'student_report') {
     return 'Student report';
   }
 
-  return 'Manual';
+  return 'Manual Request';
 }
 
 export const HARDWARE_FAILURE_COMPONENTS = [
@@ -337,12 +337,12 @@ export const COMPONENT_LABELS: Record<string, string> = {
   pump: 'Water Pump',
   water_leak: 'Water Leak Detector',
   leak: 'Water Leak Detector',
-  sensor_ultrasonic: 'Ultrasonic Distance Sensor',
-  ultrasonic: 'Ultrasonic Distance Sensor',
-  servo_lid: 'Servo Lid Mechanism',
-  servo: 'Servo Lid Mechanism',
-  waterflow: 'Water Flow Sensor',
-  water_flow: 'Water Flow Sensor',
+  sensor_ultrasonic: 'Occupancy Sensor',
+  ultrasonic: 'Occupancy Sensor',
+  servo_lid: 'Automatic Lid Mechanism',
+  servo: 'Automatic Lid Mechanism',
+  waterflow: 'Water Flow Meter',
+  water_flow: 'Water Flow Meter',
   connectivity: 'Device Connectivity',
   offline: 'Device Connectivity',
   flush_valve: 'Flush Valve',

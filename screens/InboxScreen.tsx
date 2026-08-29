@@ -73,7 +73,7 @@ function EmptyState({ activeFilter }: { activeFilter?: InboxFilter }): React.JSX
           ? 'All tasks have passed supervisor QA inspection.'
           : activeFilter === 'active'
             ? 'You currently have no tasks in progress.'
-            : 'You are all caught up for now. New restroom alerts will appear here as soon as the IoT system assigns them to you.'
+            : 'You are all caught up for now. New restroom alerts will appear here as soon as tasks are assigned to you.'
       }
     />
   );

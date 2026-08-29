@@ -482,7 +482,7 @@ export function SupervisorDashboardScreen({
               </View>
               <View style={styles.menuTextGroup}>
                 <Text style={styles.menuItemTitle}>Reports & Export</Text>
-                <Text style={styles.menuItemSubtitle}>View performance and export CSV</Text>
+                <Text style={styles.menuItemSubtitle}>View performance and export reports</Text>
               </View>
             </View>
             <View style={styles.menuRowRight}>
@@ -2267,7 +2267,7 @@ export function SupervisorReportsScreen({
         </ScrollView>
 
         {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Supervisor Audit Compliance</Text>
+        <Text style={styles.sectionHeaderTitle}>Inspection Completion</Text>
 
         {/* Supervisor QA Audit KPI Card */}
         <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
@@ -2275,7 +2275,7 @@ export function SupervisorReportsScreen({
             <View style={styles.rowBetween}>
               <View style={{ flex: 1, gap: 2 }}>
                 <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                  Audit Overview
+                  Inspection Overview
                 </Text>
                 <Text style={styles.metricFooterText}>
                   {metrics.approvedCount} approved • {metrics.flaggedCount} flagged • {metrics.pendingAuditCount} pending review
@@ -2283,7 +2283,7 @@ export function SupervisorReportsScreen({
               </View>
               <View style={styles.complianceBadge}>
                 <Text style={styles.complianceBadgeNumber}>{metrics.complianceRate}</Text>
-                <Text style={styles.complianceBadgeLabel}>Audited</Text>
+                <Text style={styles.complianceBadgeLabel}>Inspected</Text>
               </View>
             </View>
           </Card.Content>

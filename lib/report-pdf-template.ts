@@ -475,7 +475,7 @@ export function generateReportHTML(input: ReportPDFInput): string {
     </div>
     <div class="kpi-card">
       <div class="kpi-value">${metrics.photoPairsCount}</div>
-      <div class="kpi-label">Photo Evidence Pairs</div>
+      <div class="kpi-label">Before &amp; After Photos</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-value">${metrics.pendingAuditCount}</div>

@@ -421,7 +421,7 @@ describe('Supervisor Screens Integration Suite', () => {
         expect(screen.getByText('Tasks Completed')).toBeTruthy();
       });
 
-      expect(screen.getByText('Audit Overview')).toBeTruthy();
+      expect(screen.getByText('Inspection Overview')).toBeTruthy();
       expect(screen.getByText('Avg Resolution Time')).toBeTruthy();
       expect(screen.getByText('Photo Proof')).toBeTruthy();
       expect(screen.getByText('Biometric Verified')).toBeTruthy();

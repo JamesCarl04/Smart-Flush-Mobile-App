@@ -240,7 +240,7 @@ export function taskTriggerTone(
 
   if (triggerType === 'flush_count') {
     return {
-      label: 'Flush Threshold',
+      label: 'High Usage Check',
       backgroundColor: UI_COLORS.softGold,
       color: UI_COLORS.goldDark,
       icon: 'counter',
@@ -249,7 +249,7 @@ export function taskTriggerTone(
 
   if (triggerType === 'water_overuse') {
     return {
-      label: 'Water Overuse',
+      label: 'High Water Usage',
       backgroundColor: UI_COLORS.softOrange,
       color: '#C2410C',
       icon: 'water-alert',
@@ -267,7 +267,7 @@ export function taskTriggerTone(
 
   if (triggerType === 'uv_complete') {
     return {
-      label: 'UV Cycle Alert',
+      label: 'UV Cleaning Check',
       backgroundColor: UI_COLORS.softGold,
       color: UI_COLORS.goldDark,
       icon: 'lightbulb-alert-outline',
@@ -276,7 +276,7 @@ export function taskTriggerTone(
 
   if (triggerType === 'sensor_fault') {
     return {
-      label: 'Ultrasonic Sensor Fault',
+      label: 'Occupancy Sensor Issue',
       backgroundColor: UI_COLORS.softRed,
       color: UI_COLORS.danger,
       icon: 'radar',

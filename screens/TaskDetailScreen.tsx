@@ -820,7 +820,7 @@ export function TaskDetailScreen({
             <Card.Content style={styles.sectionContent}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>
-                  Completion Evidence
+                  Completion Photos
                 </Text>
                 {task.biometricVerified ? (
                   <View style={styles.biometricBadge}>

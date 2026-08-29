@@ -150,11 +150,11 @@ describe('MaintenanceUI helper functions', () => {
     });
 
     it.each([
-      ['flush_count', 'Flush Threshold', 'counter'],
-      ['water_overuse', 'Water Overuse', 'water-alert'],
+      ['flush_count', 'High Usage Check', 'counter'],
+      ['water_overuse', 'High Water Usage', 'water-alert'],
       ['water_no_flow', 'No Water After Flush', 'water-off-outline'],
-      ['uv_complete', 'UV Cycle Alert', 'lightbulb-alert-outline'],
-      ['sensor_fault', 'Ultrasonic Sensor Fault', 'radar'],
+      ['uv_complete', 'UV Cleaning Check', 'lightbulb-alert-outline'],
+      ['sensor_fault', 'Occupancy Sensor Issue', 'radar'],
     ] as const)('should provide a distinct, actionable badge for %s', (trigger, label, icon) => {
       const tone = taskTriggerTone(trigger);
       expect(tone.label).toBe(label);
@@ -198,21 +198,21 @@ describe('MaintenanceUI helper functions', () => {
 
       const ultrasonicMeta = getComponentMeta('sensor_ultrasonic');
       expect(ultrasonicMeta).toEqual({
-        label: 'Ultrasonic Distance Sensor',
+        label: 'Occupancy Sensor',
         icon: 'radar',
         isHardware: true,
       });
 
       const servoMeta = getComponentMeta('servo_lid');
       expect(servoMeta).toEqual({
-        label: 'Servo Lid Mechanism',
+        label: 'Automatic Lid Mechanism',
         icon: 'robot-industrial',
         isHardware: true,
       });
 
       const waterflowMeta = getComponentMeta('waterflow');
       expect(waterflowMeta).toEqual({
-        label: 'Water Flow Sensor',
+        label: 'Water Flow Meter',
         icon: 'water-sync',
         isHardware: true,
       });
@@ -270,7 +270,7 @@ describe('MaintenanceUI helper functions', () => {
     it('should return green resolved tone for completed hardware tasks', () => {
       const tone = hardwareUrgencyTone('sensor_ultrasonic', 'completed');
       expect(tone).toEqual({
-        label: 'Ultrasonic Distance Sensor Resolved',
+        label: 'Occupancy Sensor Resolved',
         backgroundColor: UI_COLORS.softGreen,
         color: UI_COLORS.success,
         icon: 'shield-check-outline',

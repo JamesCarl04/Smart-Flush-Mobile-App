@@ -112,15 +112,15 @@ describe('tasks utility', () => {
 
   describe('formatTaskTrigger', () => {
     it('should format trigger types into human-readable labels', () => {
-      expect(formatTaskTrigger('hardware_failure')).toBe('Hardware failure');
-      expect(formatTaskTrigger('sensor_fault')).toBe('Ultrasonic Sensor Fault');
+      expect(formatTaskTrigger('hardware_failure')).toBe('Hardware Issue');
+      expect(formatTaskTrigger('sensor_fault')).toBe('Occupancy Sensor Issue');
       expect(formatTaskTrigger('maintenance')).toBe('Maintenance');
-      expect(formatTaskTrigger('flush_count')).toBe('Flush threshold');
-      expect(formatTaskTrigger('water_overuse')).toBe('Water overuse');
+      expect(formatTaskTrigger('flush_count')).toBe('High Usage Check');
+      expect(formatTaskTrigger('water_overuse')).toBe('High Water Usage');
       expect(formatTaskTrigger('water_no_flow')).toBe('No water after flush');
-      expect(formatTaskTrigger('uv_complete')).toBe('UV cycle alert');
+      expect(formatTaskTrigger('uv_complete')).toBe('UV Cleaning Check');
       expect(formatTaskTrigger('student_report')).toBe('Student report');
-      expect(formatTaskTrigger('manual')).toBe('Manual');
+      expect(formatTaskTrigger('manual')).toBe('Manual Request');
       expect(formatTaskTrigger('maintenance', 'maintenance_due')).toBe('Routine Toilet Check');
     });
 
@@ -181,9 +181,9 @@ describe('tasks utility', () => {
     it('should correctly format hardware failure components to descriptive names', () => {
       expect(formatTaskComponent('pump')).toBe('Water Pump');
       expect(formatTaskComponent('water_leak')).toBe('Water Leak Detector');
-      expect(formatTaskComponent('sensor_ultrasonic')).toBe('Ultrasonic Distance Sensor');
-      expect(formatTaskComponent('servo_lid')).toBe('Servo Lid Mechanism');
-      expect(formatTaskComponent('waterflow')).toBe('Water Flow Sensor');
+      expect(formatTaskComponent('sensor_ultrasonic')).toBe('Occupancy Sensor');
+      expect(formatTaskComponent('servo_lid')).toBe('Automatic Lid Mechanism');
+      expect(formatTaskComponent('waterflow')).toBe('Water Flow Meter');
       expect(formatTaskComponent('connectivity')).toBe('Device Connectivity');
       expect(formatTaskComponent('flush_valve')).toBe('Flush Valve');
       expect(formatTaskComponent('pipe')).toBe('Plumbing Pipe');
