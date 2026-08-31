@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { ActivityIndicator, Divider } from 'react-native-paper';
+import { Divider } from 'react-native-paper';
 
 import {
   KLIR_COLORS,
@@ -21,7 +21,6 @@ import {
 } from './MaintenanceUI';
 import { TasksContext } from '../contexts/TasksContext';
 import { useAuth } from '../hooks/useAuth';
-import { useOfflineSync } from '../hooks/useOfflineSync';
 import { emitLocalNotification } from '../lib/notifications';
 
 interface ProfileSheetModalProps {
@@ -34,7 +33,6 @@ export function ProfileSheetModal({
   onDismiss,
 }: ProfileSheetModalProps): React.JSX.Element {
   const { user, role, logout } = useAuth();
-  const { syncing } = useOfflineSync();
 
   const handleLogout = (): void => {
     Alert.alert(
@@ -60,14 +58,6 @@ export function ProfileSheetModal({
     cleanPersonName(user?.name) ||
     (role === 'supervisor' ? 'Facility Supervisor' : 'Maintenance Personnel');
   const buildingLabel = user?.building || 'Main Campus / All Buildings';
-  const shiftLabel =
-    role === 'supervisor'
-      ? 'All Shifts • Command Hub'
-      : user?.shift
-        ? user.shift.toLowerCase().includes('shift')
-          ? `${user.shift} • Active Duty`
-          : `${user.shift} Shift • Active Duty`
-        : '1st Shift • Active Duty';
 
   return (
     <Modal
@@ -137,9 +127,9 @@ export function ProfileSheetModal({
 
               <Divider style={styles.divider} />
 
-              {/* Duty & Shift Meta */}
+              {/* Facility Meta */}
               <View style={styles.section}>
-                <Text style={styles.sectionHeader}>SHIFT & STATUS</Text>
+                <Text style={styles.sectionHeader}>FACILITY</Text>
 
                 <View style={styles.detailRow}>
                   <View style={styles.detailIconBox}>
@@ -152,47 +142,6 @@ export function ProfileSheetModal({
                   <View style={styles.detailTextBox}>
                     <Text style={styles.detailLabel}>Assigned Facility</Text>
                     <Text style={styles.detailValue}>{buildingLabel}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIconBox}>
-                    <MaterialCommunityIcons
-                      name="clock-time-four-outline"
-                      size={18}
-                      color={KLIR_COLORS.gold}
-                    />
-                  </View>
-                  <View style={styles.detailTextBox}>
-                    <Text style={styles.detailLabel}>Current Shift</Text>
-                    <Text style={styles.detailValue}>
-                      {shiftLabel}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.detailRow}>
-                  <View style={styles.detailIconBox}>
-                    {syncing ? (
-                      <ActivityIndicator
-                        size={16}
-                        color={KLIR_COLORS.primary}
-                      />
-                    ) : (
-                      <MaterialCommunityIcons
-                        name="cloud-check-outline"
-                        size={18}
-                        color={KLIR_COLORS.success}
-                      />
-                    )}
-                  </View>
-                  <View style={styles.detailTextBox}>
-                    <Text style={styles.detailLabel}>Sync Status</Text>
-                    <Text style={styles.detailValue}>
-                      {syncing
-                        ? 'Synchronizing offline tasks...'
-                        : 'All data synchronized'}
-                    </Text>
                   </View>
                 </View>
               </View>
@@ -257,10 +206,13 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: 'absolute',
-    top: 16,
-    right: 20,
-    padding: 6,
-    borderRadius: 16,
+    top: 12,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: KLIR_COLORS.canvas,
   },
   profileHeader: {

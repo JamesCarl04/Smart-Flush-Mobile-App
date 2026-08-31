@@ -651,9 +651,6 @@ export function TaskExecutionModal({
                     ? 'Step 2 of 3 • Maintenance Checklist'
                     : 'Step 3 of 3 • Completion Summary'}
             </Text>
-            <Text style={styles.locationSubtitle}>
-              {`${getRestroomLabel(task)} • ${task.location} (${task.building})`}
-            </Text>
           </View>
 
           <TouchableOpacity
@@ -730,9 +727,6 @@ export function TaskExecutionModal({
                       <Text style={styles.stepHeadline}>
                         Capture Initial Condition
                       </Text>
-                      <Text style={styles.stepDescription}>
-                        Take a clear photo of the fixture prior to servicing. Geotag and timestamp are automatically burned.
-                      </Text>
                       <View style={styles.viewfinderMetaRow}>
                         <View style={styles.viewfinderMetaPill}>
                           <MaterialCommunityIcons
@@ -792,11 +786,6 @@ export function TaskExecutionModal({
                   <View>
                     <Text style={styles.checklistTitle}>
                       SDCA F-TGS 203 Checklist
-                    </Text>
-                    <Text style={styles.checklistSubtitle}>
-                      {isRecheckMode
-                        ? 'Review all 10 items and address supervisor feedback.'
-                        : 'Mark all 10 items before taking the After photo.'}
                     </Text>
                   </View>
                   <View style={styles.countBadge}>
@@ -912,11 +901,6 @@ export function TaskExecutionModal({
                   {isRecheckMode
                     ? 'Rectification & Re-inspection Summary'
                     : 'Completion Verification'}
-                </Text>
-                <Text style={styles.summarySubtitle}>
-                  {isRecheckMode
-                    ? 'Review supervisor feedback, original condition, and your rectified proof photo.'
-                    : 'Review your before & after proof photos and checklist summary.'}
                 </Text>
 
                 {/* Side-by-Side Photo Comparison */}
@@ -1112,11 +1096,7 @@ export function TaskExecutionModal({
                         </View>
                       ))}
                     </ScrollView>
-                  ) : (
-                    <Text style={{ fontSize: 11, color: '#94A3B8', fontStyle: 'italic' }}>
-                      Optional: Take photos of distant stalls, urinals, or floor drains.
-                    </Text>
-                  )}
+                  ) : null}
                 </View>
 
                 {/* Summary Metrics */}

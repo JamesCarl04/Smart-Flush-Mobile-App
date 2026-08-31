@@ -280,11 +280,6 @@ export function SupervisorDashboardScreen({
         <View style={styles.sectionHeaderRow}>
           <View style={styles.sectionTitleGroup}>
             <Text style={styles.screenHeaderTitle}>Overview</Text>
-            <Text style={styles.facilitySubtitle}>
-              {user?.building
-                ? `${user.building} Facility`
-                : 'SDCA Annex Facility'} • Operations
-            </Text>
           </View>
         </View>
 
@@ -302,7 +297,6 @@ export function SupervisorDashboardScreen({
               <Text variant="displaySmall" style={styles.metricBigNumber}>
                 {isColdLoading ? '—' : activeToday.length}
               </Text>
-              <Text style={styles.metricFooterText}>In progress today</Text>
             </Card.Content>
           </Card>
 
@@ -328,9 +322,6 @@ export function SupervisorDashboardScreen({
               >
                 {isColdLoading ? '—' : unassigned}
               </Text>
-              <Text style={styles.metricFooterText}>
-                {unassigned > 0 ? 'Needs assignment' : 'All assigned'}
-              </Text>
             </Card.Content>
           </Card>
 
@@ -353,19 +344,17 @@ export function SupervisorDashboardScreen({
           </Card>
         </View>
 
-        {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Quick Actions</Text>
-
-        {/* Mobbin Inset Grouped Menu Card */}
-        <View style={[styles.groupedMenuCard, styles.cardElevation]}>
-          {/* Row 1: Manage Tasks */}
+        {/* Section: Operational Quick Actions (Mobbin Native Grouped List) */}
+        <Text style={styles.sectionHeading}>Management</Text>
+        <View style={[styles.groupedMenuCard, styles.menuContainer, styles.cardElevation]}>
+          {/* Row 1: Assign & Track Tasks */}
           <TouchableOpacity
             style={styles.menuRow}
             onPress={() => navigation.navigate('SupervisorTasks')}
             accessible={true}
             accessibilityRole="button"
             accessibilityLabel="Tasks"
-            accessibilityHint="Open task queue to view or assign active tasks"
+            accessibilityHint="Manage and assign field operations tasks"
           >
             <View style={styles.menuRowLeft}>
               <View style={[styles.menuIconContainer, { backgroundColor: '#FEE2E2' }]}>
@@ -377,7 +366,6 @@ export function SupervisorDashboardScreen({
               </View>
               <View style={styles.menuTextGroup}>
                 <Text style={styles.menuItemTitle}>Tasks</Text>
-                <Text style={styles.menuItemSubtitle}>View and assign active tasks</Text>
               </View>
             </View>
             <View style={styles.menuRowRight}>
@@ -411,7 +399,6 @@ export function SupervisorDashboardScreen({
               </View>
               <View style={styles.menuTextGroup}>
                 <Text style={styles.menuItemTitle}>Team</Text>
-                <Text style={styles.menuItemSubtitle}>View team status & availability</Text>
               </View>
             </View>
             <View style={styles.menuRowRight}>
@@ -443,7 +430,6 @@ export function SupervisorDashboardScreen({
               </View>
               <View style={styles.menuTextGroup}>
                 <Text style={styles.menuItemTitle}>Completed Tasks</Text>
-                <Text style={styles.menuItemSubtitle}>Review completed work & photos</Text>
               </View>
             </View>
             <View style={styles.menuRowRight}>
@@ -477,7 +463,6 @@ export function SupervisorDashboardScreen({
               </View>
               <View style={styles.menuTextGroup}>
                 <Text style={styles.menuItemTitle}>Reports & Export</Text>
-                <Text style={styles.menuItemSubtitle}>View performance and export reports</Text>
               </View>
             </View>
             <View style={styles.menuRowRight}>
@@ -504,9 +489,6 @@ export function SupervisorDashboardScreen({
             Supervisor Authentication
           </Dialog.Title>
           <Dialog.Content style={{ gap: 12 }}>
-            <Text style={{ color: '#64748B', fontSize: 13 }}>
-              Enter your password to unlock Completed Tasks & QA Inspection Records.
-            </Text>
 
             {authError ? (
               <View
@@ -561,8 +543,10 @@ export function SupervisorDashboardScreen({
               loading={authVerifying}
               disabled={authVerifying || !authPassword.trim()}
               buttonColor={KLIR_COLORS.primary}
+              style={styles.authUnlockButton}
+              contentStyle={styles.authUnlockButtonContent}
             >
-              Unlock
+              {authVerifying ? '' : 'Unlock'}
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -726,11 +710,14 @@ export function TeamAvailabilityScreen(): React.JSX.Element {
           </View>
         }
         ListEmptyComponent={
-          <EmptyOperationState
-            icon="account-search-outline"
-            title="No team members found"
-            body="No team members match the selected status filter."
-          />
+          <View
+            style={styles.emptyCenteredContainer}
+            accessible={true}
+            accessibilityRole="text"
+            accessibilityLiveRegion="polite"
+          >
+            <Text style={styles.emptyCenteredText}>No team members found</Text>
+          </View>
         }
         renderItem={({ item }) => {
           const statusInfo = personStatusMap.get(item.id) ?? getPersonOperationalStatus(item, tasks);
@@ -945,11 +932,14 @@ export function SupervisorTasksScreen({
             </View>
           }
           ListEmptyComponent={
-            <EmptyOperationState
-              icon="clipboard-check-outline"
-              title="No active tasks"
-              body="No tasks match this filter."
-            />
+            <View
+              style={styles.emptyCenteredContainer}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLiveRegion="polite"
+            >
+              <Text style={styles.emptyCenteredText}>No active tasks</Text>
+            </View>
           }
           renderItem={({ item }) => {
             const isUrgent =
@@ -1278,11 +1268,14 @@ export function CompletedReviewsScreen({
             </View>
           }
           ListEmptyComponent={
-            <EmptyOperationState
-              icon="check-all"
-              title="No completed tasks yet"
-              body="Completed tasks with photos and checklists will appear here."
-            />
+            <View
+              style={styles.emptyCenteredContainer}
+              accessible={true}
+              accessibilityRole="text"
+              accessibilityLiveRegion="polite"
+            >
+              <Text style={styles.emptyCenteredText}>No completed tasks yet</Text>
+            </View>
           }
           renderItem={({ item }) => {
             const isApproved = item.inspectionStatus === 'approved';
@@ -1918,7 +1911,6 @@ export function CompletedReviewDetailScreen({
               <View style={styles.qaActionRow}>
                 <Button
                   mode="contained"
-                  icon="check"
                   buttonColor={KLIR_COLORS.success}
                   textColor="#FFFFFF"
                   loading={approving}
@@ -1934,7 +1926,6 @@ export function CompletedReviewDetailScreen({
                 <Button
                   mode="contained-tonal"
                   textColor={KLIR_COLORS.danger}
-                  icon="flag-outline"
                   style={styles.flagButton}
                   contentStyle={styles.actionButtonContent}
                   labelStyle={styles.actionButtonLabel}
@@ -2422,11 +2413,9 @@ export function SupervisorReportsScreen({
         </Text>
 
         {filteredTasks.length === 0 ? (
-          <EmptyOperationState
-            icon="clipboard-text-outline"
-            title="No completed tasks"
-            body={`No completed tasks recorded for this timeframe.`}
-          />
+          <View style={styles.emptyCenteredContainer}>
+            <Text style={styles.emptyCenteredText}>No completed tasks</Text>
+          </View>
         ) : (
           filteredTasks.map((item) => (
             <Card
@@ -2738,6 +2727,14 @@ const styles = StyleSheet.create({
   },
 
   // Grouped Menu Action List
+  sectionHeading: {
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: -0.3,
+    marginTop: 8,
+  },
   sectionHeaderTitle: {
     fontFamily: INTER_FONT,
     fontSize: 16,
@@ -2745,6 +2742,13 @@ const styles = StyleSheet.create({
     color: '#0F172A',
     letterSpacing: -0.3,
     marginTop: 8,
+  },
+  menuContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#EAECF0',
+    overflow: 'hidden',
   },
   groupedMenuCard: {
     backgroundColor: '#FFFFFF',
@@ -3398,6 +3402,15 @@ const styles = StyleSheet.create({
   flagButton: {
     borderRadius: 12,
   },
+  authUnlockButton: {
+    minWidth: 88,
+    borderRadius: 10,
+    justifyContent: 'center',
+  },
+  authUnlockButtonContent: {
+    height: 40,
+    justifyContent: 'center',
+  },
   dialogCard: {
     borderRadius: 16,
     backgroundColor: '#FFFFFF',
@@ -3576,5 +3589,17 @@ const styles = StyleSheet.create({
     height: 14,
     backgroundColor: '#E2E8F0',
     borderRadius: 6,
+  },
+  emptyCenteredContainer: {
+    paddingVertical: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCenteredText: {
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

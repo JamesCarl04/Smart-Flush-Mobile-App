@@ -7,7 +7,6 @@ import { Card, Snackbar, Text } from 'react-native-paper';
 import { KlirButton } from '../components/KlirButton';
 import {
   AssigneeAvatarCluster,
-  EmptyOperationState,
   INTER_FONT,
   KLIR_COLORS,
   KLIR_RADII,
@@ -43,21 +42,15 @@ function formatDate(date: Date | null | undefined): string {
   }).format(date);
 }
 
-function EmptyTaskPanel({ onGoToInbox }: { onGoToInbox: () => void }): React.JSX.Element {
+function EmptyTaskPanel(): React.JSX.Element {
   return (
-    <View style={styles.centerState}>
-      <EmptyOperationState
-        icon="clipboard-text-search-outline"
-        title="No active task in progress"
-        body="You have no tasks currently in progress. Tap 'Acknowledge & Start' on any task in your Inbox to begin working."
-      />
-      <KlirButton
-        title="View Inbox Tasks"
-        variant="primary"
-        icon="bell-outline"
-        onPress={onGoToInbox}
-        style={styles.emptyGoInboxBtn}
-      />
+    <View
+      style={styles.centerState}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLiveRegion="polite"
+    >
+      <Text style={styles.emptyCenteredText}>No active task in progress</Text>
     </View>
   );
 }
@@ -109,16 +102,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
   }
 
   if (!activeTask) {
-    return (
-      <EmptyTaskPanel
-        onGoToInbox={() => {
-          const parentNav = navigation.getParent<any>();
-          if (parentNav) {
-            parentNav.navigate('InboxTab');
-          }
-        }}
-      />
-    );
+    return <EmptyTaskPanel />;
   }
 
   return (
@@ -440,6 +424,13 @@ const styles = StyleSheet.create({
   actionButton: {
     borderRadius: 12,
     marginTop: 4,
+  },
+  emptyCenteredText: {
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#64748B',
+    textAlign: 'center',
   },
 });
 

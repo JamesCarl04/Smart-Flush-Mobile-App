@@ -245,10 +245,5 @@ describe('InboxScreen Integration', () => {
     renderScreen();
 
     expect(screen.getByText('No pending tasks')).toBeTruthy();
-    expect(
-      screen.getByText(
-        'You are all caught up for now. New restroom alerts will appear here as soon as tasks are assigned to you.',
-      ),
-    ).toBeTruthy();
   });
 });

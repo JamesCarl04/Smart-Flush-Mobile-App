@@ -673,7 +673,7 @@ export function EmptyOperationState({
 }: {
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
   title: string;
-  body: string;
+  body?: string;
 }): React.JSX.Element {
   return (
     <View style={styles.emptyCard}>
@@ -689,9 +689,11 @@ export function EmptyOperationState({
       <Text variant="titleMedium" style={styles.emptyTitle}>
         {title}
       </Text>
-      <Text variant="bodyMedium" style={styles.emptyBody}>
-        {body}
-      </Text>
+      {body ? (
+        <Text variant="bodyMedium" style={styles.emptyBody}>
+          {body}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -875,8 +877,8 @@ const styles = StyleSheet.create({
     borderColor: '#BFDBFE',
   },
   avatarPillSubmitted: {
-    backgroundColor: '#F0FDF4',
-    borderColor: '#BBF7D0',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0',
   },
   avatarCircle: {
     width: 22,
@@ -915,7 +917,21 @@ const styles = StyleSheet.create({
     color: KLIR_COLORS.charcoal,
   },
   avatarLabelSubmitted: {
-    color: '#14532D',
+    color: '#0F172A',
+  },
+  statusDirectTextSubmitted: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#15803D',
+    marginLeft: 2,
+  },
+  statusDirectTextAck: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1D4ED8',
+    marginLeft: 2,
   },
   avatarLabelAck: {
     color: '#1E40AF',
@@ -1420,22 +1436,9 @@ export function AssigneeAvatarCluster({
             )}
 
             {hasSubmitted ? (
-              <View style={styles.statusPillSubmitted}>
-                <MaterialCommunityIcons
-                  name="check-circle"
-                  size={12}
-                  color="#15803D"
-                />
-                <Text style={styles.statusPillTextSubmitted}>Done</Text>
-              </View>
+              <Text style={styles.statusDirectTextSubmitted}>Done</Text>
             ) : hasAcknowledged ? (
-              <View style={styles.statusPillAck}>
-                <MaterialCommunityIcons
-                  name="progress-clock"
-                  size={12}
-                  color="#2563EB"
-                />
-              </View>
+              <Text style={styles.statusDirectTextAck}>Active</Text>
             ) : null}
           </View>
         );

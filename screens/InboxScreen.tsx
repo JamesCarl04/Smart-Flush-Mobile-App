@@ -7,7 +7,6 @@ import { Card, Snackbar, Text } from 'react-native-paper';
 import { KlirButton } from '../components/KlirButton';
 import {
   AssigneeAvatarCluster,
-  EmptyOperationState,
   INTER_FONT,
   KLIR_COLORS,
   KLIR_RADII,
@@ -52,30 +51,22 @@ function formatRelativeTime(date: Date): string {
 }
 
 function EmptyState({ activeFilter }: { activeFilter?: InboxFilter }): React.JSX.Element {
+  const title =
+    activeFilter === 'flagged'
+      ? 'No flagged tasks'
+      : activeFilter === 'active'
+        ? 'No active tasks'
+        : 'No pending tasks';
+
   return (
-    <EmptyOperationState
-      icon={
-        activeFilter === 'flagged'
-          ? 'flag-outline'
-          : activeFilter === 'active'
-            ? 'progress-clock'
-            : 'shield-check-outline'
-      }
-      title={
-        activeFilter === 'flagged'
-          ? 'No flagged tasks'
-          : activeFilter === 'active'
-            ? 'No active tasks'
-            : 'No pending tasks'
-      }
-      body={
-        activeFilter === 'flagged'
-          ? 'All tasks have passed supervisor QA inspection.'
-          : activeFilter === 'active'
-            ? 'You currently have no tasks in progress.'
-            : 'You are all caught up for now. New restroom alerts will appear here as soon as tasks are assigned to you.'
-      }
-    />
+    <View
+      style={styles.emptyCenteredContainer}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLiveRegion="polite"
+    >
+      <Text style={styles.emptyCenteredText}>{title}</Text>
+    </View>
   );
 }
 
@@ -251,9 +242,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionTitleGroup}>
                 <Text style={styles.sectionHeaderTitle}>Today's Tasks</Text>
-                <Text style={styles.facilitySubtitle}>
-                  {user?.building ? `${user.building} Facility` : 'SDCA Annex Facility'} • {user?.shift ?? '1st'} Shift
-                </Text>
               </View>
             </View>
 
@@ -281,9 +269,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   >
                     {loading ? '—' : pendingCount}
                   </Text>
-                  <Text style={styles.metricFooterText}>
-                    {pendingCount > 0 ? 'Needs action today' : 'All clear'}
-                  </Text>
                 </Card.Content>
               </Card>
 
@@ -299,7 +284,6 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   <Text variant="displaySmall" style={styles.metricBigNumber}>
                     {loading ? '—' : acknowledgedCount}
                   </Text>
-                  <Text style={styles.metricFooterText}>Being worked on</Text>
                 </Card.Content>
               </Card>
             </View>
@@ -963,5 +947,17 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 6,
     backgroundColor: '#E2E8F0',
+  },
+  emptyCenteredContainer: {
+    paddingVertical: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCenteredText: {
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#64748B',
+    textAlign: 'center',
   },
 });

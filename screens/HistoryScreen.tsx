@@ -6,7 +6,6 @@ import { Card, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import {
   AssigneeAvatarCluster,
-  EmptyOperationState,
   INTER_FONT,
   KLIR_COLORS,
   KLIR_RADII,
@@ -70,11 +69,14 @@ function formatAvgDuration(seconds: number): string {
 
 function EmptyState(): React.JSX.Element {
   return (
-    <EmptyOperationState
-      icon="check-all"
-      title="No completed tasks yet"
-      body="Completed tasks with proof photos and checklists will appear here."
-    />
+    <View
+      style={styles.emptyCenteredContainer}
+      accessible={true}
+      accessibilityRole="text"
+      accessibilityLiveRegion="polite"
+    >
+      <Text style={styles.emptyCenteredText}>No completed tasks yet</Text>
+    </View>
   );
 }
 
@@ -151,9 +153,6 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionTitleGroup}>
                 <Text style={styles.sectionHeaderTitle}>Completed Work</Text>
-                <Text style={styles.facilitySubtitle}>
-                  {user?.building ? `${user.building} Facility` : 'SDCA Annex Facility'} • {userCleanName}
-                </Text>
               </View>
             </View>
 
@@ -163,7 +162,6 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                 <Card.Content style={styles.metricContent}>
                   <Text style={styles.metricLabel}>Tasks Completed</Text>
                   <Text style={styles.standardMetricValue}>{completedCount}</Text>
-                  <Text style={styles.metricFooterText}>Completed</Text>
                 </Card.Content>
               </Card>
 
@@ -171,7 +169,6 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                 <Card.Content style={styles.metricContent}>
                   <Text style={styles.metricLabel}>Avg Duration</Text>
                   <Text style={styles.standardMetricValue}>{avgTurnaround}</Text>
-                  <Text style={styles.metricFooterText}>Turnaround</Text>
                 </Card.Content>
               </Card>
 
@@ -179,7 +176,6 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                 <Card.Content style={styles.metricContent}>
                   <Text style={styles.metricLabel}>Compliance</Text>
                   <Text style={styles.standardMetricValue}>{complianceRate}</Text>
-                  <Text style={styles.metricFooterText}>Verified</Text>
                 </Card.Content>
               </Card>
             </View>
@@ -686,5 +682,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
     color: KLIR_COLORS.primary,
+  },
+  emptyCenteredContainer: {
+    paddingVertical: 56,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyCenteredText: {
+    fontFamily: INTER_FONT,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#64748B',
+    textAlign: 'center',
   },
 });
