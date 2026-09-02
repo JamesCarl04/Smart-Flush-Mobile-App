@@ -118,17 +118,17 @@ graph TD
 
 ---
 
-## 🗺️ Facility Master Mapping (SDCA Annex 19 Restrooms)
+## 🗺️ Facility Master Mapping (SDCA Annex 22 Restrooms & 96 Fixtures)
 
-The SDCA Annex facility contains **19 registered restroom units** across 4 floors:
+The SDCA Annex facility contains **22 registered restroom units** and **96 total fixtures/stalls** across 4 floors:
 
-| Floor | Restroom Name | Device ID | Default Lead Technician |
-| :--- | :--- | :--- | :--- |
-| **1st Floor** | **1F Canteen Male Restroom**<br>**1F Canteen Female Restroom**<br>**1F Faculty Male Restroom**<br>**1F Faculty Female Restroom** | `SDCA-FL1-CANTEEN-M`<br>`SDCA-FL1-CANTEEN-F`<br>`SDCA-FL1-FACULTY-M`<br>`SDCA-FL1-FACULTY-F` | **James Alvarez**<br>(`james@gmail.com`) |
-| **2nd Floor** | **2F Male Restroom 1**<br>**2F Male Restroom 2**<br>**2F Female Restroom 1**<br>**2F Female Restroom 2**<br>**2F PWD Restroom** | `SDCA-FL2-M1`<br>`SDCA-FL2-M2`<br>`SDCA-FL2-F1`<br>`SDCA-FL2-F2`<br>`SDCA-FL2-PWD` | **Justine Lopez (Tech)**<br>(`justine@gmail.com`) |
-| **3rd Floor** | **3F Male Restroom 1**<br>**3F Male Restroom 2**<br>**3F Female Restroom 1**<br>**3F Female Restroom 2**<br>**3F PWD Restroom** | `SDCA-FL3-M1`<br>`SDCA-FL3-M2`<br>`SDCA-FL3-F1`<br>`SDCA-FL3-F2`<br>`SDCA-FL3-PWD` | **Maria Lindog**<br>(`maria@gmail.com`) |
-| **4th Floor** | **4F Male Restroom 1**<br>**4F Male Restroom 2**<br>**4F Female Restroom 1**<br>**4F Female Restroom 2**<br>**4F PWD Restroom** | `SDCA-FL4-M1`<br>`SDCA-FL4-M2`<br>`SDCA-FL4-F1`<br>`SDCA-FL4-F2`<br>`SDCA-FL4-PWD` | **Floating / Supervisor Dispatch** |
-| **Hardware Lab** | **SDCA Annex Test Stall** | `toilet-01` | *Hardware Test Unit* |
+| Floor | Restroom Name | Device ID | Fixture Count | Default Lead Technician |
+| :--- | :--- | :--- | :---: | :--- |
+| **1st Floor** | **1F Canteen Male Restroom**<br>**1F Canteen Female Restroom**<br>**1F Faculty Male Restroom**<br>**1F Faculty Female Restroom** | `SDCA-FL1-CANTEEN-M`<br>`SDCA-FL1-CANTEEN-F`<br>`SDCA-FL1-FACULTY-M`<br>`SDCA-FL1-FACULTY-F` | 7<br>3<br>6<br>2 | **James Alvarez**<br>(`james@gmail.com`) |
+| **2nd Floor** | **2F Male (Left Wing)**<br>**2F Male (Right Wing)**<br>**2F Female (Left Wing)**<br>**2F Female (Right Wing)**<br>**2F PWD (Left Wing)**<br>**2F PWD (Right Wing)** | `SDCA-FL2-M1`<br>`SDCA-FL2-M2`<br>`SDCA-FL2-F1`<br>`SDCA-FL2-F2`<br>`SDCA-FL2-PWD1`<br>`SDCA-FL2-PWD2` | 7<br>7<br>5<br>5<br>1<br>1 | **Justine Lopez (Tech)**<br>(`justine@gmail.com`) |
+| **3rd Floor** | **3F Male (Left Wing)**<br>**3F Male (Right Wing)**<br>**3F Female (Left Wing)**<br>**3F Female (Right Wing)**<br>**3F PWD (Left Wing)**<br>**3F PWD (Right Wing)** | `SDCA-FL3-M1`<br>`SDCA-FL3-M2`<br>`SDCA-FL3-F1`<br>`SDCA-FL3-F2`<br>`SDCA-FL3-PWD1`<br>`SDCA-FL3-PWD2` | 7<br>7<br>5<br>5<br>1<br>1 | **Maria Lindog**<br>(`maria@gmail.com`) |
+| **4th Floor** | **4F Male (Left Wing)**<br>**4F Male (Right Wing)**<br>**4F Female (Left Wing)**<br>**4F Female (Right Wing)**<br>**4F PWD (Left Wing)**<br>**4F PWD (Right Wing)** | `SDCA-FL4-M1`<br>`SDCA-FL4-M2`<br>`SDCA-FL4-F1`<br>`SDCA-FL4-F2`<br>`SDCA-FL4-PWD1`<br>`SDCA-FL4-PWD2` | 7<br>7<br>5<br>5<br>1<br>1 | **Floating / Supervisor Dispatch** |
+| **Hardware Lab** | **SDCA Annex Test Stall** | `toilet-01` | 1 | *Hardware Test Unit* |
 
 ---
 

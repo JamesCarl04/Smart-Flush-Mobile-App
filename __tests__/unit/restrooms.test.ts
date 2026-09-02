@@ -51,7 +51,7 @@ describe('restrooms utility', () => {
         getRestroomLabel({
           deviceId: 'SDCA-FL2-PWD-S01',
         }),
-      ).toBe('SDCA Annex 2F PWD Restroom • Single Stall');
+      ).toBe('SDCA Annex 2F PWD Restroom (Left Wing) • Single Stall');
     });
 
     it('should return predefined mapping for recognized device IDs when restroomName is null or undefined', () => {
@@ -106,12 +106,12 @@ describe('restrooms utility', () => {
   describe('Inventory and QR utilities', () => {
     it('should return all defined rooms', () => {
       const rooms = getAllRooms();
-      expect(rooms.length).toBeGreaterThanOrEqual(19);
+      expect(rooms.length).toBe(22);
     });
 
-    it('should return all unique stalls across the building (75 total stalls)', () => {
+    it('should return all unique stalls across the building (96 total stalls)', () => {
       const stalls = getAllStalls();
-      expect(stalls.length).toBe(75);
+      expect(stalls.length).toBe(96);
     });
 
     it('should filter stalls correctly by floor', () => {
@@ -120,19 +120,19 @@ describe('restrooms utility', () => {
       const floor3 = getStallsByFloor('3F');
       const floor4 = getStallsByFloor('4F');
 
-      expect(floor1.length).toBe(24);
-      expect(floor2.length).toBe(17);
-      expect(floor3.length).toBe(17);
-      expect(floor4.length).toBe(17);
+      expect(floor1.length).toBe(18);
+      expect(floor2.length).toBe(26);
+      expect(floor3.length).toBe(26);
+      expect(floor4.length).toBe(26);
     });
 
     it('should filter stalls by roomId', () => {
       const canteenMaleStalls = getStallsByRoom('SDCA-FL1-CANTEEN-M');
-      expect(canteenMaleStalls.length).toBe(8);
+      expect(canteenMaleStalls.length).toBe(7);
       expect(canteenMaleStalls[0].id).toBe('SDCA-FL1-CANTEEN-M-S01');
-      expect(canteenMaleStalls[7].id).toBe('SDCA-FL1-CANTEEN-M-S08');
+      expect(canteenMaleStalls[6].id).toBe('SDCA-FL1-CANTEEN-M-S07');
 
-      const pwdStall = getStallsByRoom('SDCA-FL2-PWD');
+      const pwdStall = getStallsByRoom('SDCA-FL2-PWD1');
       expect(pwdStall.length).toBe(1);
       expect(pwdStall[0].stallLabel).toBe('Single Stall');
     });
@@ -151,9 +151,12 @@ describe('restrooms utility', () => {
     it('should calculate complete restroom summary', () => {
       const summary = getRestroomSummary();
       expect(summary.totalFloors).toBe(4);
-      expect(summary.totalStalls).toBe(75);
-      expect(summary.floorBreakdown['1F']).toBe(24);
-      expect(summary.floorBreakdown['2F']).toBe(17);
+      expect(summary.totalRooms).toBe(22);
+      expect(summary.totalStalls).toBe(96);
+      expect(summary.floorBreakdown['1F']).toBe(18);
+      expect(summary.floorBreakdown['2F']).toBe(26);
+      expect(summary.floorBreakdown['3F']).toBe(26);
+      expect(summary.floorBreakdown['4F']).toBe(26);
     });
 
     it('should generate properly formatted stall QR URLs', () => {
