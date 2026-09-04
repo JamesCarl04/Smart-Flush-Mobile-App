@@ -225,7 +225,7 @@ describe('task-completion utility', () => {
     const taskId = 'task-photo-test-1';
     const capturedAt = new Date('2026-08-15T14:30:00.000Z');
 
-    it('should upload photo using native storage putFile and return download URL', async () => {
+    it('should upload photo using native storage putFile with image/jpeg metadata and return download URL', async () => {
       mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
       mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
 
@@ -239,11 +239,13 @@ describe('task-completion utility', () => {
       expect(storage.ref).toHaveBeenCalledWith(
         `tasks/${taskId}/before_${capturedAt.getTime()}.jpg`,
       );
-      expect(mockStorageRef.putFile).toHaveBeenCalledWith('file:///cache/photo.jpg');
+      expect(mockStorageRef.putFile).toHaveBeenCalledWith('file:///cache/photo.jpg', {
+        contentType: 'image/jpeg',
+      });
       expect(url).toBe('https://storage.example.com/uploaded.jpg');
     });
 
-    it('should prefix uri with file:// if missing', async () => {
+    it('should prefix uri with file:// if missing and include image/jpeg metadata', async () => {
       mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
       mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
 
@@ -256,7 +258,95 @@ describe('task-completion utility', () => {
 
       expect(mockStorageRef.putFile).toHaveBeenCalledWith(
         'file:///data/user/0/com.james.klir/cache/photo.jpg',
+        { contentType: 'image/jpeg' },
       );
+    });
+
+    it('should preserve content:// URI without prefixing file:// and attach metadata', async () => {
+      mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
+      mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
+
+      await uploadTaskPhoto(
+        taskId,
+        'content://media/external/images/1234',
+        'before',
+        capturedAt,
+      );
+
+      expect(mockStorageRef.putFile).toHaveBeenCalledWith(
+        'content://media/external/images/1234',
+        { contentType: 'image/jpeg' },
+      );
+    });
+
+    it('should handle invalid capturedAt Date gracefully without producing NaN in path', async () => {
+      mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
+      mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
+
+      await uploadTaskPhoto(
+        taskId,
+        'file:///cache/photo.jpg',
+        'before',
+        new Date('invalid'),
+      );
+
+      expect(storage.ref).not.toHaveBeenCalledWith(expect.stringContaining('NaN'));
+    });
+
+    it('should continue to putFile when FileSystem.getInfoAsync throws non-validation error', async () => {
+      mockStorageRef.putFile.mockResolvedValueOnce({ state: 'success' });
+      mockStorageRef.getDownloadURL.mockResolvedValueOnce('https://storage.example.com/uploaded.jpg');
+      const FileSystem = require('expo-file-system/legacy');
+      FileSystem.getInfoAsync.mockRejectedValueOnce(new Error('Permission denied on content URI'));
+
+      const url = await uploadTaskPhoto(
+        taskId,
+        'content://media/external/images/1234',
+        'after',
+        capturedAt,
+      );
+
+      expect(url).toBe('https://storage.example.com/uploaded.jpg');
+      expect(mockStorageRef.putFile).toHaveBeenCalledWith(
+        'content://media/external/images/1234',
+        { contentType: 'image/jpeg' },
+      );
+    });
+
+    it('should throw error when taskId is invalid or empty', async () => {
+      await expect(
+        uploadTaskPhoto('', 'file:///cache/photo.jpg', 'before', capturedAt),
+      ).rejects.toThrow('Photo upload failed (storage/invalid-argument): Task ID is required.');
+    });
+
+    it('should throw error when uri is invalid or empty', async () => {
+      await expect(
+        uploadTaskPhoto(taskId, '', 'before', capturedAt),
+      ).rejects.toThrow('Photo upload failed (storage/invalid-argument): Photo URI is required.');
+    });
+
+    it('should reject upload when local file exceeds 10MB limit', async () => {
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      const FileSystem = require('expo-file-system/legacy');
+      FileSystem.getInfoAsync.mockResolvedValueOnce({
+        exists: true,
+        size: 12 * 1024 * 1024,
+      });
+
+      await expect(
+        uploadTaskPhoto(taskId, 'file:///cache/oversized.jpg', 'before', capturedAt),
+      ).rejects.toThrow(
+        /Photo upload failed \(storage\/file-too-large\): Photo exceeds maximum allowed size of 10MB/,
+      );
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          '[UploadTaskPhoto] Error uploading before photo for task task-photo-test-1 (storage/file-too-large):',
+        ),
+        expect.stringContaining('Photo exceeds maximum allowed size of 10MB (12.00MB).'),
+      );
+
+      errorSpy.mockRestore();
     });
 
     it('should catch, log, and throw formatted error when putFile fails', async () => {

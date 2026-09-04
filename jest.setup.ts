@@ -149,7 +149,9 @@ jest.mock('firebase/storage', () => ({
 
 // 5b. Mock React Native Firebase Storage
 export const mockStorageRef = {
-  putFile: jest.fn().mockResolvedValue({ state: 'success' }),
+  putFile: jest.fn((_filePath?: string, _metadata?: { contentType?: string }) =>
+    Promise.resolve({ state: 'success' }),
+  ),
   getDownloadURL: jest.fn().mockResolvedValue('https://storage.example.com/mock-photo.jpg'),
 };
 
@@ -195,13 +197,30 @@ export const mockFirestoreDoc = {
   }),
 };
 
+const handleSnapshot = (...args: any[]) => {
+  const callback = typeof args[0] === 'function' ? args[0] : typeof args[1] === 'function' ? args[1] : null;
+  if (callback) {
+    callback({ empty: true, docs: [] });
+  }
+  return jest.fn();
+};
+
+export const mockFirestoreQuery: any = {
+  where: jest.fn(() => mockFirestoreQuery),
+  orderBy: jest.fn(() => mockFirestoreQuery),
+  limit: jest.fn(() => mockFirestoreQuery),
+  get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+  onSnapshot: jest.fn((...args: any[]) => handleSnapshot(...args)),
+};
+
 export const mockFirestoreCollection = {
   doc: jest.fn((_id?: string) => mockFirestoreDoc),
+  add: jest.fn().mockResolvedValue({ id: 'mock-doc-id' }),
   get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
-  onSnapshot: jest.fn((callback) => {
-    callback({ empty: true, docs: [] });
-    return jest.fn();
-  }),
+  where: jest.fn((..._args: any[]) => mockFirestoreQuery),
+  orderBy: jest.fn((..._args: any[]) => mockFirestoreQuery),
+  limit: jest.fn((..._args: any[]) => mockFirestoreQuery),
+  onSnapshot: jest.fn((...args: any[]) => handleSnapshot(...args)),
 };
 
 export const mockFirestoreModule = {
@@ -372,6 +391,7 @@ const mockFileSystem = {
   writeAsStringAsync: jest.fn().mockResolvedValue(undefined),
   readAsStringAsync: jest.fn().mockResolvedValue('mock content'),
   deleteAsync: jest.fn().mockResolvedValue(undefined),
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: true, size: 1024 * 1024 }),
   EncodingType: {
     UTF8: 'utf8',
     Base64: 'base64',

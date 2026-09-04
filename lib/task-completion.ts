@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
 import firestore from '@react-native-firebase/firestore';
 import { auth, db, storage } from './firebase';
@@ -86,23 +87,66 @@ export async function isOnlineAsync(): Promise<boolean> {
   return state.isConnected === true && state.isInternetReachable !== false;
 }
 
+export const MAX_TASK_PHOTO_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+
 export async function uploadTaskPhoto(
   taskId: string,
   uri: string,
-  kind: 'before' | 'after',
+  kind: 'before' | 'after' | string,
   capturedAt: Date,
 ): Promise<string> {
+  if (!taskId || typeof taskId !== 'string' || !taskId.trim()) {
+    throw new Error('Photo upload failed (storage/invalid-argument): Task ID is required.');
+  }
+
+  if (!uri || typeof uri !== 'string' || !uri.trim()) {
+    throw new Error('Photo upload failed (storage/invalid-argument): Photo URI is required.');
+  }
+
   if (uri.startsWith('http://') || uri.startsWith('https://')) {
     return uri;
   }
 
+  const isScheme = /^[a-zA-Z][a-zA-Z0-9+-.]*:\/\//.test(uri);
+  const cleanUri = isScheme
+    ? uri
+    : uri.startsWith('/')
+      ? `file://${uri}`
+      : `file://${uri}`;
+
+  if (typeof FileSystem.getInfoAsync === 'function') {
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(cleanUri);
+      if (fileInfo.exists && typeof fileInfo.size === 'number' && fileInfo.size > MAX_TASK_PHOTO_SIZE_BYTES) {
+        const sizeMb = (fileInfo.size / (1024 * 1024)).toFixed(2);
+        throw new Error(
+          `Photo upload failed (storage/file-too-large): Photo exceeds maximum allowed size of 10MB (${sizeMb}MB).`,
+        );
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.startsWith('Photo upload failed')) {
+        console.error(
+          `[UploadTaskPhoto] Error uploading ${kind} photo for task ${taskId} (storage/file-too-large):`,
+          err.message,
+        );
+        throw err;
+      }
+    }
+  }
+
   try {
-    const timestamp = capturedAt.getTime();
-    const photoRef = storage.ref(`tasks/${taskId}/${kind}_${timestamp}.jpg`);
-    const cleanUri = uri.startsWith('file://') ? uri : `file://${uri}`;
-    await photoRef.putFile(cleanUri);
+    const timestamp =
+      capturedAt instanceof Date && !isNaN(capturedAt.getTime())
+        ? capturedAt.getTime()
+        : Date.now();
+    const safeKind = (kind || 'photo').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const photoRef = storage.ref(`tasks/${taskId.trim()}/${safeKind}_${timestamp}.jpg`);
+    await photoRef.putFile(cleanUri, { contentType: 'image/jpeg' });
     return await photoRef.getDownloadURL();
   } catch (error: unknown) {
+    if (error instanceof Error && error.message.startsWith('Photo upload failed')) {
+      throw error;
+    }
     const err = error as { code?: string; message?: string };
     const code = err?.code ?? 'storage/unknown';
     const message = err?.message ?? String(error);
