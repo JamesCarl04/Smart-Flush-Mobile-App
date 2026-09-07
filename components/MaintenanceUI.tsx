@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Platform, StyleSheet, View } from 'react-native';
 import { Text } from 'react-native-paper';
 
+import { db } from '../lib/firebase';
 import { formatTaskComponent, formatTaskTrigger, isBroadcastTask, isHardwareFailureComponent } from '../lib/tasks';
 import type { AutomationTrigger, Task, TaskTriggerType } from '../types';
 
@@ -1175,6 +1177,8 @@ export function getInitials(name?: string | null): string {
   return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
+const GLOBAL_USER_NAME_CACHE: Record<string, string> = {};
+
 export function AssigneeAvatarCluster({
   task,
   people = [],
@@ -1182,6 +1186,11 @@ export function AssigneeAvatarCluster({
   currentUserId,
   currentUserName,
 }: AssigneeAvatarClusterProps): React.JSX.Element | null {
+  const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({
+    ...GLOBAL_USER_NAME_CACHE,
+    ...(task.assignedToNames ?? {}),
+  });
+
   const assignedIds =
     task.assignedToIds && task.assignedToIds.length > 0
       ? task.assignedToIds
@@ -1205,6 +1214,48 @@ export function AssigneeAvatarCluster({
     ]),
   );
 
+  useEffect(() => {
+    let isMounted = true;
+    const missingUids = allWorkerIds.filter(
+      (uid) =>
+        uid &&
+        uid !== currentUserId &&
+        uid !== 'current-user' &&
+        !task.assignedToNames?.[uid] &&
+        !task.submissions?.[uid]?.technicianName &&
+        !people.find((p) => p.id === uid || p.email === uid)?.displayName &&
+        !GLOBAL_USER_NAME_CACHE[uid] &&
+        !uid.includes('@'),
+    );
+
+    if (missingUids.length === 0) return;
+
+    missingUids.forEach((uid) => {
+      if (typeof db?.collection !== 'function') return;
+      db.collection('users')
+        .doc(uid)
+        .get()
+        .then((doc) => {
+          if (!isMounted || !doc.exists) return;
+          const data = doc.data();
+          const name =
+            data?.displayName || data?.name || data?.fullName;
+          if (name && typeof name === 'string' && name.trim()) {
+            const trimmed = name.trim();
+            GLOBAL_USER_NAME_CACHE[uid] = trimmed;
+            setResolvedNames((prev) => ({ ...prev, [uid]: trimmed }));
+          }
+        })
+        .catch(() => {
+          // ignore lookup errors
+        });
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [allWorkerIds, currentUserId, people, task.assignedToNames, task.submissions]);
+
   const resolveWorkerName = (
     uid: string,
   ): { displayName: string; firstName: string } => {
@@ -1221,7 +1272,21 @@ export function AssigneeAvatarCluster({
       return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
 
-    // 3. Check people roster
+    // 3. Check task assignedToNames map
+    const assignedName = task.assignedToNames?.[uid];
+    if (assignedName) {
+      const cleaned = cleanPersonName(assignedName);
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
+    }
+
+    // 4. Check cached / fetched names
+    const cached = resolvedNames[uid] || GLOBAL_USER_NAME_CACHE[uid];
+    if (cached) {
+      const cleaned = cleanPersonName(cached);
+      return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
+    }
+
+    // 5. Check people roster
     const person = people.find((p) => p.id === uid || p.email === uid);
     if (person?.displayName) {
       const cleaned = cleanPersonName(person.displayName);
@@ -1232,7 +1297,7 @@ export function AssigneeAvatarCluster({
       return { displayName: cleaned, firstName: cleaned.split(' ')[0] };
     }
 
-    // 4. Format UID if it looks like an email or known ID
+    // 6. Format UID if it looks like an email or known ID
     if (uid.includes('@')) {
       const cleaned = cleanPersonName(uid);
       return { displayName: cleaned, firstName: cleaned.split(' ')[0] };

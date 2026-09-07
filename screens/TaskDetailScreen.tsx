@@ -127,11 +127,19 @@ function formatDate(date: Date | null | undefined): string {
 function LinearWorkflowStepper({
   status,
   step,
+  isUserSubmitted = false,
 }: {
   status: Task['status'];
   step: FlowStep;
+  isUserSubmitted?: boolean;
 }): React.JSX.Element {
-  const steps = [
+  const isDoneOrSubmitted = status === 'completed' || isUserSubmitted;
+  const steps: Array<{
+    key: string;
+    label: string;
+    isComplete: boolean;
+    isCurrent: boolean;
+  }> = [
     {
       key: 'reported',
       label: 'Reported',
@@ -144,20 +152,21 @@ function LinearWorkflowStepper({
       isComplete:
         status === 'acknowledged' ||
         status === 'completed' ||
-        status === 'flagged',
-      isCurrent: status === 'acknowledged' && step === 'details',
+        status === 'flagged' ||
+        isDoneOrSubmitted,
+      isCurrent: status === 'acknowledged' && step === 'details' && !isDoneOrSubmitted,
     },
     {
       key: 'proof',
       label: 'Proof & Check',
-      isComplete: status === 'completed' || step === 'summary',
-      isCurrent: step === 'checklist' || step === 'summary',
+      isComplete: isDoneOrSubmitted || step === 'summary',
+      isCurrent: (step === 'checklist' || step === 'summary') && !isDoneOrSubmitted,
     },
     {
       key: 'done',
-      label: 'Completed',
-      isComplete: status === 'completed',
-      isCurrent: status === 'completed',
+      label: status === 'completed' ? 'Completed' : 'Submitted',
+      isComplete: isDoneOrSubmitted,
+      isCurrent: isDoneOrSubmitted,
     },
   ];
 
@@ -613,9 +622,10 @@ export function TaskDetailScreen({
         checklist,
       ) as unknown as TaskChecklist;
       const online = await isOnlineAsync();
+      let isFullyCompleted = true;
 
       if (online) {
-        await completeTaskOnline({
+        const outcome = await completeTaskOnline({
           taskId: task.id,
           acknowledgedAt: task.acknowledgedAt ?? null,
           createdAt: task.createdAt,
@@ -629,7 +639,12 @@ export function TaskDetailScreen({
           completedAt,
           completedBy: uid,
         });
-        setSnackbarMessage('Task completed and synced.');
+        isFullyCompleted = outcome?.isFullyCompleted ?? true;
+        setSnackbarMessage(
+          isFullyCompleted
+            ? 'Task completed and synced.'
+            : 'Checklist submitted. Work order remains active for teammate(s).',
+        );
       } else {
         await queueOfflineCompletion({
           taskId: task.id,
@@ -643,24 +658,38 @@ export function TaskDetailScreen({
           completedBy: uid,
           offlineSynced: false,
         });
+        isFullyCompleted = !(task.assignedToIds && task.assignedToIds.length > 1);
         setSnackbarMessage('Saved offline. Will sync when connected.');
       }
 
       await refreshTasks();
       setTask({
         ...task,
-        status: 'completed',
-        completedAt,
-        completedBy: uid,
-        assignedTo: uid,
+        status: isFullyCompleted ? 'completed' : 'acknowledged',
+        ...(isFullyCompleted ? { completedAt, completedBy: uid } : {}),
+        submissions: {
+          ...(task.submissions ?? {}),
+          [uid]: {
+            technicianUid: uid,
+            technicianName: user?.name ?? 'You',
+            checklist: firestoreChecklist,
+            beforePhotoUrl: beforePhotoUri,
+            afterPhotoUrl: afterPhotoUri,
+            remarks,
+            completedAt,
+            biometricVerified,
+          },
+        },
         beforePhotoUrl: beforePhotoUri,
         afterPhotoUrl: afterPhotoUri,
       });
       setStep('details');
 
       Alert.alert(
-        'Task Completed',
-        'Work order has been closed and verified. View your completed work in History.',
+        isFullyCompleted ? 'Task Completed' : 'Checklist Submitted',
+        isFullyCompleted
+          ? 'Work order has been closed and verified. View your completed work in History.'
+          : 'Your checklist has been submitted! You are now free for other tasks. This work order remains active for your teammate.',
         [
           {
             text: 'View History',
@@ -700,6 +729,67 @@ export function TaskDetailScreen({
     return checklistCheckedCount / CHECKLIST_LABELS.length;
   }, [checklistCheckedCount]);
 
+  const [selectedSubmissionUid, setSelectedSubmissionUid] = useState<string | null>(null);
+
+  const currentUid = user?.uid ?? currentUserId();
+  const isTeam = Boolean(task?.assignedToIds && task.assignedToIds.length > 1);
+  const isUserAcknowledged = Boolean(
+    (task?.acknowledgedBy && currentUid && task.acknowledgedBy[currentUid]) ||
+    (!isTeam && task?.status === 'acknowledged')
+  );
+  const isUserSubmitted = Boolean(
+    currentUid && (
+      (task?.submissions && task.submissions[currentUid]) ||
+      (task?.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[currentUid])
+    )
+  );
+
+  const completedTeammateCount = useMemo(() => {
+    if (!task?.assignedToIds || task.assignedToIds.length <= 1) return 0;
+    return task.assignedToIds.filter((id) => {
+      if (id === currentUid) return false;
+      const sub = task.submissions?.[id];
+      const comp =
+        task.completedBy && typeof task.completedBy === 'object'
+          ? (task.completedBy as Record<string, any>)[id]
+          : null;
+      return Boolean(sub || comp);
+    }).length;
+  }, [task, currentUid]);
+
+  const submissionsList = useMemo(() => {
+    if (!task?.submissions) return [];
+    return Object.values(task.submissions);
+  }, [task?.submissions]);
+
+  const displayedSubmission = useMemo(() => {
+    if (!task?.submissions) return null;
+    if (selectedSubmissionUid && task.submissions[selectedSubmissionUid]) {
+      return task.submissions[selectedSubmissionUid];
+    }
+    if (currentUid && task.submissions[currentUid]) {
+      return task.submissions[currentUid];
+    }
+    const firstUid = Object.keys(task.submissions)[0];
+    return firstUid ? task.submissions[firstUid] : null;
+  }, [task?.submissions, selectedSubmissionUid, currentUid]);
+
+  const displayedBeforePhoto = displayedSubmission?.beforePhotoUrl ?? task?.beforePhotoUrl;
+  const displayedBeforeCapturedAt = displayedSubmission?.completedAt ?? task?.beforePhotoCapturedAt;
+  const displayedAfterPhoto = displayedSubmission?.afterPhotoUrl ?? task?.afterPhotoUrl;
+  const displayedAfterCapturedAt = displayedSubmission?.completedAt ?? task?.afterPhotoCapturedAt;
+  const displayedChecklist = displayedSubmission?.checklist ?? task?.checklist;
+  const displayedBiometric = displayedSubmission?.biometricVerified ?? task?.biometricVerified;
+
+  const handleAction = async (): Promise<void> => {
+    if (!task) return;
+    if (!isUserAcknowledged) {
+      await handleAcknowledge();
+    } else {
+      await startCompletionFlow();
+    }
+  };
+
   if (loading) {
     return <TaskDetailSkeleton />;
   }
@@ -722,15 +812,6 @@ export function TaskDetailScreen({
     );
   }
 
-  const handleAction = async (): Promise<void> => {
-    if (!task) return;
-    if (task.status !== 'acknowledged') {
-      await handleAcknowledge();
-    } else {
-      await startCompletionFlow();
-    }
-  };
-
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
@@ -738,7 +819,7 @@ export function TaskDetailScreen({
         <Card mode="elevated" style={[styles.stepperCard, styles.cardElevation]}>
           <Card.Content style={styles.stepperCardContent}>
             <Text style={styles.stepperTitle}>Task Progress</Text>
-            <LinearWorkflowStepper status={task.status} step={step} />
+            <LinearWorkflowStepper status={task.status} step={step} isUserSubmitted={isUserSubmitted} />
           </Card.Content>
         </Card>
 
@@ -840,11 +921,46 @@ export function TaskDetailScreen({
                 />
               </View>
 
+              {/* Teammate status callout banners */}
+              {task.status !== 'completed' && isUserSubmitted ? (
+                <View style={styles.teammateWaitingCallout}>
+                  <MaterialCommunityIcons
+                    name="clock-check-outline"
+                    size={18}
+                    color="#0284C7"
+                    style={styles.instructionIcon}
+                  />
+                  <View style={styles.instructionTextWrapper}>
+                    <Text style={styles.teammateWaitingLabel}>CHECKLIST SUBMITTED</Text>
+                    <Text style={styles.teammateWaitingText}>
+                      Your checklist has been submitted. Waiting for remaining teammate(s) to finish before the work order is closed.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {task.status !== 'completed' && !isUserSubmitted && completedTeammateCount > 0 ? (
+                <View style={styles.teammateProgressCallout}>
+                  <MaterialCommunityIcons
+                    name="account-check-outline"
+                    size={18}
+                    color="#059669"
+                    style={styles.instructionIcon}
+                  />
+                  <View style={styles.instructionTextWrapper}>
+                    <Text style={styles.teammateProgressLabel}>TEAMMATE SUBMITTED</Text>
+                    <Text style={styles.teammateProgressText}>
+                      {completedTeammateCount} teammate{completedTeammateCount > 1 ? 's' : ''} submitted their checklist. Complete your checklist to close this work order.
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
               {/* Direct Action Button */}
-              {task.status !== 'completed' ? (
+              {task.status !== 'completed' && !isUserSubmitted ? (
                 <KlirButton
                   title={
-                    task.status === 'acknowledged'
+                    isUserAcknowledged
                       ? 'Take Proof Photo'
                       : 'Acknowledge Task'
                   }
@@ -854,7 +970,7 @@ export function TaskDetailScreen({
                   onPress={() => void handleAction()}
                   style={styles.actionButton}
                   icon={
-                    task.status === 'acknowledged'
+                    isUserAcknowledged
                       ? 'camera-outline'
                       : 'clipboard-check-outline'
                   }
@@ -864,15 +980,15 @@ export function TaskDetailScreen({
           </Card>
         ) : null}
 
-        {/* Step: Details - Completion Evidence if completed */}
-        {step === 'details' && task.status === 'completed' ? (
+        {/* Step: Details - Completion Evidence if completed or user submitted */}
+        {step === 'details' && (task.status === 'completed' || isUserSubmitted) ? (
           <Card mode="elevated" style={[styles.detailCard, styles.cardElevation]}>
             <Card.Content style={styles.sectionContent}>
               <View style={styles.sectionHeaderRow}>
                 <Text style={styles.sectionTitle}>
-                  Completion Photos
+                  {task.status === 'completed' ? 'Completion Photos' : 'Your Submitted Evidence'}
                 </Text>
-                {task.biometricVerified ? (
+                {displayedBiometric ? (
                   <View style={styles.biometricBadge}>
                     <MaterialCommunityIcons
                       name="shield-check"
@@ -886,6 +1002,47 @@ export function TaskDetailScreen({
                 ) : null}
               </View>
 
+              {/* Multi-Technician Submission Selector */}
+              {submissionsList.length > 1 ? (
+                <View style={styles.submissionSelectorContainer}>
+                  <Text style={styles.submissionSelectorLabel}>Technician Submission:</Text>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+                  >
+                    {submissionsList.map((sub) => {
+                      const isSelected =
+                        (displayedSubmission?.technicianUid === sub.technicianUid);
+                      return (
+                        <TouchableOpacity
+                          key={sub.technicianUid}
+                          onPress={() => setSelectedSubmissionUid(sub.technicianUid)}
+                          style={[
+                            styles.submissionSelectPill,
+                            isSelected && styles.submissionSelectPillActive,
+                          ]}
+                        >
+                          <MaterialCommunityIcons
+                            name={isSelected ? 'account-check' : 'account-outline'}
+                            size={14}
+                            color={isSelected ? '#FFFFFF' : '#475569'}
+                          />
+                          <Text
+                            style={[
+                              styles.submissionSelectPillText,
+                              isSelected && styles.submissionSelectPillTextActive,
+                            ]}
+                          >
+                            {sub.technicianName}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              ) : null}
+
               {/* Side-by-Side Photo Container */}
               <View style={styles.comparisonContainer}>
                 <View style={styles.comparisonColumn}>
@@ -897,11 +1054,11 @@ export function TaskDetailScreen({
                     />
                     <Text style={styles.comparisonLabel}>BEFORE</Text>
                   </View>
-                  {task.beforePhotoUrl ? (
+                  {displayedBeforePhoto ? (
                     <TouchableOpacity
                       style={styles.photoWrapper}
                       onPress={() => {
-                        setSelectedViewerPhoto(task.beforePhotoUrl ?? null);
+                        setSelectedViewerPhoto(displayedBeforePhoto ?? null);
                         setViewerCaption('Before Photo');
                       }}
                       accessible={true}
@@ -909,7 +1066,7 @@ export function TaskDetailScreen({
                       accessibilityLabel="View Before photo fullscreen"
                     >
                       <Image
-                        source={{ uri: task.beforePhotoUrl }}
+                        source={{ uri: displayedBeforePhoto }}
                         style={styles.comparisonPhoto}
                       />
                       <View style={styles.photoOverlayTag}>
@@ -938,9 +1095,9 @@ export function TaskDetailScreen({
                       </Text>
                     </View>
                   )}
-                  {task.beforePhotoCapturedAt ? (
+                  {displayedBeforeCapturedAt ? (
                     <Text style={styles.photoTimestamp}>
-                      {formatDate(task.beforePhotoCapturedAt)}
+                      {formatDate(displayedBeforeCapturedAt)}
                     </Text>
                   ) : null}
                 </View>
@@ -967,11 +1124,11 @@ export function TaskDetailScreen({
                       AFTER
                     </Text>
                   </View>
-                  {task.afterPhotoUrl ? (
+                  {displayedAfterPhoto ? (
                     <TouchableOpacity
                       style={styles.photoWrapper}
                       onPress={() => {
-                        setSelectedViewerPhoto(task.afterPhotoUrl ?? null);
+                        setSelectedViewerPhoto(displayedAfterPhoto ?? null);
                         setViewerCaption('After Photo');
                       }}
                       accessible={true}
@@ -979,7 +1136,7 @@ export function TaskDetailScreen({
                       accessibilityLabel="View After photo fullscreen"
                     >
                       <Image
-                        source={{ uri: task.afterPhotoUrl }}
+                        source={{ uri: displayedAfterPhoto }}
                         style={styles.comparisonPhoto}
                       />
                       <View style={styles.photoOverlayTag}>
@@ -1008,9 +1165,9 @@ export function TaskDetailScreen({
                       </Text>
                     </View>
                   )}
-                  {task.afterPhotoCapturedAt ? (
+                  {displayedAfterCapturedAt ? (
                     <Text style={styles.photoTimestamp}>
-                      {formatDate(task.afterPhotoCapturedAt)}
+                      {formatDate(displayedAfterCapturedAt)}
                     </Text>
                   ) : null}
                 </View>
@@ -1123,7 +1280,7 @@ export function TaskDetailScreen({
                 Checklist Verification (10 items)
               </Text>
               {CHECKLIST_LABELS.map((item) => {
-                const isNa = task.checklist?.[item.key] === 'na';
+                const isNa = (displayedChecklist?.[item.key] ?? task.checklist?.[item.key]) === 'na';
                 return (
                   <View key={item.key} style={styles.completedChecklistRow}>
                     <View
@@ -1147,10 +1304,10 @@ export function TaskDetailScreen({
 
               <Divider style={{ marginVertical: 4 }} />
               <Text style={styles.detailSummaryText}>
-                Remarks: {task.remarks || 'None'}
+                Remarks: {displayedSubmission?.remarks ?? task.remarks ?? 'None'}
               </Text>
               <Text style={styles.detailSummaryText}>
-                Completed at: {formatDate(task.completedAt)}
+                Completed at: {formatDate(displayedSubmission?.completedAt ?? task.completedAt)}
               </Text>
             </Card.Content>
           </Card>
@@ -1649,6 +1806,95 @@ const styles = StyleSheet.create({
     color: '#78350F',
     fontWeight: '600',
     lineHeight: 19,
+  },
+  teammateWaitingCallout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  teammateWaitingLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#0369A1',
+    letterSpacing: 0.5,
+  },
+  teammateWaitingText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#075985',
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  teammateProgressCallout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  teammateProgressLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#047857',
+    letterSpacing: 0.5,
+  },
+  teammateProgressText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#065F46',
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  submissionSelectorContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    gap: 6,
+  },
+  submissionSelectorLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  submissionSelectPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  submissionSelectPillActive: {
+    backgroundColor: KLIR_COLORS.primary,
+    borderColor: KLIR_COLORS.primary,
+  },
+  submissionSelectPillText: {
+    fontFamily: INTER_FONT,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  submissionSelectPillTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
   metaRow: {
     flexDirection: 'row',

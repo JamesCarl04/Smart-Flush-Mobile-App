@@ -92,6 +92,7 @@ export interface Task {
   message: string;
   assignedTo: string | null;
   assignedToIds?: string[];
+  assignedToNames?: Record<string, string>;
   isBroadcast?: boolean;
   assignmentType?: 'broadcast' | 'individual' | 'team';
   automationRuleId?: string | null;

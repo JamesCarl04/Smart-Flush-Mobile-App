@@ -29,6 +29,7 @@ type TaskDocumentShape = {
   status?: unknown;
   assignedTo?: unknown;
   assignedToIds?: unknown;
+  assignedToNames?: unknown;
   isBroadcast?: unknown;
   assignmentType?: unknown;
   automationRuleId?: unknown;
@@ -535,12 +536,25 @@ export function parseTaskDocument(
     return null;
   }
 
-  const completedBy = extractUserUid(data.completedBy);
+  const completedBy =
+    typeof data.completedBy === 'string' && data.completedBy.trim()
+      ? data.completedBy.trim()
+      : null;
   const completedAt = toDate(data.completedAt);
   const acknowledgedBy = parseTimestampMap(data.acknowledgedBy);
   const completedByMap = parseTimestampMap(data.completedBy);
   const submissions = parseSubmissions(data.submissions);
   const assignedToIds = stringArray(data.assignedToIds);
+  const assignedToNames =
+    typeof data.assignedToNames === 'object' && data.assignedToNames !== null
+      ? Object.entries(data.assignedToNames as Record<string, unknown>).reduce<Record<string, string>>(
+          (acc, [k, v]) => {
+            if (typeof v === 'string' && v.trim()) acc[k] = v.trim();
+            return acc;
+          },
+          {},
+        )
+      : undefined;
 
   let status: TaskStatus = 'unassigned';
   if (rawStatus === 'flagged') {
@@ -551,15 +565,21 @@ export function parseTaskDocument(
     status = 'reassignment_needed';
   } else if (rawStatus === 'completed') {
     status = 'completed';
-  } else if (completedAt || completedBy || Object.keys(submissions).length > 0) {
-    // If all assigned technicians have submitted, mark completed
-    if (assignedToIds.length > 0 && assignedToIds.every((uid) => Boolean(submissions[uid] || completedByMap[uid]))) {
-      status = 'completed';
-    } else if (completedAt || completedBy) {
+  } else if (assignedToIds.length > 1) {
+    // For team tasks with multiple assignees:
+    // It is ONLY completed if ALL assigned technicians have submitted!
+    const allSubmitted = assignedToIds.every(
+      (uid) => Boolean(submissions[uid] || completedByMap[uid]),
+    );
+    if (allSubmitted) {
       status = 'completed';
     } else if (typeof rawStatus === 'string' && isTaskStatus(rawStatus)) {
       status = rawStatus;
+    } else {
+      status = 'acknowledged';
     }
+  } else if (completedAt || completedBy || Object.keys(submissions).length > 0) {
+    status = 'completed';
   } else if (typeof rawStatus === 'string' && isTaskStatus(rawStatus)) {
     status = rawStatus;
   }
@@ -598,6 +618,7 @@ export function parseTaskDocument(
     message: data.message,
     assignedTo: typeof data.assignedTo === 'string' ? data.assignedTo : null,
     assignedToIds,
+    assignedToNames,
     isBroadcast:
       data.isBroadcast === true ||
       data.assignmentType === 'broadcast' ||

@@ -61,6 +61,7 @@ import {
   isPersonMatchingBuilding,
   reassignTask,
   type MaintenancePerson,
+  type ReassignTaskInput,
 } from '../lib/supervisor-api';
 import {
   CHECKLIST_LABELS,
@@ -1083,24 +1084,24 @@ export function SupervisorTaskDetailScreen({
 
     setSubmitting(true);
     try {
-      const payload: {
-        taskId: string;
-        newAssigneeUid: string;
-        newAssigneeUids?: string[];
-        reason: string;
-        supervisorUid: string;
-        supervisorName?: string;
-      } = {
+      const assigneeNames: Record<string, string> = {};
+      selectedAssignees.forEach((uid) => {
+        const found = people.find((p) => p.id === uid);
+        if (found?.displayName) {
+          assigneeNames[uid] = found.displayName;
+        }
+      });
+
+      const payload: ReassignTaskInput = {
         taskId: task.id,
         newAssigneeUid: selectedAssignees[0],
         reason,
         supervisorUid: user.uid,
+        supervisorName: user.name || undefined,
+        assigneeNames,
       };
       if (selectedAssignees.length > 1) {
         payload.newAssigneeUids = selectedAssignees;
-        if (user.name) {
-          payload.supervisorName = user.name;
-        }
       }
       await reassignTask(payload);
       setMessage('Task reassigned.');

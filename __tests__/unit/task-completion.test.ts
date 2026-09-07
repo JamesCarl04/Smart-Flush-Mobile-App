@@ -172,10 +172,7 @@ describe('task-completion utility', () => {
     });
 
     it('should complete task online and call update for task and user documents', async () => {
-      mockFirestoreDoc.update.mockResolvedValue(undefined);
-      mockFirestoreDoc.set.mockResolvedValue(undefined);
-
-      await expect(completeTaskOnline(input)).resolves.toBeUndefined();
+      await expect(completeTaskOnline(input)).resolves.toEqual({ isFullyCompleted: true });
       expect(mockFirestoreDoc.update).toHaveBeenCalledTimes(1);
       expect(mockFirestoreDoc.set).toHaveBeenCalledTimes(1);
     });

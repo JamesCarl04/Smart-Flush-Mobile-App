@@ -74,6 +74,7 @@ export interface ReassignTaskInput {
   reason: string;
   supervisorUid: string;
   supervisorName?: string;
+  assigneeNames?: Record<string, string>;
 }
 
 export async function reassignTask(input: ReassignTaskInput): Promise<void> {

@@ -158,7 +158,9 @@ export async function uploadTaskPhoto(
   }
 }
 
-export async function completeTaskOnline(input: OnlineCompletionInput): Promise<void> {
+export async function completeTaskOnline(
+  input: OnlineCompletionInput,
+): Promise<{ isFullyCompleted: boolean }> {
   const [beforePhotoUrl, afterPhotoUrl, additionalUploadedPhotos] = await Promise.all([
     uploadTaskPhoto(
       input.taskId,
@@ -193,53 +195,62 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
   const totalTime = secondsBetween(input.createdAt, input.completedAt);
   const nextRecheckCount = input.isRecheck
     ? (input.recheckCount ?? 0) + 1
-    : input.recheckCount ?? 0;
+    : (input.recheckCount ?? 0);
 
+  const submissionPayload = {
+    technicianUid: input.completedBy,
+    technicianName: auth.currentUser?.displayName ?? input.completedBy,
+    checklist: input.checklist,
+    beforePhotoUrl,
+    beforePhotoCapturedAt: firestore.Timestamp.fromDate(input.beforePhotoCapturedAt),
+    afterPhotoUrl,
+    afterPhotoCapturedAt: firestore.Timestamp.fromDate(input.afterPhotoCapturedAt),
+    additionalPhotos: additionalUploadedPhotos,
+    remarks: input.remarks,
+    workDuration,
+    completedAt: firestore.Timestamp.fromDate(input.completedAt),
+    biometricVerified: input.biometricVerified,
+    recheckCount: nextRecheckCount,
+    recheckedAt: input.isRecheck
+      ? firestore.Timestamp.fromDate(input.completedAt)
+      : null,
+  };
+
+  let isFullyCompleted = true;
+  let currentAssignedToIds: string[] = [];
   try {
-    const submissionPayload: Record<string, unknown> = {
-      technicianUid: input.completedBy,
-      technicianName: auth.currentUser?.displayName ?? input.completedBy,
-      checklist: input.checklist,
-      beforePhotoUrl,
-      beforePhotoCapturedAt: firestore.Timestamp.fromDate(input.beforePhotoCapturedAt),
-      afterPhotoUrl,
-      afterPhotoCapturedAt: firestore.Timestamp.fromDate(input.afterPhotoCapturedAt),
-      additionalPhotos: additionalUploadedPhotos,
-      remarks: input.remarks,
-      workDuration,
-      completedAt: firestore.Timestamp.fromDate(input.completedAt),
-      biometricVerified: input.biometricVerified,
-      recheckCount: nextRecheckCount,
-      recheckedAt: input.isRecheck
-        ? firestore.Timestamp.fromDate(input.completedAt)
-        : null,
-    };
-
-    let isFullyCompleted = true;
-    let currentAssignedToIds: string[] = [];
-    try {
-      const currentTaskDoc = await db.collection('tasks').doc(input.taskId).get();
-      const exists =
-        typeof (currentTaskDoc as any).exists === 'function'
-          ? (currentTaskDoc as any).exists()
-          : Boolean((currentTaskDoc as any).exists);
-      if (exists) {
-        const currentData = (currentTaskDoc.data() as Record<string, any>) || {};
-        currentAssignedToIds = Array.isArray(currentData.assignedToIds) ? currentData.assignedToIds : [];
-        if (currentAssignedToIds.length > 1) {
-          const completedByMap = currentData.completedBy && typeof currentData.completedBy === 'object'
+    const currentTaskDoc = await db.collection('tasks').doc(input.taskId).get();
+    const exists =
+      typeof (currentTaskDoc as any).exists === 'function'
+        ? (currentTaskDoc as any).exists()
+        : Boolean((currentTaskDoc as any).exists);
+    if (exists) {
+      const currentData = (currentTaskDoc.data() as Record<string, any>) || {};
+      currentAssignedToIds = Array.isArray(currentData.assignedToIds) ? currentData.assignedToIds : [];
+      if (currentAssignedToIds.length > 1) {
+        const existingSubmissions =
+          currentData.submissions && typeof currentData.submissions === 'object'
+            ? currentData.submissions
+            : {};
+        const completedByMap =
+          currentData.completedBy && typeof currentData.completedBy === 'object'
             ? currentData.completedBy
             : {};
-          const completedCount = currentAssignedToIds.filter(
-            (id: string) => id === input.completedBy || Boolean(completedByMap[id]),
-          ).length;
-          isFullyCompleted = completedCount >= currentAssignedToIds.length;
-        }
+        const completedCount = currentAssignedToIds.filter(
+          (id: string) =>
+            id === input.completedBy ||
+            Boolean(existingSubmissions[id]) ||
+            Boolean(completedByMap[id]),
+        ).length;
+        isFullyCompleted = completedCount >= currentAssignedToIds.length;
       }
-    } catch {
-      isFullyCompleted = true;
     }
+  } catch (err) {
+    console.warn('[completeTaskOnline] Failed checking task completion count:', err);
+    isFullyCompleted = false;
+  }
 
+  try {
     const updatePayload: Record<string, unknown> = {
       checklist: input.checklist,
       remarks: input.remarks,
@@ -302,6 +313,8 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
     );
     throw new Error(`[Firestore Task Update] Error: ${message}`);
   }
+
+  return { isFullyCompleted };
 }
 
 export async function readOfflineCompletions(): Promise<CompletionBundle[]> {
@@ -397,8 +410,15 @@ export async function syncOfflineCompletions(
           taskData?.completedBy && typeof taskData.completedBy === 'object'
             ? (taskData.completedBy as Record<string, any>)
             : {};
+        const submissionsMap =
+          taskData?.submissions && typeof taskData.submissions === 'object'
+            ? (taskData.submissions as Record<string, any>)
+            : {};
         const completedCount = assignedToIds.filter(
-          (id: string) => id === item.completedBy || Boolean(completedByMap[id]),
+          (id: string) =>
+            id === item.completedBy ||
+            Boolean(completedByMap[id]) ||
+            Boolean(submissionsMap[id]),
         ).length;
         isFullyCompleted = completedCount >= assignedToIds.length;
       }

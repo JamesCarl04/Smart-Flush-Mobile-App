@@ -276,12 +276,14 @@ describe('Supervisor Operations Flow E2E', () => {
     // Verify Reassignment API call
     await waitFor(
       () => {
-        expect(reassignRequestPayload).toEqual({
-          taskId: 'task-unassigned-901',
-          newAssigneeUid: 'worker-available-01',
-          reason: 'High-priority restroom overflow - reassigned to Carlos for immediate response',
-          supervisorUid: 'supervisor-lead-01',
-        });
+        expect(reassignRequestPayload).toEqual(
+          expect.objectContaining({
+            taskId: 'task-unassigned-901',
+            newAssigneeUid: 'worker-available-01',
+            reason: 'High-priority restroom overflow - reassigned to Carlos for immediate response',
+            supervisorUid: 'supervisor-lead-01',
+          }),
+        );
       },
       { timeout: 15000 },
     );
