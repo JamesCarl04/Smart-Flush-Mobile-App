@@ -251,6 +251,7 @@ export async function completeTaskOnline(
   }
 
   try {
+    const isTeam = currentAssignedToIds.length > 1;
     const updatePayload: Record<string, unknown> = {
       checklist: input.checklist,
       remarks: input.remarks,
@@ -266,10 +267,12 @@ export async function completeTaskOnline(
         ? {
             inspectionStatus: 'pending_review',
             completedAt: firestore.Timestamp.fromDate(input.completedAt),
-            completedBy: input.completedBy,
+            ...(!isTeam ? { completedBy: input.completedBy } : {}),
           }
         : {}),
-      [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt),
+      ...(isTeam || !isFullyCompleted
+        ? { [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt) }
+        : {}),
       [`submissions.${input.completedBy}`]: submissionPayload,
       ...(currentAssignedToIds.length <= 1 || isFullyCompleted ? { assignedTo: input.completedBy } : {}),
       workDuration,

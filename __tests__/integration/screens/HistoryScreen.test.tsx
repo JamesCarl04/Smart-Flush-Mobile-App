@@ -209,6 +209,7 @@ describe('HistoryScreen Integration', () => {
 
     expect(mockNavigation.navigate).toHaveBeenCalledWith('TaskDetail', {
       taskId: 'hist-1',
+      fromHistory: true,
     });
   });
 

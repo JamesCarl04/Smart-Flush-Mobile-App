@@ -177,6 +177,46 @@ describe('task-completion utility', () => {
       expect(mockFirestoreDoc.set).toHaveBeenCalledTimes(1);
     });
 
+    it('should not overwrite completedBy with string when completing multi-assignee team task', async () => {
+      mockFirestoreDoc.get.mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          assignedToIds: ['user-tech-1', 'user-tech-2'],
+          submissions: {
+            'user-tech-2': { completedAt: new Date() },
+          },
+        }),
+      });
+
+      const result = await completeTaskOnline(input);
+      expect(result.isFullyCompleted).toBe(true);
+
+      const updateCall = mockFirestoreDoc.update.mock.calls[0][0];
+      // For team tasks, completedBy must NOT be set as a string UID
+      expect(typeof updateCall.completedBy).not.toBe('string');
+      // Individual technician timestamp must be recorded in map key
+      expect(updateCall['completedBy.user-tech-1']).toBeDefined();
+      expect(updateCall.status).toBe('completed');
+    });
+
+    it('should set status to acknowledged when first technician of team task submits', async () => {
+      mockFirestoreDoc.get.mockResolvedValueOnce({
+        exists: true,
+        data: () => ({
+          assignedToIds: ['user-tech-1', 'user-tech-2'],
+          submissions: {},
+        }),
+      });
+
+      const result = await completeTaskOnline(input);
+      expect(result.isFullyCompleted).toBe(false);
+
+      const updateCall = mockFirestoreDoc.update.mock.calls[0][0];
+      expect(updateCall.status).toBe('acknowledged');
+      expect(updateCall['completedBy.user-tech-1']).toBeDefined();
+      expect(updateCall.completedBy).toBeUndefined();
+    });
+
     it('should catch, log, and throw error when task update fails (permission-denied)', async () => {
       const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       const permError = Object.assign(new Error('Missing or insufficient permissions.'), {

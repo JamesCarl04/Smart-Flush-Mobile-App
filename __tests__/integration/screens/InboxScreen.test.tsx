@@ -246,4 +246,45 @@ describe('InboxScreen Integration', () => {
 
     expect(screen.getByText('No pending tasks')).toBeTruthy();
   });
+
+  it('keeps CTA as "Acknowledge & Start" for team task when teammate acknowledged but current user has not', () => {
+    const teamTask: Task = {
+      id: 'team-task-1',
+      deviceId: 'dev-team-1',
+      restroomName: 'Restroom Team',
+      type: 'maintenance',
+      component: 'flush_valve',
+      location: '3F Restroom',
+      floor: '3F',
+      building: 'GB3 Building',
+      shift: '1st',
+      triggerType: 'manual',
+      message: 'Teammate acknowledged valve issue',
+      assignedTo: 'user-tech-1',
+      assignedToIds: ['user-tech-1', 'user-tech-2'],
+      status: 'acknowledged', // status is acknowledged at root because user-tech-2 acknowledged
+      acknowledgedBy: {
+        'user-tech-2': new Date('2026-08-15T08:20:00Z'),
+      },
+      createdAt: new Date('2026-08-15T08:15:00Z'),
+      createdBy: 'system',
+    };
+
+    (useTasksHook.useTasks as jest.Mock).mockReturnValue({
+      tasks: [mockInboxTasks[2], teamTask],
+      inboxTasks: [mockInboxTasks[2], teamTask],
+      historyTasks: [],
+      pendingCount: 2,
+      loading: false,
+      errorMessage: null,
+      refreshTasks: mockRefreshTasks,
+      clearError: mockClearError,
+    });
+
+    renderScreen();
+
+    // user-tech-1 has not acknowledged yet, so button MUST be "Acknowledge & Start"
+    expect(screen.getByText('Acknowledge & Start')).toBeTruthy();
+    expect(screen.queryByText('Resume Task & Open Camera')).toBeNull();
+  });
 });

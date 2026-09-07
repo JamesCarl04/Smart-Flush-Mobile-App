@@ -7,6 +7,7 @@ import * as ImagePicker from '../lib/native-image-picker';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { captureRef } from 'react-native-view-shot';
 import {
+  ActivityIndicator,
   Button,
   Card,
   Divider,
@@ -57,11 +58,13 @@ import type {
   InboxStackParamList,
   Task,
   TaskChecklist,
+  TaskStackParamList,
 } from '../types';
 
 type Props =
   | NativeStackScreenProps<InboxStackParamList, 'TaskDetail'>
-  | NativeStackScreenProps<HistoryStackParamList, 'TaskDetail'>;
+  | NativeStackScreenProps<HistoryStackParamList, 'TaskDetail'>
+  | NativeStackScreenProps<TaskStackParamList, 'TaskDetail'>;
 
 type FlowStep = 'details' | 'checklist' | 'summary';
 
@@ -128,12 +131,14 @@ function LinearWorkflowStepper({
   status,
   step,
   isUserSubmitted = false,
+  isHistoryView = false,
 }: {
   status: Task['status'];
   step: FlowStep;
   isUserSubmitted?: boolean;
+  isHistoryView?: boolean;
 }): React.JSX.Element {
-  const isDoneOrSubmitted = status === 'completed' || isUserSubmitted;
+  const isDoneOrSubmitted = status === 'completed' || isUserSubmitted || isHistoryView;
   const steps: Array<{
     key: string;
     label: string;
@@ -254,9 +259,10 @@ export function TaskDetailScreen({
   route,
 }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, refreshTasks } = useTasks();
+  const { tasks, historyTasks, refreshTasks } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDetailRefreshing, setIsDetailRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
@@ -277,6 +283,10 @@ export function TaskDetailScreen({
   const overlayRef = useRef<View>(null);
   const initializedTaskIdRef = useRef<string | null>(null);
   const taskId = route.params.taskId;
+  const isFromHistoryParam = Boolean((route.params as any)?.fromHistory);
+  const isInHistoryTasks = Boolean(
+    Array.isArray(historyTasks) && historyTasks.some((t) => t.id === taskId),
+  );
   const cachedTask = useMemo(
     () => tasks.find((currentTask) => currentTask.id === taskId) ?? null,
     [taskId, tasks],
@@ -331,6 +341,7 @@ export function TaskDetailScreen({
 
   const refreshTaskDetail = useCallback(
     async (silent = false): Promise<void> => {
+      setIsDetailRefreshing(true);
       if (!silent && !cachedTask) {
         setLoading(true);
       }
@@ -362,6 +373,8 @@ export function TaskDetailScreen({
 
         setLoadError(message);
         setLoading(false);
+      } finally {
+        setIsDetailRefreshing(false);
       }
     },
     [cachedTask, taskId],
@@ -740,8 +753,20 @@ export function TaskDetailScreen({
   const isUserSubmitted = Boolean(
     currentUid && (
       (task?.submissions && task.submissions[currentUid]) ||
-      (task?.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[currentUid])
+      (task?.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[currentUid]) ||
+      task?.completedBy === currentUid ||
+      (cachedTask?.submissions && cachedTask.submissions[currentUid]) ||
+      (cachedTask?.completedBy && typeof cachedTask.completedBy === 'object' && (cachedTask.completedBy as Record<string, any>)[currentUid]) ||
+      cachedTask?.completedBy === currentUid
     )
+  );
+
+  const isHistoryView = Boolean(
+    isFromHistoryParam ||
+    isInHistoryTasks ||
+    task?.status === 'completed' ||
+    cachedTask?.status === 'completed' ||
+    isUserSubmitted
   );
 
   const completedTeammateCount = useMemo(() => {
@@ -753,7 +778,7 @@ export function TaskDetailScreen({
         task.completedBy && typeof task.completedBy === 'object'
           ? (task.completedBy as Record<string, any>)[id]
           : null;
-      return Boolean(sub || comp);
+      return Boolean(sub || comp || task.completedBy === id);
     }).length;
   }, [task, currentUid]);
 
@@ -819,7 +844,12 @@ export function TaskDetailScreen({
         <Card mode="elevated" style={[styles.stepperCard, styles.cardElevation]}>
           <Card.Content style={styles.stepperCardContent}>
             <Text style={styles.stepperTitle}>Task Progress</Text>
-            <LinearWorkflowStepper status={task.status} step={step} isUserSubmitted={isUserSubmitted} />
+            <LinearWorkflowStepper
+              status={task.status}
+              step={step}
+              isUserSubmitted={isUserSubmitted}
+              isHistoryView={isHistoryView}
+            />
           </Card.Content>
         </Card>
 
@@ -828,7 +858,7 @@ export function TaskDetailScreen({
           <Card mode="elevated" style={[styles.heroCard, styles.cardElevation]}>
             <Card.Content style={styles.heroContent}>
               {/* Top Row: Status Badge (when in progress / not completed) */}
-              {task.status !== 'completed' ? (
+              {!isHistoryView && task.status !== 'completed' ? (
                 <View style={styles.headerTopRow}>
                   <OperationBadge
                     label={
@@ -922,7 +952,7 @@ export function TaskDetailScreen({
               </View>
 
               {/* Teammate status callout banners */}
-              {task.status !== 'completed' && isUserSubmitted ? (
+              {!isHistoryView && task.status !== 'completed' && isUserSubmitted ? (
                 <View style={styles.teammateWaitingCallout}>
                   <MaterialCommunityIcons
                     name="clock-check-outline"
@@ -939,7 +969,7 @@ export function TaskDetailScreen({
                 </View>
               ) : null}
 
-              {task.status !== 'completed' && !isUserSubmitted && completedTeammateCount > 0 ? (
+              {!isHistoryView && task.status !== 'completed' && !isUserSubmitted && completedTeammateCount > 0 ? (
                 <View style={styles.teammateProgressCallout}>
                   <MaterialCommunityIcons
                     name="account-check-outline"
@@ -957,7 +987,7 @@ export function TaskDetailScreen({
               ) : null}
 
               {/* Direct Action Button */}
-              {task.status !== 'completed' && !isUserSubmitted ? (
+              {!isHistoryView && task.status !== 'completed' && !isUserSubmitted ? (
                 <KlirButton
                   title={
                     isUserAcknowledged
@@ -980,8 +1010,22 @@ export function TaskDetailScreen({
           </Card>
         ) : null}
 
+        {/* Inline Loading Card for Completion Evidence when loading in History */}
+        {step === 'details' && isHistoryView && isDetailRefreshing && !displayedSubmission && !displayedBeforePhoto ? (
+          <Card mode="elevated" style={[styles.detailCard, styles.cardElevation]}>
+            <Card.Content style={[styles.sectionContent, styles.loadingEvidenceCard]}>
+              <ActivityIndicator size="small" color={KLIR_COLORS.primary} />
+              <Text style={styles.loadingEvidenceText}>
+                Loading completion evidence & photos...
+              </Text>
+            </Card.Content>
+          </Card>
+        ) : null}
+
         {/* Step: Details - Completion Evidence if completed or user submitted */}
-        {step === 'details' && (task.status === 'completed' || isUserSubmitted) ? (
+        {step === 'details' &&
+        (task.status === 'completed' || isUserSubmitted || isHistoryView) &&
+        (!isDetailRefreshing || displayedSubmission || displayedBeforePhoto) ? (
           <Card mode="elevated" style={[styles.detailCard, styles.cardElevation]}>
             <Card.Content style={styles.sectionContent}>
               <View style={styles.sectionHeaderRow}>
@@ -2206,5 +2250,17 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 34,
     fontWeight: '700',
+  },
+  loadingEvidenceCard: {
+    paddingVertical: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingEvidenceText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '500',
   },
 });

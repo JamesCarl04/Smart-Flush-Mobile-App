@@ -177,17 +177,17 @@ export type AuthStackParamList = {
 
 export type InboxStackParamList = {
   InboxHome: undefined;
-  TaskDetail: { taskId: string };
+  TaskDetail: { taskId: string; fromHistory?: boolean };
 };
 
 export type HistoryStackParamList = {
   HistoryHome: undefined;
-  TaskDetail: { taskId: string };
+  TaskDetail: { taskId: string; fromHistory?: boolean };
 };
 
 export type TaskStackParamList = {
   ActiveTask: { taskId?: string } | undefined;
-  TaskDetail: { taskId: string };
+  TaskDetail: { taskId: string; fromHistory?: boolean };
 };
 
 export type SupervisorStackParamList = {

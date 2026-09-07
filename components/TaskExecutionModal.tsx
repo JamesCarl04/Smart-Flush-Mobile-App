@@ -208,16 +208,44 @@ export function TaskExecutionModal({
       currentTaskIdRef.current = task.id;
       setAdditionalAreaPhotos([]);
 
+      const uid = user?.uid ?? currentUserId();
+      const isTeam = Boolean(task.assignedToIds && task.assignedToIds.length > 1);
+      const personalSubmission = uid && task.submissions ? task.submissions[uid] : null;
+
       if (isRecheckMode) {
-        setBeforePhotoUri(task.beforePhotoUrl ?? null);
-        setBeforeCapturedAt(task.beforePhotoCapturedAt ?? new Date());
+        const initialBefore = personalSubmission?.beforePhotoUrl ?? (!isTeam ? task.beforePhotoUrl : null);
+        setBeforePhotoUri(initialBefore ?? null);
+        setBeforeCapturedAt(
+          personalSubmission?.beforePhotoCapturedAt ??
+          (!isTeam ? task.beforePhotoCapturedAt : null) ??
+          (initialBefore ? new Date() : null),
+        );
         setAfterPhotoUri(null);
         setAfterCapturedAt(null);
-        setStep('checklist');
-        setChecklist(task.checklist ? { ...task.checklist } : { ...EMPTY_CHECKLIST });
-        setRemarks(task.remarks ? `[Rectification] ` : '');
+        setStep(initialBefore ? 'checklist' : 'before_photo');
+        setChecklist(
+          personalSubmission?.checklist
+            ? { ...personalSubmission.checklist }
+            : (!isTeam && task.checklist
+                ? { ...task.checklist }
+                : { ...EMPTY_CHECKLIST }),
+        );
+        setRemarks(
+          personalSubmission?.remarks
+            ? `[Rectification] `
+            : (!isTeam && task.remarks ? `[Rectification] ` : ''),
+        );
         setBiometricVerified(false);
-      } else if (task.beforePhotoUrl) {
+      } else if (personalSubmission) {
+        setBeforePhotoUri(personalSubmission.beforePhotoUrl ?? null);
+        setBeforeCapturedAt(personalSubmission.beforePhotoCapturedAt ?? new Date());
+        setStep(personalSubmission.afterPhotoUrl ? 'summary' : 'checklist');
+        setAfterPhotoUri(personalSubmission.afterPhotoUrl ?? null);
+        setAfterCapturedAt(personalSubmission.afterPhotoCapturedAt ?? null);
+        setChecklist(personalSubmission.checklist ? { ...personalSubmission.checklist } : { ...EMPTY_CHECKLIST });
+        setRemarks(personalSubmission.remarks ?? '');
+        setBiometricVerified(Boolean(personalSubmission.biometricVerified));
+      } else if (!isTeam && task.beforePhotoUrl) {
         setBeforePhotoUri(task.beforePhotoUrl);
         setBeforeCapturedAt(task.beforePhotoCapturedAt ?? new Date());
         setStep(task.afterPhotoUrl ? 'summary' : 'checklist');
@@ -235,6 +263,7 @@ export function TaskExecutionModal({
         setChecklist({ ...EMPTY_CHECKLIST });
         setRemarks('');
         setBiometricVerified(false);
+        setAdditionalAreaPhotos([]);
       }
       setActionInFlight(false);
     }
@@ -244,7 +273,7 @@ export function TaskExecutionModal({
     }
 
     prevVisibleRef.current = visible;
-  }, [visible, task?.id, isRecheckMode]);
+  }, [visible, task?.id, isRecheckMode, user?.uid]);
 
   const handleRequestClose = (): void => {
     if (beforePhotoUri && step !== 'before_photo') {

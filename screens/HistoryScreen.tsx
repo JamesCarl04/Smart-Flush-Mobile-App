@@ -260,7 +260,7 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
             mode="elevated"
             style={[styles.taskCard, styles.cardElevation]}
             onPress={() =>
-              navigation.navigate('TaskDetail', { taskId: item.id })
+              navigation.navigate('TaskDetail', { taskId: item.id, fromHistory: true })
             }
             accessible={true}
             accessibilityRole="button"

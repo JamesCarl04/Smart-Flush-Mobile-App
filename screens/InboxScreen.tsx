@@ -96,9 +96,16 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
     clearError,
   } = useTasks();
 
-  const acknowledgedCount = inboxTasks.filter(
-    (task) => task.status === 'acknowledged' || task.status === 'rechecking',
-  ).length;
+  const acknowledgedCount = inboxTasks.filter((task) => {
+    const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
+    if (task.status === 'rechecking') {
+      return !task.recheckedBy || task.recheckedBy === user?.uid || isTeam;
+    }
+    if (isTeam) {
+      return Boolean(user?.uid && task.acknowledgedBy?.[user.uid]);
+    }
+    return task.status === 'acknowledged' || Boolean(user?.uid && task.acknowledgedBy?.[user.uid]);
+  }).length;
 
   const flaggedTasksList = useMemo(() => {
     return inboxTasks.filter(
@@ -108,11 +115,19 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
 
   const activeTasksList = useMemo(() => {
     return inboxTasks.filter((task) => {
+      const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
+      const isUserAck = isTeam
+        ? Boolean(user?.uid && task.acknowledgedBy?.[user.uid])
+        : (task.status === 'acknowledged' || Boolean(user?.uid && task.acknowledgedBy?.[user.uid]));
+
+      const isRecheckingForUser =
+        task.status === 'rechecking' &&
+        (!task.recheckedBy || task.recheckedBy === user?.uid || isTeam);
+
       // Tasks currently in progress by this technician
       if (
-        task.status === 'acknowledged' ||
-        task.status === 'rechecking' ||
-        Boolean(user?.uid && task.acknowledgedBy?.[user.uid])
+        isUserAck ||
+        isRecheckingForUser
       ) {
         return true;
       }
@@ -171,7 +186,12 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   };
 
   const handleStartTask = async (task: Task): Promise<void> => {
-    if (task.status === 'acknowledged' || task.status === 'rechecking') {
+    const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
+    const isUserAcknowledged = isTeam
+      ? Boolean(user?.uid && task.acknowledgedBy?.[user.uid])
+      : (task.status === 'acknowledged' || Boolean(user?.uid && task.acknowledgedBy?.[user.uid]));
+
+    if (task.status === 'rechecking' || isUserAcknowledged) {
       navigateToActiveTaskWorkspace(task.id);
       return;
     }
@@ -563,27 +583,32 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
                   icon="camera-outline"
                   style={styles.taskActionButton}
                 />
-              ) : (
-                <KlirButton
-                  title={
-                    item.status === 'acknowledged' ||
-                    (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
-                      ? 'Resume Task & Open Camera'
-                      : 'Acknowledge & Start'
-                  }
-                  variant="primary"
-                  loading={actionInFlightId === item.id}
-                  disabled={actionInFlightId === item.id}
-                  onPress={() => void handleStartTask(item)}
-                  icon={
-                    item.status === 'acknowledged' ||
-                    (user?.uid && Boolean(item.acknowledgedBy?.[user.uid]))
-                      ? 'camera-outline'
-                      : 'clipboard-check-outline'
-                  }
-                  style={styles.taskActionButton}
-                />
-              )}
+              ) : (() => {
+                const isTeam = Array.isArray(item.assignedToIds) && item.assignedToIds.length > 1;
+                const isUserAcknowledged = isTeam
+                  ? Boolean(user?.uid && item.acknowledgedBy?.[user.uid])
+                  : (item.status === 'acknowledged' || Boolean(user?.uid && item.acknowledgedBy?.[user.uid]));
+
+                return (
+                  <KlirButton
+                    title={
+                      isUserAcknowledged
+                        ? 'Resume Task & Open Camera'
+                        : 'Acknowledge & Start'
+                    }
+                    variant="primary"
+                    loading={actionInFlightId === item.id}
+                    disabled={actionInFlightId === item.id}
+                    onPress={() => void handleStartTask(item)}
+                    icon={
+                      isUserAcknowledged
+                        ? 'camera-outline'
+                        : 'clipboard-check-outline'
+                    }
+                    style={styles.taskActionButton}
+                  />
+                );
+              })()}
             </Card.Actions>
           </Card>
         )}

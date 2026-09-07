@@ -218,22 +218,40 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
   );
 
-  const activeTasks = inboxTasks.filter(
-    (task) =>
-      !(user?.uid && (
-        (task.submissions && Boolean(task.submissions[user.uid])) ||
-        (task.completedBy && typeof task.completedBy === 'object' && Boolean((task.completedBy as Record<string, any>)[user.uid]))
-      )) &&
-      (task.status === 'acknowledged' ||
-        task.status === 'rechecking' ||
-        Boolean(user?.uid && task.acknowledgedBy && task.acknowledgedBy[user.uid])) &&
-      (task.assignedTo === user?.uid ||
-        task.assignedTo === user?.email ||
-        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
-        isBroadcastTask(task) ||
-        (task.acknowledgedBy && Boolean(task.acknowledgedBy[user?.uid ?? ''])) ||
-        task.recheckedBy === user?.uid),
-  );
+  const activeTasks = inboxTasks.filter((task) => {
+    if (
+      user?.uid &&
+      ((task.submissions && Boolean(task.submissions[user.uid])) ||
+        (task.completedBy &&
+          typeof task.completedBy === 'object' &&
+          Boolean((task.completedBy as Record<string, any>)[user.uid])))
+    ) {
+      return false;
+    }
+
+    const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
+    const isAcknowledgedForUser = isTeam
+      ? Boolean(user?.uid && task.acknowledgedBy && task.acknowledgedBy[user.uid])
+      : (task.status === 'acknowledged' ||
+         Boolean(user?.uid && task.acknowledgedBy && task.acknowledgedBy[user.uid]));
+
+    const isRecheckingForUser =
+      task.status === 'rechecking' &&
+      (!task.recheckedBy || task.recheckedBy === user?.uid || isTeam);
+
+    if (!isAcknowledgedForUser && !isRecheckingForUser) {
+      return false;
+    }
+
+    return (
+      task.assignedTo === user?.uid ||
+      task.assignedTo === user?.email ||
+      (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+      isBroadcastTask(task) ||
+      (task.acknowledgedBy && Boolean(task.acknowledgedBy[user?.uid ?? ''])) ||
+      task.recheckedBy === user?.uid
+    );
+  });
 
   const activeTasksCount = activeTasks.length;
 

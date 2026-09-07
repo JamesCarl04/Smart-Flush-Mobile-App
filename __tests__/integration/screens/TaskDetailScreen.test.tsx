@@ -296,4 +296,54 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
       expect(screen.getByText('Saved offline. Will sync when connected.')).toBeTruthy();
     });
   });
+
+  it('renders clean loading state in History view and suppresses action buttons', async () => {
+    let resolveTaskFetch: (task: Task) => void;
+    const pendingFetchPromise = new Promise<Task>((resolve) => {
+      resolveTaskFetch = resolve;
+    });
+
+    (taskApi.fetchTask as jest.Mock).mockReturnValue(pendingFetchPromise);
+
+    const historyRoute = {
+      key: 'TaskDetail',
+      name: 'TaskDetail',
+      params: { taskId: 'task-flow-123', fromHistory: true },
+    };
+
+    render(
+      <PaperProvider>
+        <TaskDetailScreen navigation={mockNavigation} route={historyRoute as any} />
+      </PaperProvider>,
+    );
+
+    // Verify action buttons are immediately suppressed in history mode
+    expect(screen.queryByText('Acknowledge Task')).toBeNull();
+    expect(screen.queryByText('Take Proof Photo')).toBeNull();
+
+    // Verify clean loading indicator is displayed while submission is loading
+    expect(screen.getByText('Loading completion evidence & photos...')).toBeTruthy();
+
+    // Now resolve the fetch with completed submission
+    await act(async () => {
+      resolveTaskFetch!({
+        ...initialMockTask,
+        status: 'completed',
+        completedAt: new Date('2026-08-15T09:00:00Z'),
+        completedBy: 'user-tech-1',
+        beforePhotoUrl: 'https://storage.example.com/before.jpg',
+        afterPhotoUrl: 'https://storage.example.com/after.jpg',
+        remarks: 'Replaced diaphragm valve',
+      });
+    });
+
+    // Verify completion evidence appears and action buttons remain absent
+    await waitFor(() => {
+      expect(screen.getByText('Completion Photos')).toBeTruthy();
+      expect(screen.getByText(/Replaced diaphragm valve/)).toBeTruthy();
+      expect(screen.queryByText('Acknowledge Task')).toBeNull();
+      expect(screen.queryByText('Take Proof Photo')).toBeNull();
+      expect(screen.queryByText('Loading completion evidence & photos...')).toBeNull();
+    });
+  });
 });

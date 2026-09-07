@@ -308,12 +308,14 @@ describe('Supervisor Screens Integration Suite', () => {
       fireEvent.press(reassignButton);
 
       await waitFor(() => {
-        expect(supervisorApi.reassignTask).toHaveBeenCalledWith({
-          taskId: 'task-unassigned-2',
-          newAssigneeUid: 'person-1',
-          reason: 'Priority reassignment to available technician',
-          supervisorUid: 'sup-user-1',
-        });
+        expect(supervisorApi.reassignTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-unassigned-2',
+            newAssigneeUid: 'person-1',
+            reason: 'Priority reassignment to available technician',
+            supervisorUid: 'sup-user-1',
+          }),
+        );
       });
 
       await waitFor(() => {

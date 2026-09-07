@@ -2,6 +2,8 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { TaskExecutionModal } from '../../components/TaskExecutionModal';
+import { AuthContext } from '../../contexts/AuthContext';
+import { EMPTY_CHECKLIST } from '../../lib/tasks';
 import type { Task } from '../../types';
 
 jest.mock('../../hooks/useAuth', () => ({
@@ -219,5 +221,107 @@ describe('TaskExecutionModal', () => {
       expect(getByText('Additional Area Photos (0/3)')).toBeTruthy();
       expect(queryByText('Stall 1')).toBeNull();
     });
+  });
+
+  it('opens clean slate at Step 1 for multi-assignee task without borrowing teammate photos', async () => {
+    const multiAssigneeTask: Task = {
+      ...mockTask,
+      assignedToIds: ['tech-1', 'tech-2'],
+      beforePhotoUrl: 'https://storage.example.com/tech-1-before.jpg',
+      afterPhotoUrl: 'https://storage.example.com/tech-1-after.jpg',
+      submissions: {
+        'tech-1': {
+          technicianUid: 'tech-1',
+          technicianName: 'Tech 1',
+          beforePhotoUrl: 'https://storage.example.com/tech-1-before.jpg',
+          afterPhotoUrl: 'https://storage.example.com/tech-1-after.jpg',
+          checklist: { ...EMPTY_CHECKLIST },
+          remarks: 'Done by tech 1',
+          completedAt: new Date(),
+          biometricVerified: true,
+        },
+      },
+    };
+
+    const { getByText, queryByText } = render(
+      <PaperProvider>
+        <AuthContext.Provider
+          value={{
+            user: {
+              uid: 'tech-2',
+              name: 'Tech 2',
+              email: 'tech2@test.com',
+              role: 'maintenance',
+            },
+            role: 'maintenance',
+            loading: false,
+            logout: jest.fn(),
+          }}
+        >
+          <TaskExecutionModal
+            visible={true}
+            task={multiAssigneeTask}
+            onDismiss={jest.fn()}
+          />
+        </AuthContext.Provider>
+      </PaperProvider>,
+    );
+
+    expect(getByText('Step 1 of 3 • Proof Photo')).toBeTruthy();
+    expect(getByText('Capture Initial Condition')).toBeTruthy();
+    expect(getByText('Take Proof Photo')).toBeTruthy();
+    expect(queryByText('SDCA F-TGS 203 Checklist')).toBeNull();
+    expect(queryByText('Submission Summary')).toBeNull();
+  });
+
+  it('starts at Step 1 for recheck mode if user has no prior before photo', () => {
+    const flaggedTeamTask: Task = {
+      ...mockTask,
+      assignedToIds: ['tech-1', 'tech-2'],
+      status: 'flagged',
+      inspectionStatus: 'flagged',
+      flagReason: 'Missed soap dispenser cleaning',
+      beforePhotoUrl: 'https://storage.example.com/tech-1-before.jpg',
+      submissions: {
+        'tech-1': {
+          technicianUid: 'tech-1',
+          technicianName: 'Tech 1',
+          beforePhotoUrl: 'https://storage.example.com/tech-1-before.jpg',
+          afterPhotoUrl: 'https://storage.example.com/tech-1-after.jpg',
+          checklist: { ...EMPTY_CHECKLIST },
+          completedAt: new Date(),
+        },
+      },
+    };
+
+    const { getByText, queryByText } = render(
+      <PaperProvider>
+        <AuthContext.Provider
+          value={{
+            user: {
+              uid: 'tech-2',
+              name: 'Tech 2',
+              email: 'tech2@test.com',
+              role: 'maintenance',
+            },
+            role: 'maintenance',
+            loading: false,
+            logout: jest.fn(),
+          }}
+        >
+          <TaskExecutionModal
+            visible={true}
+            task={flaggedTeamTask}
+            onDismiss={jest.fn()}
+          />
+        </AuthContext.Provider>
+      </PaperProvider>,
+    );
+
+    // Because tech-2 has no personal before photo, modal must start at Step 1 to avoid submission deadlock
+    expect(getByText('Step 1 of 3 • Before Photo')).toBeTruthy();
+    expect(getByText('Capture Initial Condition')).toBeTruthy();
+    expect(getByText('Take Proof Photo')).toBeTruthy();
+    expect(queryByText('SDCA F-TGS 203 Checklist')).toBeNull();
   });
 });

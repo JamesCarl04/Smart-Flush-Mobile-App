@@ -77,9 +77,17 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
   const [actionInFlight, setActionInFlight] = useState(false);
 
+  const isTeam = Boolean(activeTask && activeTask.assignedToIds && activeTask.assignedToIds.length > 1);
+  const isUserAcknowledged = Boolean(
+    activeTask && (
+      (user?.uid && activeTask.acknowledgedBy?.[user.uid]) ||
+      (!isTeam && (activeTask.status === 'acknowledged' || activeTask.status === 'rechecking'))
+    )
+  );
+
   const handleAction = async (): Promise<void> => {
     if (!activeTask) return;
-    if (activeTask.status !== 'acknowledged' && activeTask.status !== 'rechecking') {
+    if (!isUserAcknowledged && activeTask.status !== 'rechecking') {
       setActionInFlight(true);
       try {
         await acknowledgeTask(activeTask.id);
@@ -227,7 +235,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
             {/* Direct Action Button */}
             <KlirButton
               title={
-                activeTask.status === 'acknowledged' || activeTask.status === 'rechecking'
+                isUserAcknowledged || activeTask.status === 'rechecking'
                   ? 'Resume Task & Open Camera'
                   : 'Acknowledge & Start Task'
               }
@@ -235,7 +243,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
               loading={actionInFlight}
               disabled={actionInFlight}
               icon={
-                activeTask.status === 'acknowledged' || activeTask.status === 'rechecking'
+                isUserAcknowledged || activeTask.status === 'rechecking'
                   ? 'camera-outline'
                   : 'clipboard-check-outline'
               }

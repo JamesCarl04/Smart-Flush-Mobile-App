@@ -19,6 +19,8 @@ function TestTasksConsumer(): React.JSX.Element {
   const {
     tasks,
     inboxTasks,
+    activeTasks,
+    activeTasksCount,
     historyTasks,
     pendingCount,
     loading,
@@ -33,6 +35,7 @@ function TestTasksConsumer(): React.JSX.Element {
       <Text testID="error-message">{errorMessage ?? 'NO_ERROR'}</Text>
       <Text testID="tasks-count">{tasks.length}</Text>
       <Text testID="inbox-count">{inboxTasks.length}</Text>
+      <Text testID="active-count">{activeTasksCount}</Text>
       <Text testID="history-count">{historyTasks.length}</Text>
       <Text testID="pending-count">{pendingCount}</Text>
       <View testID="inbox-task-ids">
@@ -379,5 +382,89 @@ describe('TasksContext Integration', () => {
     expect(screen.getByTestId('tasks-count').props.children).toBe(0);
     expect(screen.getByTestId('loading').props.children).toBe('IDLE');
     expect(taskApi.fetchTasks).not.toHaveBeenCalled();
+  });
+
+  it('isolates activeTasks count for team tasks: only technicians who personally acknowledged have active tasks', async () => {
+    const teamTask: Task = {
+      id: 'team-task-1',
+      deviceId: 'dev-team',
+      type: 'maintenance',
+      component: 'flush_valve',
+      location: '1F Restroom',
+      floor: '1F',
+      building: 'GB3',
+      shift: '1st',
+      triggerType: 'hardware_failure',
+      message: 'Urgent team task',
+      assignedTo: null,
+      assignedToIds: ['user-tech-1', 'user-tech-2'],
+      status: 'acknowledged',
+      acknowledgedAt: new Date('2026-08-15T02:00:00Z'),
+      acknowledgedBy: {
+        'user-tech-1': new Date('2026-08-15T02:00:00Z'),
+      },
+      createdAt: new Date('2026-08-15T01:00:00Z'),
+      createdBy: 'system',
+    };
+
+    // 1. When logged in as user-tech-2 (who has NOT acknowledged):
+    (useAuthHook.useAuth as jest.Mock).mockReturnValue({
+      user: {
+        uid: 'user-tech-2',
+        email: 'tech2@smartflush.com',
+        role: 'maintenance',
+        name: 'Jordan Technician',
+      },
+      role: 'maintenance',
+      loading: false,
+      logout: jest.fn(),
+    });
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([teamTask]);
+
+    const { unmount } = render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // Tech 2 sees it in inbox, but active count is 0 because Tech 2 has not acknowledged!
+    expect(screen.getByTestId('inbox-count').props.children).toBe(1);
+    expect(screen.getByTestId('active-count').props.children).toBe(0);
+
+    unmount();
+
+    // 2. When logged in as user-tech-1 (who HAS acknowledged):
+    (useAuthHook.useAuth as jest.Mock).mockReturnValue({
+      user: {
+        uid: 'user-tech-1',
+        email: 'tech1@smartflush.com',
+        role: 'maintenance',
+        name: 'Alex Technician',
+      },
+      role: 'maintenance',
+      loading: false,
+      logout: jest.fn(),
+    });
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // Tech 1 sees it in active tasks!
+    expect(screen.getByTestId('active-count').props.children).toBe(1);
   });
 });
