@@ -1330,7 +1330,23 @@ export function AssigneeAvatarCluster({
           ? [task.assignedTo]
           : []),
       ]),
-    );
+    ).sort((a, b) => {
+      if (a === b) return 0;
+      if (currentUserId && a === currentUserId) return -1;
+      if (currentUserId && b === currentUserId) return 1;
+
+      const assigned = assignedIds;
+      const indexA = assigned.indexOf(a);
+      const indexB = assigned.indexOf(b);
+
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+
+      return a.localeCompare(b);
+    });
     const responderCount = responderUids.length;
     const isSelfAck = currentUserId
       ? Boolean(
@@ -1441,7 +1457,24 @@ export function AssigneeAvatarCluster({
   }
 
   // Multi-assignee or standard assigned task
-  const targetIds = allWorkerIds.length > 0 ? allWorkerIds : assignedIds;
+  const rawTargetIds = allWorkerIds.length > 0 ? allWorkerIds : assignedIds;
+  const targetIds = [...rawTargetIds].sort((a, b) => {
+    if (a === b) return 0;
+    if (currentUserId && a === currentUserId) return -1;
+    if (currentUserId && b === currentUserId) return 1;
+
+    const assigned = assignedIds;
+    const indexA = assigned.indexOf(a);
+    const indexB = assigned.indexOf(b);
+
+    if (indexA !== -1 && indexB !== -1) {
+      return indexA - indexB;
+    }
+    if (indexA !== -1) return -1;
+    if (indexB !== -1) return 1;
+
+    return a.localeCompare(b);
+  });
   if (targetIds.length === 0) return null;
 
   const isTeam =

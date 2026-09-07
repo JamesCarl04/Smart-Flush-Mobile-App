@@ -97,20 +97,30 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const normalizedQuery = searchQuery.trim().toLowerCase();
 
-    return historyTasks.filter((task) => {
-      const completedAt = task.completedAt ?? task.createdAt;
-      const matchesRange =
-        selectedRange === 'all' ||
-        (selectedRange === 'today' && completedAt >= startOfToday) ||
-        (selectedRange === 'week' && completedAt >= sevenDaysAgo);
-      const matchesSearch =
-        !normalizedQuery ||
-        getRestroomLabel(task).toLowerCase().includes(normalizedQuery) ||
-        task.deviceId.toLowerCase().includes(normalizedQuery) ||
-        task.message.toLowerCase().includes(normalizedQuery);
+    return historyTasks
+      .filter((task) => {
+        const completedAt = task.completedAt ?? task.createdAt;
+        const matchesRange =
+          selectedRange === 'all' ||
+          (selectedRange === 'today' && completedAt >= startOfToday) ||
+          (selectedRange === 'week' && completedAt >= sevenDaysAgo);
+        const matchesSearch =
+          !normalizedQuery ||
+          getRestroomLabel(task).toLowerCase().includes(normalizedQuery) ||
+          task.deviceId.toLowerCase().includes(normalizedQuery) ||
+          task.message.toLowerCase().includes(normalizedQuery);
 
-      return matchesRange && matchesSearch;
-    });
+        return matchesRange && matchesSearch;
+      })
+      .sort((a, b) => {
+        const aTime = a.completedAt?.getTime() ?? a.createdAt.getTime();
+        const bTime = b.completedAt?.getTime() ?? b.createdAt.getTime();
+        return (
+          bTime - aTime ||
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          b.id.localeCompare(a.id)
+        );
+      });
   }, [historyTasks, searchQuery, selectedRange]);
 
   const completedCount = visibleHistory.length;

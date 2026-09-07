@@ -8,6 +8,7 @@ import {
   parseSubmissions,
   parseTaskDocument,
   parseTimestampMap,
+  toDate,
 } from './tasks';
 import type { Task, TaskChecklist, TaskStatus } from '../types';
 
@@ -72,13 +73,6 @@ interface TaskApiData {
   recheckedAt?: unknown;
 }
 
-function millisToDate(value: unknown): Date | null {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return null;
-  }
-
-  return new Date(value);
-}
 
 function stringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim() : null;
@@ -151,7 +145,7 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     return null;
   }
 
-  const createdAt = millisToDate(data.createdAt);
+  const createdAt = toDate(data.createdAt);
   if (!createdAt) {
     return null;
   }
@@ -173,10 +167,10 @@ function parseTaskApiData(data: TaskApiData): Task | null {
         )
       : undefined;
 
-  const completedAt = millisToDate(data.completedAt);
+  const completedAt = toDate(data.completedAt);
   const completedBy = extractUserUid(data.completedBy);
   const assignedTo = extractAssignedTo(data);
-  const acknowledgedAt = millisToDate(data.acknowledgedAt);
+  const acknowledgedAt = toDate(data.acknowledgedAt);
   const acknowledgedBy = parseTimestampMap(rawObj.acknowledgedBy);
   const completedByMap = parseTimestampMap(data.completedBy);
   const submissions = parseSubmissions(data.submissions);
@@ -187,9 +181,9 @@ function parseTaskApiData(data: TaskApiData): Task | null {
   }
 
   let status: TaskStatus = 'unassigned';
-  if (rawStatus === 'flagged') {
+  if (rawStatus === 'flagged' || data.inspectionStatus === 'flagged') {
     status = 'flagged';
-  } else if (rawStatus === 'rechecking') {
+  } else if (rawStatus === 'rechecking' || data.inspectionStatus === 'rechecking') {
     status = 'rechecking';
   } else if (rawStatus === 'reassignment_needed') {
     status = 'reassignment_needed';
@@ -272,11 +266,11 @@ function parseTaskApiData(data: TaskApiData): Task | null {
         ? rawObj.assignmentSource
         : undefined,
     requiresSupervisorAssignment: rawObj.requiresSupervisorAssignment === true,
-    autoAssignmentEligibleAt: millisToDate(rawObj.autoAssignmentEligibleAt),
+    autoAssignmentEligibleAt: toDate(rawObj.autoAssignmentEligibleAt),
     cycleCountAtTrigger: numberOrNull(rawObj.cycleCountAtTrigger),
     status,
     createdAt,
-    assignedAt: millisToDate(data.assignedAt),
+    assignedAt: toDate(data.assignedAt),
     acknowledgedAt,
     completedAt,
     responseTime: numberOrNull(data.responseTime),
@@ -285,9 +279,9 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     checklist: parseChecklist(data.checklist),
     remarks: typeof data.remarks === 'string' ? data.remarks : '',
     beforePhotoUrl: stringOrNull(data.beforePhotoUrl),
-    beforePhotoCapturedAt: millisToDate(data.beforePhotoCapturedAt),
+    beforePhotoCapturedAt: toDate(data.beforePhotoCapturedAt),
     afterPhotoUrl: stringOrNull(data.afterPhotoUrl),
-    afterPhotoCapturedAt: millisToDate(data.afterPhotoCapturedAt),
+    afterPhotoCapturedAt: toDate(data.afterPhotoCapturedAt),
     additionalPhotos: parseAreaPhotos(data.additionalPhotos),
     submissions: parseSubmissions(data.submissions),
     biometricVerified: data.biometricVerified === true,
@@ -306,14 +300,14 @@ function parseTaskApiData(data: TaskApiData): Task | null {
         : undefined,
     inspectedBy: stringOrNull(data.inspectedBy),
     inspectedByName: stringOrNull(data.inspectedByName),
-    inspectedAt: millisToDate(data.inspectedAt),
+    inspectedAt: toDate(data.inspectedAt),
     flagReason: stringOrNull(data.flagReason),
     flagPhotoUrls: Array.isArray(data.flagPhotoUrls)
       ? data.flagPhotoUrls.filter((url): url is string => typeof url === 'string')
       : undefined,
     recheckCount: numberOrNull(data.recheckCount) ?? 0,
     recheckedBy: stringOrNull(data.recheckedBy),
-    recheckedAt: millisToDate(data.recheckedAt),
+    recheckedAt: toDate(data.recheckedAt),
   };
 }
 

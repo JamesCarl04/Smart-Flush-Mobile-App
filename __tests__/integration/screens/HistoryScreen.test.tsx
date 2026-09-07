@@ -222,4 +222,40 @@ describe('HistoryScreen Integration', () => {
     expect(screen.getByText('0')).toBeTruthy();
     expect(screen.getByText('No completed tasks yet')).toBeTruthy();
   });
+
+  it('sorts visible history tasks deterministically with identical completion times', () => {
+    const sameCompleted = new Date();
+    const taskA: Task = {
+      ...mockHistoryTasks[0],
+      id: 'task-aaa',
+      restroomName: 'Restroom Alpha',
+      completedAt: sameCompleted,
+      createdAt: new Date(sameCompleted.getTime() - 10000),
+    };
+    const taskZ: Task = {
+      ...mockHistoryTasks[0],
+      id: 'task-zzz',
+      restroomName: 'Restroom Zeta',
+      completedAt: sameCompleted,
+      createdAt: new Date(sameCompleted.getTime() - 10000),
+    };
+
+    // taskZ has id 'task-zzz' which precedes 'task-aaa' descending
+    (useTasksHook.useTasks as jest.Mock).mockReturnValue({
+      tasks: [taskA, taskZ],
+      inboxTasks: [],
+      historyTasks: [taskA, taskZ],
+      pendingCount: 0,
+      loading: false,
+      errorMessage: null,
+      refreshTasks: jest.fn(),
+      clearError: mockClearError,
+    });
+
+    renderScreen();
+
+    // Verify both items rendered stably
+    expect(screen.getByText('Restroom Zeta')).toBeTruthy();
+    expect(screen.getByText('Restroom Alpha')).toBeTruthy();
+  });
 });

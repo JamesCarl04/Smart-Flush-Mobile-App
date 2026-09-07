@@ -15,7 +15,12 @@ import {
   fetchSupervisorTasks,
   type MaintenancePerson,
 } from '../lib/supervisor-api';
-import { parseTaskDocument } from '../lib/tasks';
+import {
+  parseSubmissions,
+  parseTaskDocument,
+  parseTimestampMap,
+  toDate,
+} from '../lib/tasks';
 import type { Task } from '../types';
 
 export interface SupervisorContextValue {
@@ -31,18 +36,30 @@ const SUPERVISOR_TASKS_CACHE_KEY = '@klir:supervisor_tasks';
 const SUPERVISOR_PEOPLE_CACHE_KEY = '@klir:supervisor_people';
 
 function hydrateCachedTask(raw: any): Task {
+  const isFlagged = raw.inspectionStatus === 'flagged' || raw.status === 'flagged';
+  const isRechecking = raw.inspectionStatus === 'rechecking' || raw.status === 'rechecking';
+  const resolvedStatus = isFlagged ? 'flagged' : isRechecking ? 'rechecking' : raw.status;
+
   return {
     ...raw,
-    createdAt: new Date(raw.createdAt),
-    assignedAt: raw.assignedAt ? new Date(raw.assignedAt) : null,
-    acknowledgedAt: raw.acknowledgedAt ? new Date(raw.acknowledgedAt) : null,
-    completedAt: raw.completedAt ? new Date(raw.completedAt) : null,
-    beforePhotoCapturedAt: raw.beforePhotoCapturedAt
-      ? new Date(raw.beforePhotoCapturedAt)
-      : null,
-    afterPhotoCapturedAt: raw.afterPhotoCapturedAt
-      ? new Date(raw.afterPhotoCapturedAt)
-      : null,
+    status: resolvedStatus,
+    createdAt: toDate(raw.createdAt) ?? new Date(0),
+    assignedAt: toDate(raw.assignedAt),
+    acknowledgedAt: toDate(raw.acknowledgedAt),
+    completedAt: toDate(raw.completedAt),
+    beforePhotoCapturedAt: toDate(raw.beforePhotoCapturedAt),
+    afterPhotoCapturedAt: toDate(raw.afterPhotoCapturedAt),
+    inspectedAt: toDate(raw.inspectedAt),
+    recheckedAt: toDate(raw.recheckedAt),
+    flaggedAt: toDate(raw.flaggedAt),
+    autoAssignmentEligibleAt: toDate(raw.autoAssignmentEligibleAt),
+    submissions: parseSubmissions(raw.submissions),
+    acknowledgedBy: parseTimestampMap(raw.acknowledgedBy),
+    completedByMap: parseTimestampMap(raw.completedByMap ?? raw.completedBy),
+    completedBy:
+      typeof raw.completedBy === 'string' && raw.completedBy.trim()
+        ? raw.completedBy.trim()
+        : null,
   };
 }
 

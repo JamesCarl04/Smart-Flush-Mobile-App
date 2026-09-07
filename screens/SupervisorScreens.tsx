@@ -70,6 +70,7 @@ import {
   getTaskDisplayStatus,
   isBroadcastTask,
   parseTaskDocument,
+  toDate,
 } from '../lib/tasks';
 import type { AreaPhoto, SupervisorStackParamList, Task } from '../types';
 
@@ -90,19 +91,38 @@ type ReportsProps = NativeStackScreenProps<
   'SupervisorReports'
 >;
 
-function formatDate(date?: Date | null): string {
-  return date
-    ? new Intl.DateTimeFormat('en-PH', {
+function formatDate(date?: Date | string | number | null): string {
+  const parsed = toDate(date);
+  if (!parsed) {
+    return 'Not recorded';
+  }
+  try {
+    return new Intl.DateTimeFormat('en-PH', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    }).format(parsed);
+  } catch {
+    try {
+      return new Intl.DateTimeFormat('en', {
         month: 'short',
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
-      }).format(date)
-    : 'Not recorded';
+      }).format(parsed);
+    } catch {
+      try {
+        return parsed.toLocaleDateString();
+      } catch {
+        return 'Not recorded';
+      }
+    }
+  }
 }
 
 function formatDuration(seconds?: number | null): string {
-  if (!seconds || seconds <= 0) {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
     return 'N/A';
   }
 
@@ -124,10 +144,11 @@ function formatDuration(seconds?: number | null): string {
   return `${remainder} sec`;
 }
 
-function formatRelativeTime(date?: Date | null): string {
-  if (!date) return 'Recently';
+function formatRelativeTime(date?: Date | string | number | null): string {
+  const parsed = toDate(date);
+  if (!parsed) return 'Recently';
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = now.getTime() - parsed.getTime();
   const diffMins = Math.max(0, Math.floor(diffMs / (1000 * 60)));
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
@@ -562,7 +583,7 @@ export function SupervisorDashboardScreen({
 }
 
 function getAssigneeName(
-  assignedTo: string | null | undefined,
+  assignedTo: unknown,
   people: MaintenancePerson[],
   task?: Task | null,
 ): string {
@@ -575,27 +596,64 @@ function getAssigneeName(
       : 'All Team (Broadcast)';
   }
 
-  const resolvePersonName = (idOrEmail: string): string => {
+  const resolvePersonName = (idOrEmail: unknown): string => {
+    if (typeof idOrEmail !== 'string' || !idOrEmail.trim()) {
+      return 'Unassigned';
+    }
+    const cleanId = idOrEmail.trim();
+
+    // Prefer technician names from task.submissions when available
+    if (task?.submissions?.[cleanId]?.technicianName) {
+      const clean = cleanPersonName(task.submissions[cleanId].technicianName);
+      if (clean) return clean;
+    }
+
     const person = people.find(
       (p) =>
-        p.id === idOrEmail ||
-        p.email?.toLowerCase() === idOrEmail.toLowerCase(),
+        p.id === cleanId ||
+        (typeof p.email === 'string' &&
+          p.email.trim().length > 0 &&
+          p.email.trim().toLowerCase() === cleanId.toLowerCase()),
     );
-    return person ? cleanPersonName(person.displayName) : idOrEmail;
+    if (person) {
+      const clean = cleanPersonName(person.displayName);
+      if (clean) return clean;
+    }
+    return cleanId;
   };
 
   const validIds = task?.assignedToIds?.filter(
-    (id) => Boolean(id) && id !== 'unassigned',
+    (id) => typeof id === 'string' && Boolean(id.trim()) && id !== 'unassigned',
   );
 
   if (validIds && validIds.length > 0) {
-    const names = validIds.map(resolvePersonName);
+    const names = validIds.map((id) => resolvePersonName(id));
     if (names.length === 1) return names[0];
     if (names.length === 2) return `${names[0]}, ${names[1]}`;
     return `${names[0]}, ${names[1]} +${names.length - 2} others`;
   }
 
-  if (!assignedTo || assignedTo === 'unassigned') {
+  // If no valid assignedToIds, check task submissions
+  if (task?.submissions && Object.keys(task.submissions).length > 0) {
+    const subNames = Object.values(task.submissions)
+      .map((s) => cleanPersonName(s.technicianName))
+      .filter((n) => Boolean(n));
+    if (subNames.length === 1) return subNames[0];
+    if (subNames.length === 2) return `${subNames[0]}, ${subNames[1]}`;
+    if (subNames.length > 2) return `${subNames[0]}, ${subNames[1]} +${subNames.length - 2} others`;
+  }
+
+  // If no valid assignedToIds and no submissions, check completedByMap
+  if (task?.completedByMap && Object.keys(task.completedByMap).length > 0) {
+    const compNames = Object.keys(task.completedByMap)
+      .map((uid) => resolvePersonName(uid))
+      .filter((n) => Boolean(n));
+    if (compNames.length === 1) return compNames[0];
+    if (compNames.length === 2) return `${compNames[0]}, ${compNames[1]}`;
+    if (compNames.length > 2) return `${compNames[0]}, ${compNames[1]} +${compNames.length - 2} others`;
+  }
+
+  if (typeof assignedTo !== 'string' || !assignedTo.trim() || assignedTo === 'unassigned') {
     return 'Unassigned';
   }
   return resolvePersonName(assignedTo);
@@ -1288,9 +1346,11 @@ export function CompletedReviewsScreen({
           Boolean(task.completedAt),
       )
       .sort((a, b) => {
-        const timeA = (a.completedAt ?? a.createdAt).getTime();
-        const timeB = (b.completedAt ?? b.createdAt).getTime();
-        return timeB - timeA;
+        const timeA = (toDate(a.completedAt) ?? toDate(a.createdAt) ?? new Date(0)).getTime();
+        const timeB = (toDate(b.completedAt) ?? toDate(b.createdAt) ?? new Date(0)).getTime();
+        const diff = timeB - timeA;
+        if (diff !== 0) return diff;
+        return (b.id || '').localeCompare(a.id || '');
       });
   }, [tasks]);
 
@@ -1377,7 +1437,7 @@ export function CompletedReviewsScreen({
                 </Text>
 
                 <Text variant="bodySmall" style={styles.taskAssigneeText}>
-                  Completed by: {getAssigneeName(item.completedBy ?? item.assignedTo, people, item)}
+                  Completed by: {getAssigneeName(typeof item.completedBy === 'string' ? item.completedBy : item.assignedTo, people, item)}
                 </Text>
 
                 {item.beforePhotoUrl && item.afterPhotoUrl ? (
@@ -1450,7 +1510,11 @@ export function CompletedReviewDetailScreen({
     return Object.keys(task.submissions);
   }, [task]);
 
-  const [selectedTechUid, setSelectedTechUid] = useState<string | null>(null);
+  const [selectedTechUid, setSelectedTechUid] = useState<string | null>(() => {
+    if (!task?.submissions) return null;
+    const uids = Object.keys(task.submissions).sort();
+    return uids.length > 0 ? uids[0] : null;
+  });
 
   useEffect(() => {
     if (
@@ -1516,32 +1580,36 @@ export function CompletedReviewDetailScreen({
   const displayBiometric =
     activeSubmission?.biometricVerified ?? task.biometricVerified;
 
+  const compAt = toDate(task.completedAt);
+  const ackAt = toDate(task.acknowledgedAt);
+  const creatAt = toDate(task.createdAt);
+
   const computedWorkDuration =
     activeSubmission?.workDuration ??
     task.workDuration ??
-    (task.completedAt && task.acknowledgedAt
+    (compAt && ackAt
       ? Math.max(
           0,
           Math.round(
-            (task.completedAt.getTime() - task.acknowledgedAt.getTime()) / 1000,
+            (compAt.getTime() - ackAt.getTime()) / 1000,
           ),
         )
-      : task.completedAt && task.createdAt
+      : compAt && creatAt
         ? Math.max(
             0,
             Math.round(
-              (task.completedAt.getTime() - task.createdAt.getTime()) / 1000,
+              (compAt.getTime() - creatAt.getTime()) / 1000,
             ),
           )
         : null);
 
   const computedResponseTime =
     task.responseTime ??
-    (task.acknowledgedAt && task.createdAt
+    (ackAt && creatAt
       ? Math.max(
           0,
           Math.round(
-            (task.acknowledgedAt.getTime() - task.createdAt.getTime()) / 1000,
+            (ackAt.getTime() - creatAt.getTime()) / 1000,
           ),
         )
       : null);
@@ -1895,9 +1963,14 @@ export function CompletedReviewDetailScreen({
               </Text>
               <Text style={styles.metricText}>
                 Completed by:{' '}
-                {activeSubmission
-                  ? activeSubmission.technicianName
-                  : (task.completedBy ?? getAssigneeName(task.assignedTo, people, task))}
+                {activeSubmission?.technicianName ||
+                  getAssigneeName(
+                    typeof task.completedBy === 'string'
+                      ? task.completedBy
+                      : task.assignedTo,
+                    people,
+                    task,
+                  )}
               </Text>
             </View>
 
@@ -1953,10 +2026,8 @@ export function CompletedReviewDetailScreen({
               </View>
             ) : null}
 
-            {/* Dual QA Action Buttons — only shown when pending review */}
-            {task.inspectionStatus !== 'approved' &&
-            task.inspectionStatus !== 'flagged' &&
-            task.status !== 'flagged' ? (
+            {/* QA Action Buttons */}
+            {task.inspectionStatus !== 'approved' ? (
               <View style={styles.qaActionRow}>
                 <Button
                   mode="contained"
@@ -1980,12 +2051,14 @@ export function CompletedReviewDetailScreen({
                   labelStyle={styles.actionButtonLabel}
                   disabled={approving || submittingFlag}
                   onPress={() => {
-                    setReason('Requires re-inspection');
+                    setReason(task.flagReason || 'Requires re-inspection');
                     setFlagPhotos([]);
                     setVisible(true);
                   }}
                 >
-                  Flag for Re-inspection
+                  {task.inspectionStatus === 'flagged' || task.status === 'flagged'
+                    ? 'Update Flag Reason'
+                    : 'Flag for Re-inspection'}
                 </Button>
               </View>
             ) : null}
@@ -2110,7 +2183,15 @@ export function SupervisorReportsScreen({
   const isCompactWidth = windowWidth < 420;
 
   const completedTasks = useMemo(() => {
-    return tasks.filter((t) => t.status === 'completed');
+    return tasks.filter(
+      (t) =>
+        t.status === 'completed' ||
+        t.status === 'flagged' ||
+        t.status === 'rechecking' ||
+        t.inspectionStatus === 'approved' ||
+        t.inspectionStatus === 'flagged' ||
+        Boolean(t.completedAt),
+    );
   }, [tasks]);
 
   const filteredTasks = useMemo(() => {
@@ -2129,7 +2210,7 @@ export function SupervisorReportsScreen({
     const startOfYear = new Date(now.getFullYear(), 0, 1);
 
     return completedTasks.filter((t) => {
-      const taskDate = t.completedAt ?? t.createdAt;
+      const taskDate = toDate(t.completedAt) ?? toDate(t.createdAt) ?? new Date(0);
       switch (timeframe) {
         case 'today':
           return taskDate >= startOfToday;

@@ -162,6 +162,26 @@ export async function forceRegisterForPushNotificationsAsync(): Promise<FcmRegis
   return registerForPushNotificationsAsync();
 }
 
+export async function unregisterPushNotificationsAsync(): Promise<void> {
+  try {
+    await apiFetch<never>('/api/tasks/unregister-token', {
+      method: 'POST',
+    });
+  } catch (error) {
+    console.warn('[notifications] Failed to unregister token on backend:', error);
+  }
+
+  try {
+    if (typeof messaging().deleteToken === 'function') {
+      await messaging().deleteToken();
+    }
+  } catch (error) {
+    console.warn('[notifications] Failed to delete local FCM token:', error);
+  }
+
+  await AsyncStorage.removeItem(FCM_TOKEN_STORAGE_KEY);
+}
+
 export function requiresAndroidNotificationPermission(): boolean {
   return hasAndroidPostNotificationRuntimePermission();
 }

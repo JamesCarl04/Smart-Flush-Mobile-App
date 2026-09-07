@@ -136,6 +136,7 @@ export interface Task {
   inspectedAt?: Date | null;
   flagReason?: string | null;
   flagPhotoUrls?: string[];
+  flaggedAt?: Date | null;
   recheckCount?: number;
   recheckedBy?: string | null;
   recheckedAt?: Date | null;

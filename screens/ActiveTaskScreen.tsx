@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -23,22 +23,24 @@ import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
-import { getTaskDisplayStatus } from '../lib/tasks';
 import type { Task, TaskStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<TaskStackParamList, 'ActiveTask'>;
 
-function formatDate(date: Date | null | undefined): string {
-  if (!date) {
-    return 'Not available';
-  }
+function getTaskDisplayStatus(task: Task): string {
+  if (task.status === 'rechecking') return 'RECHECK IN PROGRESS';
+  if (task.status === 'acknowledged') return 'IN PROGRESS';
+  return 'ASSIGNED';
+}
 
-  return new Intl.DateTimeFormat('en-PH', {
+function formatDate(date: Date | null | undefined): string {
+  if (!date) return 'N/A';
+  return new Intl.DateTimeFormat('en-US', {
     month: 'short',
     day: 'numeric',
-    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    hour12: true,
   }).format(date);
 }
 
@@ -57,21 +59,51 @@ function EmptyTaskPanel(): React.JSX.Element {
 
 export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { activeTasks, loading, refreshTasks } = useTasks();
+  const { tasks, activeTasks, loading, refreshTasks } = useTasks();
   const routeTaskId = route.params?.taskId;
-  const [selectedTaskIdState, setSelectedTaskIdState] = useState<string | null>(null);
+  const [selectedTaskIdState, setSelectedTaskIdState] = useState<string | null>(routeTaskId ?? null);
+  const [prevRouteTaskId, setPrevRouteTaskId] = useState<string | undefined>(routeTaskId);
+
+  if (routeTaskId !== prevRouteTaskId) {
+    setPrevRouteTaskId(routeTaskId);
+    setSelectedTaskIdState(routeTaskId ?? null);
+  }
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (route.params?.taskId) {
+        setSelectedTaskIdState(route.params.taskId);
+      }
+    });
+    return unsubscribe;
+  }, [navigation, route.params?.taskId]);
 
   const activeTask = useMemo(() => {
-    if (selectedTaskIdState) {
-      const match = activeTasks.find((task) => task.id === selectedTaskIdState);
+    const targetTaskId = selectedTaskIdState || routeTaskId;
+    if (targetTaskId) {
+      const match = activeTasks.find((task) => task.id === targetTaskId);
       if (match) return match;
-    }
-    if (routeTaskId) {
-      const match = activeTasks.find((task) => task.id === routeTaskId);
-      if (match) return match;
+
+      const fallbackMatch = tasks.find((task) => {
+        if (task.id !== targetTaskId) return false;
+        if (task.status === 'completed') return false;
+        if (user?.uid && task.submissions && Boolean(task.submissions[user.uid])) return false;
+        if (user?.uid && task.completedByMap && Boolean(task.completedByMap[user.uid])) return false;
+        if (user?.uid && task.completedBy === user.uid) return false;
+        if (
+          user?.uid &&
+          task.completedBy &&
+          typeof task.completedBy === 'object' &&
+          Boolean((task.completedBy as Record<string, any>)[user.uid])
+        ) {
+          return false;
+        }
+        return true;
+      });
+      if (fallbackMatch) return fallbackMatch;
     }
     return activeTasks[0] ?? null;
-  }, [activeTasks, routeTaskId, selectedTaskIdState]);
+  }, [activeTasks, routeTaskId, selectedTaskIdState, tasks, user?.uid]);
 
   const [executionModalVisible, setExecutionModalVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
@@ -105,7 +137,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
     }
   };
 
-  if (loading && activeTasks.length === 0) {
+  if (loading && activeTasks.length === 0 && !activeTask) {
     return <TaskDetailSkeleton />;
   }
 

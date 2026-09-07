@@ -7,7 +7,7 @@ import * as FirebaseAuth from '@react-native-firebase/auth';
 import { AuthProvider } from '../../contexts/AuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { auth } from '../../lib/firebase';
-import { mockAuthModule } from '../../jest.setup';
+import { mockAuthModule, mockMessagingModule } from '../../jest.setup';
 
 function TestAuthConsumer(): React.JSX.Element {
   const { user, role, loading, logout } = useAuth();
@@ -283,6 +283,44 @@ describe('AuthContext Integration', () => {
 
     fireEvent.press(screen.getByTestId('logout-button'));
 
-    expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
+    await waitFor(() => {
+      expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
+    });
+    expect(mockMessagingModule.deleteToken).toHaveBeenCalled();
+  });
+
+  it('signs out of Firebase Auth even if unregisterPushNotificationsAsync encounters an error', async () => {
+    const mockFirebaseUser = {
+      uid: 'maint-user-error',
+      email: 'tech-error@smartflush.com',
+      displayName: 'Tech Error',
+      getIdToken: jest.fn().mockResolvedValue('token-maint'),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation((_auth, callback) => {
+      callback(mockFirebaseUser);
+      return jest.fn();
+    });
+
+    global.fetch = jest.fn().mockRejectedValue(new Error('Network offline during logout'));
+    mockMessagingModule.deleteToken.mockRejectedValueOnce(new Error('FCM unregister failed'));
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    fireEvent.press(screen.getByTestId('logout-button'));
+
+    await waitFor(() => {
+      expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
+    });
   });
 });

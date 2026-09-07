@@ -11,7 +11,7 @@ import type {
   TaskTriggerType,
 } from '../types';
 
-type FirestoreDateValue = Date | Timestamp | null | undefined;
+type FirestoreDateValue = unknown;
 
 type TaskDocumentShape = {
   deviceId?: unknown;
@@ -88,12 +88,23 @@ function stringArray(value: unknown): string[] {
 }
 
 export function parseTimestampMap(value: unknown): Record<string, Date> {
-  if (!value || typeof value !== 'object') {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return {};
   }
   const result: Record<string, Date> = {};
+  if (value instanceof Map) {
+    for (const [key, raw] of value.entries()) {
+      if (typeof key === 'string') {
+        const parsedDate = toDate(raw);
+        if (parsedDate) {
+          result[key] = parsedDate;
+        }
+      }
+    }
+    return result;
+  }
   for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
-    const parsedDate = toDate(raw as FirestoreDateValue);
+    const parsedDate = toDate(raw);
     if (parsedDate) {
       result[key] = parsedDate;
     }
@@ -168,13 +179,13 @@ export function parseReassignmentHistory(value: unknown): ReassignmentEvent[] {
   return events;
 }
 
-function toDate(value: unknown): Date | null {
-  if (!value) {
+export function toDate(value: unknown): Date | null {
+  if (value === null || value === undefined) {
     return null;
   }
 
   if (value instanceof Date) {
-    return value;
+    return !Number.isNaN(value.getTime()) ? value : null;
   }
 
   if (value instanceof Timestamp) {
@@ -183,12 +194,111 @@ function toDate(value: unknown): Date | null {
 
   if (
     typeof value === 'object' &&
-    value !== null &&
-    'toDate' in value &&
-    typeof value.toDate === 'function'
+    Object.prototype.toString.call(value) === '[object Date]' &&
+    'getTime' in (value as Record<string, unknown>)
   ) {
-    const date = value.toDate();
-    return date instanceof Date && !Number.isNaN(date.getTime()) ? date : null;
+    const time = (value as Date).getTime();
+    return !Number.isNaN(time) ? (value as Date) : null;
+  }
+
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      return null;
+    }
+    const millis = value >= 1e9 && value < 1e11 ? Math.round(value * 1000) : value;
+    const date = new Date(millis);
+    return !Number.isNaN(date.getTime()) ? date : null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
+      const num = Number(trimmed);
+      if (Number.isFinite(num)) {
+        const millis = num >= 1e9 && num < 1e11 ? Math.round(num * 1000) : num;
+        const date = new Date(millis);
+        return !Number.isNaN(date.getTime()) ? date : null;
+      }
+    }
+    const date = new Date(trimmed);
+    return !Number.isNaN(date.getTime()) ? date : null;
+  }
+
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+
+    if ('toDate' in record && typeof record.toDate === 'function') {
+      try {
+        const res = (record.toDate as () => unknown)();
+        if (res instanceof Date && !Number.isNaN(res.getTime())) {
+          return res;
+        }
+        if (
+          res &&
+          typeof res === 'object' &&
+          Object.prototype.toString.call(res) === '[object Date]'
+        ) {
+          const time = (res as Date).getTime();
+          return !Number.isNaN(time) ? (res as Date) : null;
+        }
+      } catch {
+        // ignore and fall through
+      }
+    }
+
+    if ('toMillis' in record && typeof record.toMillis === 'function') {
+      try {
+        const millis = (record.toMillis as () => unknown)();
+        if (typeof millis === 'number' && Number.isFinite(millis)) {
+          const validMillis = millis >= 1e9 && millis < 1e11 ? Math.round(millis * 1000) : millis;
+          const date = new Date(validMillis);
+          if (!Number.isNaN(date.getTime())) {
+            return date;
+          }
+        }
+      } catch {
+        // ignore and fall through
+      }
+    }
+
+    const rawSec =
+      'seconds' in record && record.seconds !== null && record.seconds !== undefined
+        ? record.seconds
+        : '_seconds' in record && record._seconds !== null && record._seconds !== undefined
+          ? record._seconds
+          : null;
+
+    if (rawSec !== null) {
+      const sec =
+        typeof rawSec === 'number'
+          ? rawSec
+          : typeof rawSec === 'string' && rawSec.trim()
+            ? Number(rawSec)
+            : NaN;
+
+      if (Number.isFinite(sec)) {
+        const rawNano =
+          'nanoseconds' in record && record.nanoseconds !== null && record.nanoseconds !== undefined
+            ? record.nanoseconds
+            : '_nanoseconds' in record && record._nanoseconds !== null && record._nanoseconds !== undefined
+              ? record._nanoseconds
+              : 0;
+
+        const nano =
+          typeof rawNano === 'number'
+            ? rawNano
+            : typeof rawNano === 'string' && rawNano.trim()
+              ? Number(rawNano)
+              : 0;
+
+        const validNano = Number.isFinite(nano) ? nano : 0;
+        const date = new Date(sec * 1000 + Math.floor(validNano / 1e6));
+        return !Number.isNaN(date.getTime()) ? date : null;
+      }
+    }
   }
 
   return null;
@@ -557,9 +667,9 @@ export function parseTaskDocument(
       : undefined;
 
   let status: TaskStatus = 'unassigned';
-  if (rawStatus === 'flagged') {
+  if (rawStatus === 'flagged' || data.inspectionStatus === 'flagged') {
     status = 'flagged';
-  } else if (rawStatus === 'rechecking') {
+  } else if (rawStatus === 'rechecking' || data.inspectionStatus === 'rechecking') {
     status = 'rechecking';
   } else if (rawStatus === 'reassignment_needed') {
     status = 'reassignment_needed';

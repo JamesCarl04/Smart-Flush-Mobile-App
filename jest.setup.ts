@@ -74,6 +74,7 @@ export const mockMessagingModule = {
   requestPermission: jest.fn().mockResolvedValue(1),
   registerDeviceForRemoteMessages: jest.fn().mockResolvedValue(undefined),
   getToken: jest.fn().mockResolvedValue('mock-fcm-token'),
+  deleteToken: jest.fn().mockResolvedValue(undefined),
   onTokenRefresh: jest.fn(() => jest.fn()),
   onMessage: jest.fn(() => jest.fn()),
   onNotificationOpenedApp: jest.fn(() => jest.fn()),

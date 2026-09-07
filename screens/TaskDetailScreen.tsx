@@ -784,20 +784,37 @@ export function TaskDetailScreen({
 
   const submissionsList = useMemo(() => {
     if (!task?.submissions) return [];
-    return Object.values(task.submissions);
+    return Object.values(task.submissions).sort((a, b) => {
+      const getMillis = (dateVal: unknown): number => {
+        if (dateVal instanceof Date) {
+          const t = dateVal.getTime();
+          return Number.isFinite(t) ? t : 0;
+        }
+        if (dateVal) {
+          const t = new Date(dateVal as string | number).getTime();
+          return Number.isFinite(t) ? t : 0;
+        }
+        return 0;
+      };
+      const aTime = getMillis(a.completedAt);
+      const bTime = getMillis(b.completedAt);
+      return (
+        aTime - bTime ||
+        (a.technicianUid || '').localeCompare(b.technicianUid || '')
+      );
+    });
   }, [task?.submissions]);
 
   const displayedSubmission = useMemo(() => {
-    if (!task?.submissions) return null;
+    if (!task?.submissions || submissionsList.length === 0) return null;
     if (selectedSubmissionUid && task.submissions[selectedSubmissionUid]) {
       return task.submissions[selectedSubmissionUid];
     }
     if (currentUid && task.submissions[currentUid]) {
       return task.submissions[currentUid];
     }
-    const firstUid = Object.keys(task.submissions)[0];
-    return firstUid ? task.submissions[firstUid] : null;
-  }, [task?.submissions, selectedSubmissionUid, currentUid]);
+    return submissionsList[0] ?? null;
+  }, [task?.submissions, selectedSubmissionUid, currentUid, submissionsList]);
 
   const displayedBeforePhoto = displayedSubmission?.beforePhotoUrl ?? task?.beforePhotoUrl;
   const displayedBeforeCapturedAt = displayedSubmission?.completedAt ?? task?.beforePhotoCapturedAt;

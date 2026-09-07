@@ -346,4 +346,64 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
       expect(screen.queryByText('Loading completion evidence & photos...')).toBeNull();
     });
   });
+
+  it('renders multi-technician submission selector deterministically and defaults to current user submission', async () => {
+    const multiSubTask: Task = {
+      ...initialMockTask,
+      id: 'task-multi-sub',
+      status: 'completed',
+      completedAt: new Date('2026-08-15T09:30:00Z'),
+      submissions: {
+        'tech-other-2': {
+          technicianUid: 'tech-other-2',
+          technicianName: 'Bob Technician',
+          checklist: {} as any,
+          remarks: 'Completed work by Bob',
+          completedAt: new Date('2026-08-15T09:10:00Z'),
+          biometricVerified: true,
+        },
+        'user-tech-1': {
+          technicianUid: 'user-tech-1',
+          technicianName: 'Alex Technician',
+          checklist: {} as any,
+          remarks: 'Completed work by Alex (Current User)',
+          completedAt: new Date('2026-08-15T09:20:00Z'),
+          biometricVerified: true,
+        },
+      },
+    };
+
+    (taskApi.fetchTask as jest.Mock).mockResolvedValue(multiSubTask);
+
+    const historyRoute = {
+      key: 'TaskDetail',
+      name: 'TaskDetail',
+      params: { taskId: 'task-multi-sub', fromHistory: true },
+    };
+
+    render(
+      <PaperProvider>
+        <TaskDetailScreen navigation={mockNavigation} route={historyRoute as any} />
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Technician Submission:')).toBeTruthy();
+    });
+
+    // Both submission pills rendered
+    expect(screen.getAllByText('Alex Technician').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Bob Technician').length).toBeGreaterThanOrEqual(1);
+
+    // Default displayed submission should be current user's (Alex)
+    expect(screen.getByText(/Completed work by Alex \(Current User\)/)).toBeTruthy();
+
+    // Tap on Bob's submission pill to switch
+    const bobElements = screen.getAllByText('Bob Technician');
+    fireEvent.press(bobElements[bobElements.length - 1]);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Completed work by Bob/)).toBeTruthy();
+    });
+  });
 });

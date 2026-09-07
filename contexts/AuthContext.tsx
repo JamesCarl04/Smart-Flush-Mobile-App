@@ -4,6 +4,7 @@ import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
 
 import { getRequiredConfigValue, runtimeConfig } from '../lib/config';
 import { auth } from '../lib/firebase';
+import { unregisterPushNotificationsAsync } from '../lib/notifications';
 import type { AuthContextValue, AuthUser, UserRole } from '../types';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -133,6 +134,11 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   }, []);
 
   const logout = async (): Promise<void> => {
+    try {
+      await unregisterPushNotificationsAsync();
+    } catch (error) {
+      console.warn('[AuthContext] Error unregistering push notifications on logout:', error);
+    }
     await signOut(auth);
   };
 

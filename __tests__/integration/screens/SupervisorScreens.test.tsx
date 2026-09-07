@@ -152,6 +152,75 @@ const mockSupervisorTasks: Task[] = [
     },
     createdBy: 'system',
   },
+  {
+    id: 'task-completed-multi-4',
+    deviceId: 'dev-toilet-4',
+    restroomName: '4F Male Restroom',
+    type: 'maintenance',
+    component: 'toilet_bowl',
+    location: '4F Male Restroom',
+    floor: '4F',
+    building: 'GB3 Building',
+    shift: '1st',
+    triggerType: 'maintenance',
+    message: 'Team overhaul on toilet bowl flush mechanics',
+    assignedTo: null,
+    assignedToIds: ['person-1', 'person-2'],
+    status: 'completed',
+    completedBy: null,
+    completedByMap: {
+      'person-1': new Date(),
+      'person-2': new Date(),
+    },
+    submissions: {
+      'person-1': {
+        technicianUid: 'person-1',
+        technicianName: 'Juan Cruz',
+        checklist: {
+          removeCeilingDust: 'done',
+          removeWallDust: 'done',
+          removeLightBulbDust: 'done',
+          cleanWindows: 'na',
+          wipeDownFixtures: 'na',
+          disinfectTouchedSurfaces: 'done',
+          sweepAndDryFloors: 'done',
+          emptyTrashBins: 'done',
+          arrangeFixtures: 'na',
+          disinfectUVLights: 'done',
+        },
+        beforePhotoUrl: 'https://storage.example.com/p1_before.jpg',
+        afterPhotoUrl: 'https://storage.example.com/p1_after.jpg',
+        workDuration: 240,
+        completedAt: new Date(),
+      },
+      'person-2': {
+        technicianUid: 'person-2',
+        technicianName: 'Maria Santos',
+        checklist: {
+          removeCeilingDust: 'done',
+          removeWallDust: 'done',
+          removeLightBulbDust: 'done',
+          cleanWindows: 'na',
+          wipeDownFixtures: 'na',
+          disinfectTouchedSurfaces: 'done',
+          sweepAndDryFloors: 'done',
+          emptyTrashBins: 'done',
+          arrangeFixtures: 'na',
+          disinfectUVLights: 'done',
+        },
+        beforePhotoUrl: 'https://storage.example.com/p2_before.jpg',
+        afterPhotoUrl: 'https://storage.example.com/p2_after.jpg',
+        workDuration: 260,
+        completedAt: new Date(),
+      },
+    },
+    createdAt: new Date(),
+    completedAt: new Date(),
+    responseTime: 60,
+    workDuration: 260,
+    totalTime: 320,
+    createdBy: 'system',
+  },
 ];
 
 describe('Supervisor Screens Integration Suite', () => {
@@ -402,6 +471,42 @@ describe('Supervisor Screens Integration Suite', () => {
 
       await waitFor(() => {
         expect(mockNavigation.goBack).toHaveBeenCalled();
+      });
+    });
+
+    it('renders multi-technician completed review without crash and allows tab switching and approval', async () => {
+      (supervisorApi.approveTask as jest.Mock).mockResolvedValue(undefined);
+
+      renderWithSupervisor(
+        <CompletedReviewDetailScreen
+          navigation={mockNavigation}
+          route={{
+            key: 'CompletedReviewDetail-multi',
+            name: 'CompletedReviewDetail',
+            params: { taskId: 'task-completed-multi-4' },
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Team Submissions (2):')).toBeTruthy();
+      });
+
+      // Both technicians should be visible in tab pills
+      expect(screen.getAllByText('Juan Cruz').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Maria Santos').length).toBeGreaterThan(0);
+
+      // Click on Maria Santos to switch technician tab
+      fireEvent.press(screen.getByLabelText('View submission from Maria Santos'));
+
+      // Approve task
+      fireEvent.press(screen.getByText('Approve Task'));
+      await waitFor(() => {
+        expect(supervisorApi.approveTask).toHaveBeenCalledWith({
+          taskId: 'task-completed-multi-4',
+          supervisorUid: 'sup-user-1',
+          supervisorName: 'Supervisor Chief',
+        });
       });
     });
   });

@@ -12,6 +12,8 @@ import {
   isTaskStatus,
   isTaskTriggerType,
   parseTaskDocument,
+  parseTimestampMap,
+  toDate,
 } from '../../lib/tasks';
 import type { TaskChecklist, TaskStatus, TaskTriggerType } from '../../types';
 
@@ -469,6 +471,376 @@ describe('tasks utility', () => {
         reassignedByUid: 'sup-1',
         reassignedByName: 'Supervisor Lead Sarah',
       });
+    });
+
+    it('correctly parses acknowledgedBy and completedBy when provided with millisecond timestamps from API', () => {
+      const task = parseTaskDocument('task-api-timestamps', {
+        ...baseValidDoc,
+        assignedToIds: ['tech-1', 'tech-2'],
+        status: 'assigned',
+        acknowledgedBy: {
+          'tech-1': 1725712345678,
+        },
+        completedBy: {
+          'tech-1': 1725712365678,
+        },
+      });
+
+      expect(task).not.toBeNull();
+      expect(task?.acknowledgedBy?.['tech-1']).toBeInstanceOf(Date);
+      expect(task?.acknowledgedBy?.['tech-1']?.getTime()).toBe(1725712345678);
+      expect(task?.completedByMap?.['tech-1']).toBeInstanceOf(Date);
+      expect(task?.completedByMap?.['tech-1']?.getTime()).toBe(1725712365678);
+      expect(task?.status).toBe('acknowledged');
+    });
+
+    it('parses status as flagged when inspectionStatus is flagged even if all assignees completed', () => {
+      const task = parseTaskDocument('task-flagged-multi', {
+        ...baseValidDoc,
+        status: 'completed',
+        inspectionStatus: 'flagged',
+        flagReason: 'Leak was not completely resolved',
+        assignedToIds: ['tech-1', 'tech-2'],
+        completedBy: {
+          'tech-1': 1725712365678,
+          'tech-2': 1725712375678,
+        },
+      });
+
+      expect(task).not.toBeNull();
+      expect(task?.status).toBe('flagged');
+      expect(task?.inspectionStatus).toBe('flagged');
+      expect(task?.flagReason).toBe('Leak was not completely resolved');
+    });
+  });
+
+  describe('toDate', () => {
+    it('returns the same Date for valid Date instances', () => {
+      const date = new Date('2026-09-07T12:00:00.000Z');
+      expect(toDate(date)).toBe(date);
+    });
+
+    it('returns null for invalid Date instances', () => {
+      expect(toDate(new Date('invalid'))).toBeNull();
+    });
+
+    it('converts Firestore Timestamp instances to Date', () => {
+      const date = new Date('2026-09-07T12:00:00.000Z');
+      const timestamp = Timestamp.fromDate(date);
+      expect(toDate(timestamp)).toEqual(date);
+    });
+
+    it('converts numeric millisecond timestamps to Date', () => {
+      const millis = 1725712345678;
+      const result = toDate(millis);
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getTime()).toBe(millis);
+    });
+
+    it('returns null for non-finite numbers', () => {
+      expect(toDate(NaN)).toBeNull();
+      expect(toDate(Infinity)).toBeNull();
+      expect(toDate(-Infinity)).toBeNull();
+    });
+
+    it('converts valid ISO date strings to Date', () => {
+      const isoStr = '2026-09-07T12:00:00.000Z';
+      const result = toDate(isoStr);
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.toISOString()).toBe(isoStr);
+    });
+
+    it('converts numeric strings (epoch millis) to Date', () => {
+      const millis = 1725712345678;
+      const result = toDate(String(millis));
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getTime()).toBe(millis);
+    });
+
+    it('returns null for empty or invalid strings', () => {
+      expect(toDate('')).toBeNull();
+      expect(toDate('   ')).toBeNull();
+      expect(toDate('not-a-valid-date')).toBeNull();
+    });
+
+    it('handles objects with toDate() method', () => {
+      const date = new Date('2026-09-07T12:00:00.000Z');
+      expect(toDate({ toDate: () => date })).toEqual(date);
+      expect(toDate({ toDate: () => new Date('invalid') })).toBeNull();
+      expect(toDate({ toDate: () => { throw new Error('fail'); } })).toBeNull();
+    });
+
+    it('handles objects with toMillis() method', () => {
+      const millis = 1725712345678;
+      const result = toDate({ toMillis: () => millis });
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getTime()).toBe(millis);
+      expect(toDate({ toMillis: () => NaN })).toBeNull();
+    });
+
+    it('handles serialized Firestore Timestamp objects with seconds and nanoseconds', () => {
+      const sec = 1725712345;
+      const nano = 500000000;
+      const expected = new Date(sec * 1000 + 500);
+      expect(toDate({ seconds: sec, nanoseconds: nano })).toEqual(expected);
+      expect(toDate({ _seconds: sec, _nanoseconds: nano })).toEqual(expected);
+      expect(toDate({ seconds: sec })).toEqual(new Date(sec * 1000));
+    });
+
+    it('converts numeric timestamps in seconds to Date (10-digit epoch)', () => {
+      const sec = 1725712345;
+      const result = toDate(sec);
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getTime()).toBe(sec * 1000);
+    });
+
+    it('converts decimal strings to Date', () => {
+      const result = toDate('1725712345.5');
+      expect(result).toBeInstanceOf(Date);
+      expect(result?.getTime()).toBe(1725712345500);
+    });
+
+    it('handles cross-realm Date-like objects', () => {
+      const date = new Date('2026-09-07T12:00:00.000Z');
+      const foreignDate = Object.create(Date.prototype);
+      Object.assign(foreignDate, { getTime: () => date.getTime() });
+      expect(toDate(foreignDate)?.getTime()).toBe(date.getTime());
+    });
+
+    it('handles serialized records with numeric string seconds and nanoseconds', () => {
+      const result = toDate({ seconds: '1725712345', nanoseconds: '500000000' });
+      expect(result).toEqual(new Date(1725712345500));
+    });
+
+    it('returns null for null, undefined, boolean, and empty objects', () => {
+      expect(toDate(null)).toBeNull();
+      expect(toDate(undefined)).toBeNull();
+      expect(toDate(true)).toBeNull();
+      expect(toDate(false)).toBeNull();
+      expect(toDate({})).toBeNull();
+      expect(toDate([])).toBeNull();
+    });
+  });
+
+  describe('parseTimestampMap', () => {
+    it('parses numeric epoch millisecond payloads as returned by the REST API', () => {
+      const input = {
+        'tech-user-1': 1725712345678,
+        'tech-user-2': 1725712355678,
+      };
+      const result = parseTimestampMap(input);
+      expect(result['tech-user-1']).toBeInstanceOf(Date);
+      expect(result['tech-user-1']?.getTime()).toBe(1725712345678);
+      expect(result['tech-user-2']).toBeInstanceOf(Date);
+      expect(result['tech-user-2']?.getTime()).toBe(1725712355678);
+    });
+
+    it('parses native ES6 Map instances', () => {
+      const map = new Map<string, unknown>([
+        ['tech-1', 1725712345678],
+        ['tech-2', '2026-09-07T12:00:00.000Z'],
+      ]);
+      const result = parseTimestampMap(map);
+      expect(result['tech-1']).toBeInstanceOf(Date);
+      expect(result['tech-1']?.getTime()).toBe(1725712345678);
+      expect(result['tech-2']).toBeInstanceOf(Date);
+      expect(result['tech-2']?.toISOString()).toBe('2026-09-07T12:00:00.000Z');
+    });
+
+    it('parses ISO date strings into Date objects', () => {
+      const input = {
+        'tech-user-1': '2026-09-07T12:00:00.000Z',
+      };
+      const result = parseTimestampMap(input);
+      expect(result['tech-user-1']).toBeInstanceOf(Date);
+      expect(result['tech-user-1']?.toISOString()).toBe('2026-09-07T12:00:00.000Z');
+    });
+
+    it('parses Firestore Timestamp and serialized records', () => {
+      const date = new Date('2026-09-07T12:00:00.000Z');
+      const input = {
+        fromTs: Timestamp.fromDate(date),
+        fromSerialized: { seconds: 1725712345, nanoseconds: 0 },
+      };
+      const result = parseTimestampMap(input);
+      expect(result.fromTs).toEqual(date);
+      expect(result.fromSerialized).toEqual(new Date(1725712345000));
+    });
+
+    it('ignores invalid values and gracefully handles non-object inputs', () => {
+      expect(parseTimestampMap(null)).toEqual({});
+      expect(parseTimestampMap(undefined)).toEqual({});
+      expect(parseTimestampMap('invalid')).toEqual({});
+      expect(parseTimestampMap(123)).toEqual({});
+      expect(parseTimestampMap([])).toEqual({});
+
+      const partial = {
+        valid: 1725712345678,
+        invalidStr: 'not-a-date',
+        emptyStr: '',
+        nullVal: null,
+        undefVal: undefined,
+        invalidNum: NaN,
+      };
+      const result = parseTimestampMap(partial);
+      expect(Object.keys(result)).toEqual(['valid']);
+      expect(result.valid.getTime()).toBe(1725712345678);
+    });
+  });
+
+  describe('deterministic task ordering tie-breakers', () => {
+    it('breaks ties using b.id.localeCompare(a.id) when createdAt timestamps are identical', () => {
+      const timestamp = new Date('2026-09-07T10:00:00.000Z');
+      const taskA = { id: 'task-aaa', createdAt: timestamp };
+      const taskB = { id: 'task-zzz', createdAt: timestamp };
+
+      const sorted = [taskA, taskB].sort(
+        (a, b) =>
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          b.id.localeCompare(a.id),
+      );
+
+      // 'task-zzz' comes before 'task-aaa' descending by id
+      expect(sorted.map((t) => t.id)).toEqual(['task-zzz', 'task-aaa']);
+    });
+
+    it('orders history tasks deterministically with 3-tier comparator', () => {
+      const completedSameTime = new Date('2026-09-07T12:00:00.000Z');
+      const createdEarly = new Date('2026-09-07T08:00:00.000Z');
+      const createdLate = new Date('2026-09-07T09:00:00.000Z');
+
+      const task1 = { id: 'task-1', completedAt: completedSameTime, createdAt: createdEarly };
+      const task2 = { id: 'task-2', completedAt: completedSameTime, createdAt: createdLate };
+      const task3 = { id: 'task-3', completedAt: completedSameTime, createdAt: createdLate };
+
+      const comparator = (a: any, b: any) => {
+        const aTime = a.completedAt?.getTime() ?? a.createdAt.getTime();
+        const bTime = b.completedAt?.getTime() ?? b.createdAt.getTime();
+        return (
+          bTime - aTime ||
+          b.createdAt.getTime() - a.createdAt.getTime() ||
+          b.id.localeCompare(a.id)
+        );
+      };
+
+      const sorted = [task1, task2, task3].sort(comparator);
+
+      // task2 and task3 have same completedAt and createdAt, so task3 precedes task2 (3 > 2), and both precede task1 (createdLate > createdEarly)
+      expect(sorted.map((t) => t.id)).toEqual(['task-3', 'task-2', 'task-1']);
+    });
+
+    it('orders submissions deterministically by completedAt ascending with technicianUid tie-breaker', () => {
+      const sameTime = new Date('2026-09-07T14:00:00.000Z');
+      const subA = { technicianUid: 'tech-a', completedAt: sameTime };
+      const subB = { technicianUid: 'tech-b', completedAt: sameTime };
+
+      const comparator = (a: any, b: any) => {
+        const aTime =
+          a.completedAt instanceof Date
+            ? a.completedAt.getTime()
+            : new Date(a.completedAt ?? 0).getTime();
+        const bTime =
+          b.completedAt instanceof Date
+            ? b.completedAt.getTime()
+            : new Date(b.completedAt ?? 0).getTime();
+        return (
+          aTime - bTime ||
+          (a.technicianUid || '').localeCompare(b.technicianUid || '')
+        );
+      };
+
+      const sorted = [subB, subA].sort(comparator);
+      expect(sorted.map((s) => s.technicianUid)).toEqual(['tech-a', 'tech-b']);
+    });
+
+    it('orders assignee avatar IDs deterministically: current user first, assigned order, then UID', () => {
+      const currentUserId = 'user-current';
+      const assignedToIds = ['user-assigned-1', 'user-assigned-2'];
+      const rawIds = ['user-other-z', 'user-assigned-2', 'user-current', 'user-other-a', 'user-assigned-1'];
+
+      const sorted = [...rawIds].sort((a, b) => {
+        if (currentUserId && a === currentUserId) return -1;
+        if (currentUserId && b === currentUserId) return 1;
+
+        const assigned = assignedToIds ?? [];
+        const indexA = assigned.indexOf(a);
+        const indexB = assigned.indexOf(b);
+
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+
+        return a.localeCompare(b);
+      });
+
+      expect(sorted).toEqual([
+        'user-current',
+        'user-assigned-1',
+        'user-assigned-2',
+        'user-other-a',
+        'user-other-z',
+      ]);
+    });
+
+    it('prioritizes single assignedTo before auxiliary contributors when assignedToIds is empty', () => {
+      const currentUserId = 'user-viewer';
+      const assignedIds = ['tech-9'];
+      const rawIds = ['tech-2', 'tech-9', 'tech-5'];
+
+      const sorted = [...rawIds].sort((a, b) => {
+        if (a === b) return 0;
+        if (currentUserId && a === currentUserId) return -1;
+        if (currentUserId && b === currentUserId) return 1;
+
+        const assigned = assignedIds;
+        const indexA = assigned.indexOf(a);
+        const indexB = assigned.indexOf(b);
+
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+
+        return a.localeCompare(b);
+      });
+
+      // tech-9 is the assigned tech, so it must precede tech-2 and tech-5 even though 'tech-2' < 'tech-9'
+      expect(sorted).toEqual(['tech-9', 'tech-2', 'tech-5']);
+    });
+
+    it('handles malformed and non-finite completedAt dates in submissionsList without NaN poisoning', () => {
+      const subs = [
+        { technicianUid: 'tech-z', completedAt: 'invalid-date-string' as any },
+        { technicianUid: 'tech-a', completedAt: new Date('2026-09-07T12:00:00.000Z') },
+        { technicianUid: 'tech-b', completedAt: null as any },
+      ];
+
+      const getMillis = (dateVal: unknown): number => {
+        if (dateVal instanceof Date) {
+          const t = dateVal.getTime();
+          return Number.isFinite(t) ? t : 0;
+        }
+        if (dateVal) {
+          const t = new Date(dateVal as string | number).getTime();
+          return Number.isFinite(t) ? t : 0;
+        }
+        return 0;
+      };
+
+      const sorted = [...subs].sort((a, b) => {
+        const aTime = getMillis(a.completedAt);
+        const bTime = getMillis(b.completedAt);
+        return (
+          aTime - bTime ||
+          (a.technicianUid || '').localeCompare(b.technicianUid || '')
+        );
+      });
+
+      // 0-timestamp items (tech-b and tech-z) sorted by technicianUid ('tech-b', 'tech-z'), followed by valid date ('tech-a')
+      expect(sorted.map((s) => s.technicianUid)).toEqual(['tech-b', 'tech-z', 'tech-a']);
     });
   });
 });

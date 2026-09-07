@@ -11,7 +11,15 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
 import { fetchTasks } from '../lib/task-api';
-import { isBroadcastTask, parseTaskDocument } from '../lib/tasks';
+import {
+  isBroadcastTask,
+  parseAreaPhotos,
+  parseReassignmentHistory,
+  parseSubmissions,
+  parseTaskDocument,
+  parseTimestampMap,
+  toDate,
+} from '../lib/tasks';
 import type { Task, TasksContextValue } from '../types';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
@@ -25,23 +33,33 @@ function deduplicateTasks(taskList: Task[]): Task[] {
     }
   }
   return Array.from(map.values()).sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+    (a, b) =>
+      b.createdAt.getTime() - a.createdAt.getTime() ||
+      b.id.localeCompare(a.id),
   );
 }
 
 function hydrateCachedTask(raw: any): Task {
   return {
     ...raw,
-    createdAt: new Date(raw.createdAt),
-    assignedAt: raw.assignedAt ? new Date(raw.assignedAt) : null,
-    acknowledgedAt: raw.acknowledgedAt ? new Date(raw.acknowledgedAt) : null,
-    completedAt: raw.completedAt ? new Date(raw.completedAt) : null,
-    beforePhotoCapturedAt: raw.beforePhotoCapturedAt
-      ? new Date(raw.beforePhotoCapturedAt)
-      : null,
-    afterPhotoCapturedAt: raw.afterPhotoCapturedAt
-      ? new Date(raw.afterPhotoCapturedAt)
-      : null,
+    createdAt: toDate(raw.createdAt) ?? new Date(),
+    assignedAt: toDate(raw.assignedAt),
+    acknowledgedAt: toDate(raw.acknowledgedAt),
+    completedAt: toDate(raw.completedAt),
+    autoAssignmentEligibleAt: toDate(raw.autoAssignmentEligibleAt),
+    inspectedAt: toDate(raw.inspectedAt),
+    recheckedAt: toDate(raw.recheckedAt),
+    beforePhotoCapturedAt: toDate(raw.beforePhotoCapturedAt),
+    afterPhotoCapturedAt: toDate(raw.afterPhotoCapturedAt),
+    acknowledgedBy: parseTimestampMap(raw.acknowledgedBy),
+    completedByMap: parseTimestampMap(raw.completedByMap ?? raw.completedBy),
+    completedBy:
+      typeof raw.completedBy === 'string' && raw.completedBy.trim()
+        ? raw.completedBy.trim()
+        : null,
+    submissions: parseSubmissions(raw.submissions),
+    additionalPhotos: parseAreaPhotos(raw.additionalPhotos),
+    reassignmentHistory: parseReassignmentHistory(raw.reassignmentHistory),
   };
 }
 
@@ -198,10 +216,15 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       task.status !== 'completed' &&
       !(
         role !== 'supervisor' &&
-        Boolean(user?.uid && (
-          (task.submissions && task.submissions[user.uid]) ||
-          (task.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[user.uid])
-        ))
+        Boolean(
+          user?.uid &&
+            ((task.submissions && task.submissions[user.uid]) ||
+              (task.completedByMap && task.completedByMap[user.uid]) ||
+              task.completedBy === user.uid ||
+              (task.completedBy &&
+                typeof task.completedBy === 'object' &&
+                (task.completedBy as Record<string, any>)[user.uid])),
+        )
       ) &&
       ((task.status === 'unassigned' &&
         (role === 'supervisor' || isBroadcastTask(task))) ||
@@ -222,6 +245,8 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     if (
       user?.uid &&
       ((task.submissions && Boolean(task.submissions[user.uid])) ||
+        (task.completedByMap && Boolean(task.completedByMap[user.uid])) ||
+        task.completedBy === user.uid ||
         (task.completedBy &&
           typeof task.completedBy === 'object' &&
           Boolean((task.completedBy as Record<string, any>)[user.uid])))
@@ -255,32 +280,43 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const activeTasksCount = activeTasks.length;
 
-  const historyTasks = tasks.filter((task) => {
-    const hasUserSubmitted = Boolean(
-      user?.uid && (
-        (task.submissions && task.submissions[user.uid]) ||
-        (task.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[user.uid]) ||
-        task.completedBy === user.uid
-      )
-    );
+  const historyTasks = tasks
+    .filter((task) => {
+      const hasUserSubmitted = Boolean(
+        user?.uid && (
+          (task.submissions && task.submissions[user.uid]) ||
+          (task.completedByMap && task.completedByMap[user.uid]) ||
+          (task.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[user.uid]) ||
+          task.completedBy === user.uid
+        )
+      );
 
-    const isCompleted = task.status === 'completed';
+      const isCompleted = task.status === 'completed';
 
-    if (!isCompleted && !hasUserSubmitted) {
-      return false;
-    }
+      if (!isCompleted && !hasUserSubmitted) {
+        return false;
+      }
 
-    return (
-      !task.completedBy ||
-      task.completedBy === user?.uid ||
-      task.assignedTo === user?.uid ||
-      task.assignedTo === user?.email ||
-      (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
-      (task.submissions && Boolean(task.submissions[user?.uid ?? ''])) ||
-      hasUserSubmitted ||
-      role === 'supervisor'
-    );
-  });
+      return (
+        !task.completedBy ||
+        task.completedBy === user?.uid ||
+        task.assignedTo === user?.uid ||
+        task.assignedTo === user?.email ||
+        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+        (task.submissions && Boolean(task.submissions[user?.uid ?? ''])) ||
+        hasUserSubmitted ||
+        role === 'supervisor'
+      );
+    })
+    .sort((a, b) => {
+      const aTime = a.completedAt?.getTime() ?? a.createdAt.getTime();
+      const bTime = b.completedAt?.getTime() ?? b.createdAt.getTime();
+      return (
+        bTime - aTime ||
+        b.createdAt.getTime() - a.createdAt.getTime() ||
+        b.id.localeCompare(a.id)
+      );
+    });
 
   const pendingCount = inboxTasks.filter(
     (task) =>
