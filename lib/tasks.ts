@@ -87,7 +87,7 @@ function stringArray(value: unknown): string[] {
   );
 }
 
-function parseTimestampMap(value: unknown): Record<string, Date> {
+export function parseTimestampMap(value: unknown): Record<string, Date> {
   if (!value || typeof value !== 'object') {
     return {};
   }
@@ -521,9 +521,10 @@ export function parseTaskDocument(
   }
 
   const assignedTo = typeof data.assignedTo === 'string' && data.assignedTo.trim() ? data.assignedTo.trim() : null;
+  const assignedToIds = stringArray(data.assignedToIds);
   let rawStatus = data.status;
   if (rawStatus === 'pending') {
-    rawStatus = assignedTo ? 'assigned' : 'unassigned';
+    rawStatus = (assignedTo || assignedToIds.length > 0) ? 'assigned' : 'unassigned';
   }
 
   if (!isTaskStatus(rawStatus)) {
@@ -544,7 +545,6 @@ export function parseTaskDocument(
   const acknowledgedBy = parseTimestampMap(data.acknowledgedBy);
   const completedByMap = parseTimestampMap(data.completedBy);
   const submissions = parseSubmissions(data.submissions);
-  const assignedToIds = stringArray(data.assignedToIds);
   const assignedToNames =
     typeof data.assignedToNames === 'object' && data.assignedToNames !== null
       ? Object.entries(data.assignedToNames as Record<string, unknown>).reduce<Record<string, string>>(
@@ -563,8 +563,6 @@ export function parseTaskDocument(
     status = 'rechecking';
   } else if (rawStatus === 'reassignment_needed') {
     status = 'reassignment_needed';
-  } else if (rawStatus === 'completed') {
-    status = 'completed';
   } else if (assignedToIds.length > 1) {
     // For team tasks with multiple assignees:
     // It is ONLY completed if ALL assigned technicians have submitted!
@@ -573,13 +571,20 @@ export function parseTaskDocument(
     );
     if (allSubmitted) {
       status = 'completed';
-    } else if (typeof rawStatus === 'string' && isTaskStatus(rawStatus)) {
-      status = rawStatus;
     } else {
-      status = 'acknowledged';
+      const anyAcknowledged =
+        Object.keys(acknowledgedBy).length > 0 ||
+        rawStatus === 'acknowledged';
+      status = anyAcknowledged
+        ? 'acknowledged'
+        : (typeof rawStatus === 'string' && isTaskStatus(rawStatus) && rawStatus !== 'completed'
+            ? rawStatus
+            : 'assigned');
     }
-  } else if (completedAt || completedBy || Object.keys(submissions).length > 0) {
+  } else if (rawStatus === 'completed' || completedAt || completedBy || Object.keys(submissions).length > 0) {
     status = 'completed';
+  } else if (Object.keys(acknowledgedBy).length > 0 || rawStatus === 'acknowledged') {
+    status = 'acknowledged';
   } else if (typeof rawStatus === 'string' && isTaskStatus(rawStatus)) {
     status = rawStatus;
   }

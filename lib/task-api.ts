@@ -7,6 +7,7 @@ import {
   parseAreaPhotos,
   parseSubmissions,
   parseTaskDocument,
+  parseTimestampMap,
 } from './tasks';
 import type { Task, TaskChecklist, TaskStatus } from '../types';
 
@@ -27,6 +28,8 @@ interface TaskApiData {
   status?: unknown;
   assignedTo?: unknown;
   assignedToIds?: unknown;
+  assignedToNames?: unknown;
+  acknowledgedBy?: unknown;
   isBroadcast?: unknown;
   assignmentType?: unknown;
   automationRuleId?: unknown;
@@ -153,14 +156,34 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     return null;
   }
 
+  const rawObj = data as Record<string, unknown>;
+  const assignedToIds: string[] = Array.isArray(rawObj.assignedToIds)
+    ? rawObj.assignedToIds
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter((item) => item.length > 0)
+    : [];
+  const assignedToNames =
+    typeof rawObj.assignedToNames === 'object' && rawObj.assignedToNames !== null
+      ? Object.entries(rawObj.assignedToNames as Record<string, unknown>).reduce<Record<string, string>>(
+          (acc, [k, v]) => {
+            if (typeof v === 'string' && v.trim()) acc[k] = v.trim();
+            return acc;
+          },
+          {},
+        )
+      : undefined;
+
   const completedAt = millisToDate(data.completedAt);
   const completedBy = extractUserUid(data.completedBy);
   const assignedTo = extractAssignedTo(data);
   const acknowledgedAt = millisToDate(data.acknowledgedAt);
+  const acknowledgedBy = parseTimestampMap(rawObj.acknowledgedBy);
+  const completedByMap = parseTimestampMap(data.completedBy);
+  const submissions = parseSubmissions(data.submissions);
 
   let rawStatus: unknown = data.status;
   if (rawStatus === 'pending') {
-    rawStatus = assignedTo ? 'assigned' : 'unassigned';
+    rawStatus = (assignedTo || assignedToIds.length > 0) ? 'assigned' : 'unassigned';
   }
 
   let status: TaskStatus = 'unassigned';
@@ -170,22 +193,30 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     status = 'rechecking';
   } else if (rawStatus === 'reassignment_needed') {
     status = 'reassignment_needed';
-  } else if (rawStatus === 'completed') {
+  } else if (assignedToIds.length > 1) {
+    const allSubmitted = assignedToIds.every(
+      (uid) => Boolean(submissions[uid] || completedByMap[uid]),
+    );
+    if (allSubmitted) {
+      status = 'completed';
+    } else {
+      const anyAcknowledged =
+        Boolean(acknowledgedAt) ||
+        Object.keys(acknowledgedBy).length > 0 ||
+        rawStatus === 'acknowledged';
+      status = anyAcknowledged
+        ? 'acknowledged'
+        : (typeof rawStatus === 'string' && isTaskStatus(rawStatus) && rawStatus !== 'completed'
+            ? rawStatus
+            : 'assigned');
+    }
+  } else if (rawStatus === 'completed' || completedAt || completedBy || Object.keys(submissions).length > 0) {
     status = 'completed';
-  } else if (completedAt || completedBy) {
-    status = 'completed';
-  } else if (acknowledgedAt) {
+  } else if (acknowledgedAt || Object.keys(acknowledgedBy).length > 0 || rawStatus === 'acknowledged') {
     status = 'acknowledged';
   } else if (isTaskStatus(rawStatus)) {
     status = rawStatus;
   }
-
-  const rawObj = data as Record<string, unknown>;
-  const assignedToIds: string[] = Array.isArray(rawObj.assignedToIds)
-    ? rawObj.assignedToIds
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter((item) => item.length > 0)
-    : [];
 
   return {
     id: data.id,
@@ -213,6 +244,8 @@ function parseTaskApiData(data: TaskApiData): Task | null {
     message: data.message,
     assignedTo,
     assignedToIds,
+    assignedToNames,
+    acknowledgedBy,
     isBroadcast:
       rawObj.isBroadcast === true ||
       rawObj.assignmentType === 'broadcast' ||

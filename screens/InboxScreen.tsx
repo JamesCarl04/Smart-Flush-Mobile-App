@@ -109,7 +109,11 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
   const activeTasksList = useMemo(() => {
     return inboxTasks.filter((task) => {
       // Tasks currently in progress by this technician
-      if (task.status === 'acknowledged' || task.status === 'rechecking') {
+      if (
+        task.status === 'acknowledged' ||
+        task.status === 'rechecking' ||
+        Boolean(user?.uid && task.acknowledgedBy?.[user.uid])
+      ) {
         return true;
       }
 

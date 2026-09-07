@@ -198,7 +198,10 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       task.status !== 'completed' &&
       !(
         role !== 'supervisor' &&
-        Boolean(user?.uid && task.submissions && task.submissions[user.uid])
+        Boolean(user?.uid && (
+          (task.submissions && task.submissions[user.uid]) ||
+          (task.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[user.uid])
+        ))
       ) &&
       ((task.status === 'unassigned' &&
         (role === 'supervisor' || isBroadcastTask(task))) ||
@@ -217,8 +220,13 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const activeTasks = inboxTasks.filter(
     (task) =>
-      !(user?.uid && task.submissions && Boolean(task.submissions[user.uid])) &&
-      (task.status === 'acknowledged' || task.status === 'rechecking') &&
+      !(user?.uid && (
+        (task.submissions && Boolean(task.submissions[user.uid])) ||
+        (task.completedBy && typeof task.completedBy === 'object' && Boolean((task.completedBy as Record<string, any>)[user.uid]))
+      )) &&
+      (task.status === 'acknowledged' ||
+        task.status === 'rechecking' ||
+        Boolean(user?.uid && task.acknowledgedBy && task.acknowledgedBy[user.uid])) &&
       (task.assignedTo === user?.uid ||
         task.assignedTo === user?.email ||
         (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
@@ -229,18 +237,32 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const activeTasksCount = activeTasks.length;
 
-  const historyTasks = tasks.filter(
-    (task) =>
-      (task.status === 'completed' ||
-        Boolean(task.completedAt) ||
-        Boolean(user?.uid && task.submissions && task.submissions[user.uid])) &&
-      (!task.completedBy ||
-        task.completedBy === user?.uid ||
-        task.assignedTo === user?.uid ||
-        task.assignedTo === user?.email ||
-        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
-        (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
-  );
+  const historyTasks = tasks.filter((task) => {
+    const hasUserSubmitted = Boolean(
+      user?.uid && (
+        (task.submissions && task.submissions[user.uid]) ||
+        (task.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[user.uid]) ||
+        task.completedBy === user.uid
+      )
+    );
+
+    const isCompleted = task.status === 'completed';
+
+    if (!isCompleted && !hasUserSubmitted) {
+      return false;
+    }
+
+    return (
+      !task.completedBy ||
+      task.completedBy === user?.uid ||
+      task.assignedTo === user?.uid ||
+      task.assignedTo === user?.email ||
+      (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+      (task.submissions && Boolean(task.submissions[user?.uid ?? ''])) ||
+      hasUserSubmitted ||
+      role === 'supervisor'
+    );
+  });
 
   const pendingCount = inboxTasks.filter(
     (task) =>
