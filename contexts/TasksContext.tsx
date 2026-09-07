@@ -196,6 +196,10 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   const inboxTasks = tasks.filter(
     (task) =>
       task.status !== 'completed' &&
+      !(
+        role !== 'supervisor' &&
+        Boolean(user?.uid && task.submissions && task.submissions[user.uid])
+      ) &&
       ((task.status === 'unassigned' &&
         (role === 'supervisor' || isBroadcastTask(task))) ||
         task.status === 'assigned' ||
@@ -213,6 +217,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const activeTasks = inboxTasks.filter(
     (task) =>
+      !(user?.uid && task.submissions && Boolean(task.submissions[user.uid])) &&
       (task.status === 'acknowledged' || task.status === 'rechecking') &&
       (task.assignedTo === user?.uid ||
         task.assignedTo === user?.email ||
@@ -226,7 +231,9 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const historyTasks = tasks.filter(
     (task) =>
-      (task.status === 'completed' || Boolean(task.completedAt)) &&
+      (task.status === 'completed' ||
+        Boolean(task.completedAt) ||
+        Boolean(user?.uid && task.submissions && task.submissions[user.uid])) &&
       (!task.completedBy ||
         task.completedBy === user?.uid ||
         task.assignedTo === user?.uid ||

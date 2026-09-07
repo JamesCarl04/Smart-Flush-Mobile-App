@@ -199,6 +199,27 @@ describe('Report Export System', () => {
       expect(lines[2]).toContain('task-flagged-02');
       expect(lines[2]).toContain('"Missed ceiling and UV light disinfection."');
     });
+
+    it('should include reassignment audit columns (count, reassigned by, reason) in CSV export', () => {
+      const reassignedTask: Task = {
+        ...sampleTasks[0],
+        id: 'task-reassigned-99',
+        reassignCount: 2,
+        reassignedByName: 'Supervisor Lead Sarah',
+        reassignReason: 'Technician reallocated to priority spill',
+      };
+
+      const csv = generateCSVContent({
+        timeframe: 'weekly',
+        timeframeLabel: 'This Week',
+        tasks: [reassignedTask],
+        people: [samplePerson],
+      });
+
+      const lines = csv.split('\n');
+      expect(lines[0]).toContain('Reassign Count,Reassigned By,Reassignment Reason');
+      expect(lines[1]).toContain(',2,"Supervisor Lead Sarah","Technician reallocated to priority spill",');
+    });
   });
 
   describe('exportReportPDF', () => {

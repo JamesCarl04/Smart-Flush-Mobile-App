@@ -933,6 +933,35 @@ const styles = StyleSheet.create({
     color: '#1D4ED8',
     marginLeft: 2,
   },
+  teamHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  teamHeaderText: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: KLIR_COLORS.primary,
+  },
+  avatarPillOverflow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    backgroundColor: '#F1F5F9',
+  },
+  avatarOverflowText: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#475569',
+  },
   avatarLabelAck: {
     color: '#1E40AF',
   },
@@ -1348,101 +1377,146 @@ export function AssigneeAvatarCluster({
 
   // Multi-assignee or standard assigned task
   const targetIds = allWorkerIds.length > 0 ? allWorkerIds : assignedIds;
+  if (targetIds.length === 0) return null;
+
+  const isTeam =
+    targetIds.length > 1 ||
+    task.assignmentType === 'team' ||
+    Boolean(task.assignedToIds && task.assignedToIds.length > 1);
+
+  const doneCount = targetIds.filter((uid) =>
+    Boolean(
+      task.submissions?.[uid] ||
+        task.completedByMap?.[uid] ||
+        (task.status === 'completed' &&
+          (task.completedBy === uid ||
+            (task.completedBy == null && task.assignedTo === uid))),
+    ),
+  ).length;
+
+  const visibleIds = !showNames && targetIds.length > 3 ? targetIds.slice(0, 3) : targetIds;
 
   return (
-    <View style={styles.avatarClusterRow}>
-      {targetIds.map((uid) => {
-        const { displayName } = resolveWorkerName(uid);
-        const initials = getInitials(
-          displayName === 'You' && currentUserName
-            ? currentUserName
-            : displayName,
-        );
+    <View style={{ gap: 4 }}>
+      {showNames && isTeam ? (
+        <View style={styles.teamHeaderRow}>
+          <MaterialCommunityIcons
+            name="account-group-outline"
+            size={14}
+            color={KLIR_COLORS.primary}
+          />
+          <Text style={styles.teamHeaderText}>
+            Team Assignment • {doneCount}/{targetIds.length} Done
+          </Text>
+        </View>
+      ) : null}
+      <View style={styles.avatarClusterRow}>
+        {visibleIds.map((uid) => {
+          const { displayName } = resolveWorkerName(uid);
+          const initials = getInitials(
+            displayName === 'You' && currentUserName
+              ? currentUserName
+              : displayName,
+          );
 
-        const hasAcknowledged = Boolean(
-          task.acknowledgedBy?.[uid] ||
-            (task.status === 'acknowledged' && task.assignedTo === uid) ||
-            task.completedByMap?.[uid] ||
-            task.submissions?.[uid],
-        );
+          const hasAcknowledged = Boolean(
+            task.acknowledgedBy?.[uid] ||
+              (task.status === 'acknowledged' && task.assignedTo === uid) ||
+              task.completedByMap?.[uid] ||
+              task.submissions?.[uid],
+          );
 
-        const hasSubmitted = Boolean(
-          task.submissions?.[uid] ||
-            task.completedByMap?.[uid] ||
-            (task.status === 'completed' &&
-              (task.completedBy === uid ||
-                (task.completedBy == null && task.assignedTo === uid))),
-        );
+          const hasSubmitted = Boolean(
+            task.submissions?.[uid] ||
+              task.completedByMap?.[uid] ||
+              (task.status === 'completed' &&
+                (task.completedBy === uid ||
+                  (task.completedBy == null && task.assignedTo === uid))),
+          );
 
-        const statusLabel = hasSubmitted
-          ? 'Submitted'
-          : hasAcknowledged
-            ? 'Acknowledged'
-            : 'Pending';
+          const statusLabel = hasSubmitted
+            ? 'Submitted'
+            : hasAcknowledged
+              ? 'Acknowledged'
+              : 'Pending';
 
-        return (
+          return (
+            <View
+              key={uid}
+              style={[
+                styles.avatarPill,
+                hasSubmitted
+                  ? styles.avatarPillSubmitted
+                  : hasAcknowledged
+                    ? styles.avatarPillAck
+                    : styles.avatarPillPending,
+              ]}
+              accessible={true}
+              accessibilityRole="summary"
+              accessibilityLabel={`${displayName}: ${statusLabel}`}
+            >
+              <View
+                style={[
+                  styles.avatarCircle,
+                  hasSubmitted
+                    ? styles.avatarCircleSubmitted
+                    : hasAcknowledged
+                      ? styles.avatarCircleAck
+                      : styles.avatarCirclePending,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.avatarText,
+                    hasSubmitted
+                      ? styles.avatarTextSubmitted
+                      : hasAcknowledged
+                        ? styles.avatarTextAck
+                        : styles.avatarTextPending,
+                  ]}
+                >
+                  {initials}
+                </Text>
+              </View>
+
+              {showNames && (
+                <Text
+                  style={[
+                    styles.avatarLabel,
+                    hasSubmitted
+                      ? styles.avatarLabelSubmitted
+                      : hasAcknowledged
+                        ? styles.avatarLabelAck
+                        : styles.avatarLabelPending,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {displayName}
+                </Text>
+              )}
+
+              {hasSubmitted ? (
+                <Text style={styles.statusDirectTextSubmitted}>Done</Text>
+              ) : hasAcknowledged ? (
+                <Text style={styles.statusDirectTextAck}>Active</Text>
+              ) : null}
+            </View>
+          );
+        })}
+
+        {!showNames && targetIds.length > 3 ? (
           <View
-            key={uid}
-            style={[
-              styles.avatarPill,
-              hasSubmitted
-                ? styles.avatarPillSubmitted
-                : hasAcknowledged
-                  ? styles.avatarPillAck
-                  : styles.avatarPillPending,
-            ]}
+            style={styles.avatarPillOverflow}
             accessible={true}
             accessibilityRole="summary"
-            accessibilityLabel={`${displayName}: ${statusLabel}`}
+            accessibilityLabel={`Plus ${targetIds.length - 3} more assigned technicians`}
           >
-            <View
-              style={[
-                styles.avatarCircle,
-                hasSubmitted
-                  ? styles.avatarCircleSubmitted
-                  : hasAcknowledged
-                    ? styles.avatarCircleAck
-                    : styles.avatarCirclePending,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.avatarText,
-                  hasSubmitted
-                    ? styles.avatarTextSubmitted
-                    : hasAcknowledged
-                      ? styles.avatarTextAck
-                      : styles.avatarTextPending,
-                ]}
-              >
-                {initials}
-              </Text>
-            </View>
-
-            {showNames && (
-              <Text
-                style={[
-                  styles.avatarLabel,
-                  hasSubmitted
-                    ? styles.avatarLabelSubmitted
-                    : hasAcknowledged
-                      ? styles.avatarLabelAck
-                      : styles.avatarLabelPending,
-                ]}
-                numberOfLines={1}
-              >
-                {displayName}
-              </Text>
-            )}
-
-            {hasSubmitted ? (
-              <Text style={styles.statusDirectTextSubmitted}>Done</Text>
-            ) : hasAcknowledged ? (
-              <Text style={styles.statusDirectTextAck}>Active</Text>
-            ) : null}
+            <Text style={styles.avatarOverflowText}>
+              +{targetIds.length - 3}
+            </Text>
           </View>
-        );
-      })}
+        ) : null}
+      </View>
     </View>
   );
 }

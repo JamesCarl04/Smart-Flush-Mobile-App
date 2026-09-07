@@ -381,6 +381,13 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
                 {item.offlineSynced ? (
                   <MetaPill icon="cloud-check-outline" label="Offline synced" />
                 ) : null}
+                {Boolean((item.reassignCount && item.reassignCount > 0) || item.reassignReason) ? (
+                  <View style={styles.reassignedBadge}>
+                    <Text style={styles.reassignedBadgeText}>
+                      🔄 Reassigned by {item.reassignedByName || 'Supervisor'}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               <View style={{ marginTop: 4 }}>
@@ -572,6 +579,24 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '800',
     color: '#15803D',
+  },
+  reassignedBadge: {
+    minHeight: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: KLIR_RADII.tag,
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  reassignedBadgeText: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#92400E',
   },
   titleBlock: {
     gap: 2,

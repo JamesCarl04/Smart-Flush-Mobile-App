@@ -67,12 +67,16 @@ export async function fetchSupervisorTasks(): Promise<Task[]> {
   return fetchTasks();
 }
 
-export async function reassignTask(input: {
+export interface ReassignTaskInput {
   taskId: string;
-  newAssigneeUid: string;
+  newAssigneeUid?: string;
+  newAssigneeUids?: string[];
   reason: string;
   supervisorUid: string;
-}): Promise<void> {
+  supervisorName?: string;
+}
+
+export async function reassignTask(input: ReassignTaskInput): Promise<void> {
   const response = await apiFetch<never>('/api/supervisor/reassign-task', {
     method: 'POST',
     body: JSON.stringify(input),

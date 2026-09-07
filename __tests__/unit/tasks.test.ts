@@ -439,5 +439,36 @@ describe('tasks utility', () => {
       expect(taskNan?.workDuration).toBeNull();
       expect(taskNan?.reassignCount).toBe(0);
     });
+
+    it('should parse reassignment fields and reassignmentHistory correctly', () => {
+      const now = new Date();
+      const task = parseTaskDocument('task-reassign', {
+        ...baseValidDoc,
+        reassignReason: 'Technician unavailable due to urgent callout',
+        reassignedByName: 'Supervisor Lead Sarah',
+        reassignmentHistory: [
+          {
+            reassignedAt: Timestamp.fromDate(now),
+            previousAssigneeUids: ['tech-1'],
+            newAssigneeUids: ['tech-2'],
+            reason: 'Technician unavailable due to urgent callout',
+            reassignedByUid: 'sup-1',
+            reassignedByName: 'Supervisor Lead Sarah',
+          },
+        ],
+      });
+
+      expect(task?.reassignReason).toBe('Technician unavailable due to urgent callout');
+      expect(task?.reassignedByName).toBe('Supervisor Lead Sarah');
+      expect(task?.reassignmentHistory).toHaveLength(1);
+      expect(task?.reassignmentHistory?.[0]).toEqual({
+        reassignedAt: now,
+        previousAssigneeUids: ['tech-1'],
+        newAssigneeUids: ['tech-2'],
+        reason: 'Technician unavailable due to urgent callout',
+        reassignedByUid: 'sup-1',
+        reassignedByName: 'Supervisor Lead Sarah',
+      });
+    });
   });
 });

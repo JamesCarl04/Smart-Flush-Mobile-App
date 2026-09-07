@@ -16,6 +16,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   Button,
   Card,
+  Checkbox,
   Chip,
   Dialog,
   Portal,
@@ -572,15 +573,31 @@ function getAssigneeName(
       ? `All Team (Broadcast • ${ackCount} Responded)`
       : 'All Team (Broadcast)';
   }
+
+  const resolvePersonName = (idOrEmail: string): string => {
+    const person = people.find(
+      (p) =>
+        p.id === idOrEmail ||
+        p.email?.toLowerCase() === idOrEmail.toLowerCase(),
+    );
+    return person ? cleanPersonName(person.displayName) : idOrEmail;
+  };
+
+  const validIds = task?.assignedToIds?.filter(
+    (id) => Boolean(id) && id !== 'unassigned',
+  );
+
+  if (validIds && validIds.length > 0) {
+    const names = validIds.map(resolvePersonName);
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]}, ${names[1]}`;
+    return `${names[0]}, ${names[1]} +${names.length - 2} others`;
+  }
+
   if (!assignedTo || assignedTo === 'unassigned') {
     return 'Unassigned';
   }
-  const person = people.find(
-    (p) =>
-      p.id === assignedTo ||
-      p.email?.toLowerCase() === assignedTo.toLowerCase(),
-  );
-  return person ? cleanPersonName(person.displayName) : assignedTo;
+  return resolvePersonName(assignedTo);
 }
 
 export function TeamAvailabilityScreen(): React.JSX.Element {
@@ -1046,24 +1063,46 @@ export function SupervisorTaskDetailScreen({
   const availablePeople = people.filter(
     (person) => getPersonOperationalStatus(person, tasks).status === 'available',
   );
-  const [assignee, setAssignee] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [reason, setReason] = useState('Manual reassignment');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  const toggleAssignee = (personId: string) => {
+    setSelectedAssignees((prev) =>
+      prev.includes(personId)
+        ? prev.filter((id) => id !== personId)
+        : [...prev, personId],
+    );
+  };
+
   const submit = async (): Promise<void> => {
-    if (!task || !assignee || !user) {
+    if (!task || selectedAssignees.length === 0 || !user) {
       return;
     }
 
     setSubmitting(true);
     try {
-      await reassignTask({
+      const payload: {
+        taskId: string;
+        newAssigneeUid: string;
+        newAssigneeUids?: string[];
+        reason: string;
+        supervisorUid: string;
+        supervisorName?: string;
+      } = {
         taskId: task.id,
-        newAssigneeUid: assignee,
+        newAssigneeUid: selectedAssignees[0],
         reason,
         supervisorUid: user.uid,
-      });
+      };
+      if (selectedAssignees.length > 1) {
+        payload.newAssigneeUids = selectedAssignees;
+        if (user.name) {
+          payload.supervisorName = user.name;
+        }
+      }
+      await reassignTask(payload);
       setMessage('Task reassigned.');
       await refresh();
     } catch (caught) {
@@ -1152,12 +1191,20 @@ export function SupervisorTaskDetailScreen({
         ) : (
           <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
             <Card.Content style={styles.cardContent}>
-              <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                Select Team Member
-              </Text>
-              <RadioButton.Group onValueChange={setAssignee} value={assignee}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                  Select Team Member
+                </Text>
+                {selectedAssignees.length > 0 && (
+                  <Text variant="labelSmall" style={{ color: KLIR_COLORS.primary, fontWeight: '700' }}>
+                    {selectedAssignees.length} selected
+                  </Text>
+                )}
+              </View>
+              <View style={{ gap: 8, marginVertical: 8 }}>
                 {(availablePeople.length > 0 ? availablePeople : people).map((person) => {
-                  const isSelected = assignee === person.id;
+                  const isSelected = selectedAssignees.includes(person.id);
+                  const personName = cleanPersonName(person.displayName);
                   return (
                     <TouchableOpacity
                       key={person.id}
@@ -1165,23 +1212,24 @@ export function SupervisorTaskDetailScreen({
                         styles.technicianSelectRow,
                         isSelected && styles.technicianSelectRowActive,
                       ]}
-                      onPress={() => setAssignee(person.id)}
-                      accessible={true}
-                      accessibilityRole="radio"
-                      accessibilityState={{ selected: isSelected }}
-                      accessibilityLabel={cleanPersonName(person.displayName)}
+                      onPress={() => toggleAssignee(person.id)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={personName}
                     >
-                      <RadioButton.Item
-                        label={cleanPersonName(person.displayName)}
-                        value={person.id}
-                        color={KLIR_COLORS.primary}
-                        labelStyle={styles.radioLabel}
-                        style={{ paddingHorizontal: 0, paddingVertical: 4 }}
-                      />
+                      <Text style={[styles.radioLabel, { flex: 1 }]}>
+                        {personName}
+                      </Text>
+                      <View pointerEvents="none">
+                        <Checkbox
+                          status={isSelected ? 'checked' : 'unchecked'}
+                          color={KLIR_COLORS.primary}
+                        />
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
-              </RadioButton.Group>
+              </View>
 
               <TextInput
                 label="Reason"
@@ -1197,7 +1245,7 @@ export function SupervisorTaskDetailScreen({
                 title="Reassign Task"
                 variant="primary"
                 loading={submitting}
-                disabled={!assignee || submitting}
+                disabled={selectedAssignees.length === 0 || submitting}
                 onPress={() => void submit()}
                 style={[styles.reassignButton, styles.cardElevation]}
               />
@@ -1328,7 +1376,7 @@ export function CompletedReviewsScreen({
                 </Text>
 
                 <Text variant="bodySmall" style={styles.taskAssigneeText}>
-                  Completed by: {getAssigneeName(item.completedBy ?? item.assignedTo, people)}
+                  Completed by: {getAssigneeName(item.completedBy ?? item.assignedTo, people, item)}
                 </Text>
 
                 {item.beforePhotoUrl && item.afterPhotoUrl ? (
@@ -1848,7 +1896,7 @@ export function CompletedReviewDetailScreen({
                 Completed by:{' '}
                 {activeSubmission
                   ? activeSubmission.technicianName
-                  : (task.completedBy ?? getAssigneeName(task.assignedTo, people))}
+                  : (task.completedBy ?? getAssigneeName(task.assignedTo, people, task))}
               </Text>
             </View>
 
@@ -2429,7 +2477,7 @@ export function SupervisorReportsScreen({
               }
               accessible={true}
               accessibilityRole="button"
-              accessibilityLabel={`${item.location}, ${item.floor}. Completed by ${getAssigneeName(item.completedBy ?? item.assignedTo, people)}`}
+              accessibilityLabel={`${item.location}, ${item.floor}. Completed by ${getAssigneeName(item.completedBy ?? item.assignedTo, people, item)}`}
             >
               <Card.Content style={styles.cardContent}>
                 <View style={styles.rowBetween}>
@@ -3102,12 +3150,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   technicianSelectRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderRadius: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     marginVertical: 3,
     borderWidth: 1,
     borderColor: '#EAECF0',
     backgroundColor: '#F8FAFC',
+    minHeight: 48,
   },
   technicianSelectRowActive: {
     borderColor: KLIR_COLORS.primary,

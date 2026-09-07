@@ -96,6 +96,28 @@ describe('supervisor-api utility', () => {
       });
     });
 
+    it('should send POST request with multi-assignee payload and supervisorName', async () => {
+      const multiInput = {
+        taskId: 'task-101',
+        newAssigneeUid: 'worker-1',
+        newAssigneeUids: ['worker-1', 'worker-2'],
+        reason: 'Team required for pipe overhaul',
+        supervisorUid: 'sup-1',
+        supervisorName: 'Supervisor Jane',
+      };
+
+      mockedApiFetch.mockResolvedValueOnce({
+        success: true,
+      });
+
+      await reassignTask(multiInput);
+
+      expect(mockedApiFetch).toHaveBeenCalledWith('/api/supervisor/reassign-task', {
+        method: 'POST',
+        body: JSON.stringify(multiInput),
+      });
+    });
+
     it('should throw an error when reassignTask fails', async () => {
       mockedApiFetch.mockResolvedValueOnce({
         success: false,

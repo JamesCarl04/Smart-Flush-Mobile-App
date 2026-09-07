@@ -3,6 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 import type {
   AreaPhoto,
   ChecklistValue,
+  ReassignmentEvent,
   Task,
   TaskChecklist,
   TaskStatus,
@@ -56,6 +57,9 @@ type TaskDocumentShape = {
   biometricVerified?: unknown;
   offlineSynced?: unknown;
   reassignCount?: unknown;
+  reassignReason?: unknown;
+  reassignedByName?: unknown;
+  reassignmentHistory?: unknown;
   supervisorUid?: unknown;
   createdBy?: unknown;
   inspectionStatus?: unknown;
@@ -140,6 +144,27 @@ export function parseSubmissions(value: unknown): Record<string, TaskSubmission>
     };
   }
   return result;
+}
+
+export function parseReassignmentHistory(value: unknown): ReassignmentEvent[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const events: ReassignmentEvent[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue;
+    const reassignedAt = toDate(item.reassignedAt as FirestoreDateValue);
+    if (!reassignedAt) continue;
+    events.push({
+      reassignedAt,
+      reassignedByUid: stringOrNull(item.reassignedByUid),
+      reassignedByName: stringOrNull(item.reassignedByName),
+      previousAssigneeUids: stringArray(item.previousAssigneeUids),
+      newAssigneeUids: stringArray(item.newAssigneeUids),
+      reason: typeof item.reason === 'string' ? item.reason : '',
+    });
+  }
+  return events;
 }
 
 function toDate(value: unknown): Date | null {
@@ -623,6 +648,9 @@ export function parseTaskDocument(
     offlineSynced: data.offlineSynced === true,
     completedBy,
     reassignCount: numberOrNull(data.reassignCount) ?? 0,
+    reassignReason: stringOrNull(data.reassignReason),
+    reassignedByName: stringOrNull(data.reassignedByName),
+    reassignmentHistory: parseReassignmentHistory(data.reassignmentHistory),
     supervisorUid: stringOrNull(data.supervisorUid),
     createdBy: typeof data.createdBy === 'string' ? data.createdBy : 'unknown',
 

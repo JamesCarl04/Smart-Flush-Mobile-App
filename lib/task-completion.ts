@@ -216,6 +216,7 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
     };
 
     let isFullyCompleted = true;
+    let currentAssignedToIds: string[] = [];
     try {
       const currentTaskDoc = await db.collection('tasks').doc(input.taskId).get();
       const exists =
@@ -224,15 +225,15 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
           : Boolean((currentTaskDoc as any).exists);
       if (exists) {
         const currentData = (currentTaskDoc.data() as Record<string, any>) || {};
-        const assignedToIds = Array.isArray(currentData.assignedToIds) ? currentData.assignedToIds : [];
-        if (assignedToIds.length > 1) {
+        currentAssignedToIds = Array.isArray(currentData.assignedToIds) ? currentData.assignedToIds : [];
+        if (currentAssignedToIds.length > 1) {
           const completedByMap = currentData.completedBy && typeof currentData.completedBy === 'object'
             ? currentData.completedBy
             : {};
-          const completedCount = assignedToIds.filter(
+          const completedCount = currentAssignedToIds.filter(
             (id: string) => id === input.completedBy || Boolean(completedByMap[id]),
           ).length;
-          isFullyCompleted = completedCount >= assignedToIds.length;
+          isFullyCompleted = completedCount >= currentAssignedToIds.length;
         }
       }
     } catch {
@@ -259,7 +260,7 @@ export async function completeTaskOnline(input: OnlineCompletionInput): Promise<
         : {}),
       [`completedBy.${input.completedBy}`]: firestore.Timestamp.fromDate(input.completedAt),
       [`submissions.${input.completedBy}`]: submissionPayload,
-      assignedTo: input.completedBy,
+      ...(currentAssignedToIds.length <= 1 || isFullyCompleted ? { assignedTo: input.completedBy } : {}),
       workDuration,
       totalTime,
     };
@@ -389,6 +390,34 @@ export async function syncOfflineCompletions(
       const taskSnapshot = await taskDocRef.get();
       const taskData = taskSnapshot.data() as Record<string, unknown> | undefined;
       const createdAt = unknownTimestampToDate(taskData?.createdAt);
+      const assignedToIds = Array.isArray(taskData?.assignedToIds) ? (taskData.assignedToIds as string[]) : [];
+      let isFullyCompleted = true;
+      if (assignedToIds.length > 1) {
+        const completedByMap =
+          taskData?.completedBy && typeof taskData.completedBy === 'object'
+            ? (taskData.completedBy as Record<string, any>)
+            : {};
+        const completedCount = assignedToIds.filter(
+          (id: string) => id === item.completedBy || Boolean(completedByMap[id]),
+        ).length;
+        isFullyCompleted = completedCount >= assignedToIds.length;
+      }
+
+      const submissionPayload = {
+        technicianUid: item.completedBy,
+        technicianName:
+          (taskData?.submissions as any)?.[item.completedBy]?.technicianName || 'Technician',
+        checklist: item.checklist,
+        beforePhotoUrl,
+        beforePhotoCapturedAt: firestore.Timestamp.fromDate(completedAt),
+        afterPhotoUrl,
+        afterPhotoCapturedAt: firestore.Timestamp.fromDate(completedAt),
+        additionalPhotos: additionalUploadedPhotos,
+        remarks: item.remarks,
+        workDuration: secondsBetween(acknowledgedAt, completedAt),
+        completedAt: firestore.Timestamp.fromDate(completedAt),
+        biometricVerified: item.biometricVerified,
+      };
 
       await taskDocRef.update({
         checklist: item.checklist,
@@ -400,20 +429,29 @@ export async function syncOfflineCompletions(
         additionalPhotos: additionalUploadedPhotos,
         biometricVerified: item.biometricVerified,
         offlineSynced: true,
-        status: 'completed',
-        completedAt: firestore.Timestamp.fromDate(completedAt),
-        completedBy: item.completedBy,
+        status: isFullyCompleted ? 'completed' : 'acknowledged',
+        ...(isFullyCompleted
+          ? {
+              inspectionStatus: 'pending_review',
+              completedAt: firestore.Timestamp.fromDate(completedAt),
+              completedBy: item.completedBy,
+            }
+          : {}),
         [`completedBy.${item.completedBy}`]: firestore.Timestamp.fromDate(completedAt),
-        assignedTo: item.completedBy,
+        [`submissions.${item.completedBy}`]: submissionPayload,
+        ...(assignedToIds.length <= 1 || isFullyCompleted ? { assignedTo: item.completedBy } : {}),
         workDuration: secondsBetween(acknowledgedAt, completedAt),
         totalTime: secondsBetween(createdAt, completedAt),
       });
 
-      await db.collection('users').doc(item.completedBy).update({
-        isAvailable: true,
-        currentTaskId: null,
-        lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
-      });
+      await db.collection('users').doc(item.completedBy).set(
+        {
+          isAvailable: true,
+          currentTaskId: null,
+          lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
 
       synced += 1;
       onProgress?.(items.length - synced);

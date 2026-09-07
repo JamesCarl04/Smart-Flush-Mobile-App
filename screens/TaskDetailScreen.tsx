@@ -379,17 +379,23 @@ export function TaskDetailScreen({
     try {
       const uid = currentUserId();
       const acknowledgedAt = new Date();
+      const isTeam = Boolean(task.assignedToIds && task.assignedToIds.length > 1);
+
+      const updatePayload: Record<string, any> = {
+        status: 'acknowledged',
+        acknowledgedAt: firestore.Timestamp.fromDate(acknowledgedAt),
+        [`acknowledgedBy.${uid}`]: firestore.Timestamp.fromDate(acknowledgedAt),
+      };
+
+      if (!isTeam) {
+        updatePayload.assignedTo = uid;
+        updatePayload.assignedToIds = [uid];
+        updatePayload.isBroadcast = false;
+        updatePayload.assignmentType = 'individual';
+      }
 
       try {
-        await db.collection('tasks').doc(task.id).update({
-          status: 'acknowledged',
-          assignedTo: uid,
-          assignedToIds: [uid],
-          isBroadcast: false,
-          assignmentType: 'individual',
-          acknowledgedAt: firestore.Timestamp.fromDate(acknowledgedAt),
-          [`acknowledgedBy.${uid}`]: firestore.Timestamp.fromDate(acknowledgedAt),
-        });
+        await db.collection('tasks').doc(task.id).update(updatePayload);
         await db.collection('users').doc(uid).update({
           isAvailable: false,
           currentTaskId: task.id,
@@ -399,7 +405,31 @@ export function TaskDetailScreen({
       }
 
       await acknowledgeTask(task.id);
-      setTask({ ...task, status: 'acknowledged', acknowledgedAt, assignedTo: uid });
+      setTask(
+        isTeam
+          ? {
+              ...task,
+              status: 'acknowledged',
+              acknowledgedAt,
+              acknowledgedBy: {
+                ...(task.acknowledgedBy ?? {}),
+                [uid]: acknowledgedAt,
+              },
+            }
+          : {
+              ...task,
+              status: 'acknowledged',
+              acknowledgedAt,
+              assignedTo: uid,
+              assignedToIds: [uid],
+              isBroadcast: false,
+              assignmentType: 'individual',
+              acknowledgedBy: {
+                ...(task.acknowledgedBy ?? {}),
+                [uid]: acknowledgedAt,
+              },
+            },
+      );
       await refreshTasks();
       setSnackbarMessage('Task acknowledged. Proceed to the location.');
     } catch (error) {
@@ -761,6 +791,26 @@ export function TaskDetailScreen({
                     <Text style={styles.instructionLabel}>INSTRUCTION</Text>
                     <Text style={styles.instructionText}>
                       {task.message}
+                    </Text>
+                  </View>
+                </View>
+              ) : null}
+
+              {/* Reassignment Reason Callout Banner */}
+              {task.reassignReason ? (
+                <View style={styles.reassignCallout}>
+                  <MaterialCommunityIcons
+                    name="swap-horizontal-bold"
+                    size={16}
+                    color="#D97706"
+                    style={styles.instructionIcon}
+                  />
+                  <View style={styles.instructionTextWrapper}>
+                    <Text style={styles.reassignLabel}>
+                      REASSIGNED BY {task.reassignedByName ? task.reassignedByName.toUpperCase() : 'SUPERVISOR'}
+                    </Text>
+                    <Text style={styles.reassignText}>
+                      Reason: {task.reassignReason}
                     </Text>
                   </View>
                 </View>
@@ -1573,6 +1623,30 @@ const styles = StyleSheet.create({
     fontFamily: INTER_FONT,
     fontSize: 13,
     color: '#92400E',
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  reassignCallout: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  reassignLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#B45309',
+    letterSpacing: 0.5,
+  },
+  reassignText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#78350F',
     fontWeight: '600',
     lineHeight: 19,
   },

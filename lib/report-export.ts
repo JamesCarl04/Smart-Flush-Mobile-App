@@ -16,15 +16,31 @@ export interface ReportCSVInput {
 function getAssigneeName(
   assignedUid: string | null | undefined,
   people: MaintenancePerson[],
+  task?: Task | null,
 ): string {
-  if (!assignedUid) return 'Unassigned';
-  const found = people.find(
-    (p) =>
-      p.id === assignedUid ||
-      p.email === assignedUid ||
-      (p.displayName && p.displayName.toLowerCase() === assignedUid.toLowerCase()),
+  const resolvePersonName = (idOrEmail: string): string => {
+    const found = people.find(
+      (p) =>
+        p.id === idOrEmail ||
+        p.email === idOrEmail ||
+        (p.displayName && p.displayName.toLowerCase() === idOrEmail.toLowerCase()),
+    );
+    return found?.displayName ?? idOrEmail;
+  };
+
+  const validIds = task?.assignedToIds?.filter(
+    (id) => Boolean(id) && id !== 'unassigned',
   );
-  return found?.displayName ?? assignedUid;
+
+  if (validIds && validIds.length > 0) {
+    const names = validIds.map(resolvePersonName);
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]}, ${names[1]}`;
+    return `${names[0]}, ${names[1]} +${names.length - 2} others`;
+  }
+
+  if (!assignedUid || assignedUid === 'unassigned') return 'Unassigned';
+  return resolvePersonName(assignedUid);
 }
 
 export function generateCSVContent(input: ReportCSVInput): string {
@@ -47,11 +63,14 @@ export function generateCSVContent(input: ReportCSVInput): string {
     'Inspected At',
     'Flag Reason',
     'Recheck Count',
+    'Reassign Count',
+    'Reassigned By',
+    'Reassignment Reason',
     'Remarks',
   ];
 
   const rows = tasks.map((t) => {
-    const assignee = getAssigneeName(t.completedBy ?? t.assignedTo, people);
+    const assignee = getAssigneeName(t.completedBy ?? t.assignedTo, people, t);
     const createdAtStr = t.createdAt ? t.createdAt.toISOString() : 'N/A';
     const completedAtStr = t.completedAt ? t.completedAt.toISOString() : 'N/A';
     const remarksClean = `"${(t.remarks || '').replace(/"/g, '""')}"`;
@@ -60,6 +79,9 @@ export function generateCSVContent(input: ReportCSVInput): string {
     const inspByName = `"${(t.inspectedByName || t.inspectedBy || 'N/A').replace(/"/g, '""')}"`;
     const inspAtStr = t.inspectedAt ? t.inspectedAt.toISOString() : 'N/A';
     const flagReasonClean = `"${(t.flagReason || '').replace(/"/g, '""')}"`;
+    const reassignCount = t.reassignCount ?? 0;
+    const reassignedByName = `"${(t.reassignedByName || (reassignCount > 0 || t.reassignReason ? 'Supervisor' : 'N/A')).replace(/"/g, '""')}"`;
+    const reassignReasonClean = `"${(t.reassignReason || 'N/A').replace(/"/g, '""')}"`;
 
     return [
       t.id,
@@ -78,6 +100,9 @@ export function generateCSVContent(input: ReportCSVInput): string {
       inspAtStr,
       flagReasonClean,
       t.recheckCount ?? 0,
+      reassignCount,
+      reassignedByName,
+      reassignReasonClean,
       remarksClean,
     ].join(',');
   });

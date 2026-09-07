@@ -81,15 +81,31 @@ function getChecklistSummary(checklist?: TaskChecklist | null): { done: number; 
 function getAssigneeName(
   assignedUid: string | null | undefined,
   people: MaintenancePerson[],
+  task?: Task | null,
 ): string {
-  if (!assignedUid) return 'Unassigned';
-  const found = people.find(
-    (p) =>
-      p.id === assignedUid ||
-      p.email === assignedUid ||
-      (p.displayName && p.displayName.toLowerCase() === assignedUid.toLowerCase()),
+  const resolvePersonName = (idOrEmail: string): string => {
+    const found = people.find(
+      (p) =>
+        p.id === idOrEmail ||
+        p.email === idOrEmail ||
+        (p.displayName && p.displayName.toLowerCase() === idOrEmail.toLowerCase()),
+    );
+    return found?.displayName ?? idOrEmail;
+  };
+
+  const validIds = task?.assignedToIds?.filter(
+    (id) => Boolean(id) && id !== 'unassigned',
   );
-  return found?.displayName ?? assignedUid;
+
+  if (validIds && validIds.length > 0) {
+    const names = validIds.map(resolvePersonName);
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return `${names[0]}, ${names[1]}`;
+    return `${names[0]}, ${names[1]} +${names.length - 2} others`;
+  }
+
+  if (!assignedUid || assignedUid === 'unassigned') return 'Unassigned';
+  return resolvePersonName(assignedUid);
 }
 
 export function generateReportHTML(input: ReportPDFInput): string {
@@ -107,7 +123,7 @@ export function generateReportHTML(input: ReportPDFInput): string {
 
   const taskRowsHTML = tasks
     .map((t, index) => {
-      const assignee = getAssigneeName(t.completedBy ?? t.assignedTo, people);
+      const assignee = getAssigneeName(t.completedBy ?? t.assignedTo, people, t);
       const loc = t.location || t.restroomName || t.deviceId;
       const createdStr = formatDate(t.createdAt);
       const completedStr = formatDate(t.completedAt);
@@ -140,6 +156,11 @@ export function generateReportHTML(input: ReportPDFInput): string {
       }
       if (t.flagReason) {
         remarksHtml += `<div class="task-flag-reason"><strong>Supervisor Flag:</strong> ${escapeHtml(t.flagReason)}</div>`;
+      }
+      if ((t.reassignCount && t.reassignCount > 0) || t.reassignReason) {
+        const supName = t.reassignedByName || 'Supervisor';
+        const reasonText = t.reassignReason ? `: ${escapeHtml(t.reassignReason)}` : '';
+        remarksHtml += `<div class="task-reassign-note"><strong>🔄 Reassigned by ${escapeHtml(supName)}</strong>${reasonText}</div>`;
       }
 
       return `
@@ -410,6 +431,15 @@ export function generateReportHTML(input: ReportPDFInput): string {
       font-size: 9px;
       color: #991b1b;
       background-color: #fee2e2;
+      padding: 3px 5px;
+      border-radius: 3px;
+      margin-top: 4px;
+    }
+    .task-reassign-note {
+      font-size: 9px;
+      color: #92400e;
+      background-color: #fef3c7;
+      border: 1px solid #fcd34d;
       padding: 3px 5px;
       border-radius: 3px;
       margin-top: 4px;

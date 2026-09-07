@@ -66,6 +66,15 @@ export interface TaskSubmission {
   biometricVerified?: boolean;
 }
 
+export interface ReassignmentEvent {
+  reassignedAt: Date;
+  reassignedByUid?: string | null;
+  reassignedByName?: string | null;
+  previousAssigneeUids?: string[];
+  newAssigneeUids?: string[];
+  reason: string;
+}
+
 export interface Task {
   id: string;
   alertId?: string | null;
@@ -113,6 +122,9 @@ export interface Task {
   offlineSynced?: boolean;
   completedBy?: string | null;
   reassignCount?: number;
+  reassignReason?: string | null;
+  reassignedByName?: string | null;
+  reassignmentHistory?: ReassignmentEvent[];
   supervisorUid?: string | null;
   createdBy: string;
 
