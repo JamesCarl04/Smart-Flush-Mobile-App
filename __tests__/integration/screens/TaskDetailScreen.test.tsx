@@ -406,4 +406,60 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
       expect(screen.getByText(/Completed work by Bob/)).toBeTruthy();
     });
   });
+
+  it('displays Flagged Notice banner and allows accepting recheck when task is flagged', async () => {
+    const flaggedTask: Task = {
+      ...initialMockTask,
+      id: 'task-flagged-123',
+      status: 'flagged',
+      inspectionStatus: 'flagged',
+      flagReason: 'Flush sensor not responding to wave trigger',
+      flagPhotoUrls: ['https://storage.example.com/flag-1.jpg'],
+      inspectedByName: 'Lead Supervisor',
+      submissions: {
+        'user-tech-1': {
+          technicianUid: 'user-tech-1',
+          technicianName: 'Alex Technician',
+          checklist: {} as any,
+          remarks: 'Prior completed work',
+          completedAt: new Date('2026-08-15T09:20:00Z'),
+          biometricVerified: true,
+        },
+      },
+    };
+
+    (taskApi.fetchTask as jest.Mock).mockResolvedValue(flaggedTask);
+    (taskApi.acceptRecheckTask as jest.Mock).mockResolvedValue(undefined);
+
+    const flaggedRoute = {
+      key: 'TaskDetail',
+      name: 'TaskDetail',
+      params: { taskId: 'task-flagged-123' },
+    };
+
+    render(
+      <PaperProvider>
+        <TaskDetailScreen navigation={mockNavigation} route={flaggedRoute as any} />
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('FLAGGED FOR RE-INSPECTION BY LEAD SUPERVISOR')).toBeTruthy();
+      expect(screen.getByText('Flush sensor not responding to wave trigger')).toBeTruthy();
+      expect(screen.getByText('Supervisor Inspection Photos')).toBeTruthy();
+      expect(screen.getByText('Accept Recheck')).toBeTruthy();
+    });
+
+    const acceptBtn = screen.getByText('Accept Recheck');
+    fireEvent.press(acceptBtn);
+
+    await waitFor(() => {
+      expect(taskApi.acceptRecheckTask).toHaveBeenCalledWith({
+        taskId: 'task-flagged-123',
+        technicianUid: 'user-tech-1',
+        technicianName: 'Alex Technician',
+      });
+    });
+  });
 });
+

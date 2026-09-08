@@ -47,7 +47,7 @@ import {
   formatTaskComponent,
   getTaskDisplayStatus,
 } from '../lib/tasks';
-import { acknowledgeTask, fetchTask } from '../lib/task-api';
+import { acknowledgeTask, acceptRecheckTask, fetchTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
@@ -156,10 +156,14 @@ function LinearWorkflowStepper({
       label: 'Accepted',
       isComplete:
         status === 'acknowledged' ||
+        status === 'rechecking' ||
         status === 'completed' ||
         status === 'flagged' ||
         isDoneOrSubmitted,
-      isCurrent: status === 'acknowledged' && step === 'details' && !isDoneOrSubmitted,
+      isCurrent:
+        (status === 'acknowledged' || status === 'rechecking') &&
+        step === 'details' &&
+        !isDoneOrSubmitted,
     },
     {
       key: 'proof',
@@ -651,6 +655,8 @@ export function TaskDetailScreen({
           biometricVerified,
           completedAt,
           completedBy: uid,
+          isRecheck: task.status === 'rechecking',
+          recheckCount: (task.recheckCount ?? 0) + (task.status === 'rechecking' ? 1 : 0),
         });
         isFullyCompleted = outcome?.isFullyCompleted ?? true;
         setSnackbarMessage(
@@ -748,25 +754,42 @@ export function TaskDetailScreen({
   const isTeam = Boolean(task?.assignedToIds && task.assignedToIds.length > 1);
   const isUserAcknowledged = Boolean(
     (task?.acknowledgedBy && currentUid && task.acknowledgedBy[currentUid]) ||
-    (!isTeam && task?.status === 'acknowledged')
+    (!isTeam && (task?.status === 'acknowledged' || task?.status === 'rechecking')) ||
+    task?.status === 'rechecking'
   );
   const isUserSubmitted = Boolean(
+    task?.status !== 'flagged' &&
+    task?.status !== 'rechecking' &&
+    task?.inspectionStatus !== 'flagged' &&
+    cachedTask?.status !== 'flagged' &&
+    cachedTask?.status !== 'rechecking' &&
+    cachedTask?.inspectionStatus !== 'flagged' &&
     currentUid && (
       (task?.submissions && task.submissions[currentUid]) ||
+      (task?.completedByMap && task.completedByMap[currentUid]) ||
       (task?.completedBy && typeof task.completedBy === 'object' && (task.completedBy as Record<string, any>)[currentUid]) ||
       task?.completedBy === currentUid ||
       (cachedTask?.submissions && cachedTask.submissions[currentUid]) ||
+      (cachedTask?.completedByMap && cachedTask.completedByMap[currentUid]) ||
       (cachedTask?.completedBy && typeof cachedTask.completedBy === 'object' && (cachedTask.completedBy as Record<string, any>)[currentUid]) ||
       cachedTask?.completedBy === currentUid
     )
   );
 
   const isHistoryView = Boolean(
-    isFromHistoryParam ||
-    isInHistoryTasks ||
-    task?.status === 'completed' ||
-    cachedTask?.status === 'completed' ||
-    isUserSubmitted
+    task?.status !== 'flagged' &&
+    task?.status !== 'rechecking' &&
+    task?.inspectionStatus !== 'flagged' &&
+    cachedTask?.status !== 'flagged' &&
+    cachedTask?.status !== 'rechecking' &&
+    cachedTask?.inspectionStatus !== 'flagged' &&
+    (
+      isFromHistoryParam ||
+      isInHistoryTasks ||
+      task?.status === 'completed' ||
+      cachedTask?.status === 'completed' ||
+      isUserSubmitted
+    )
   );
 
   const completedTeammateCount = useMemo(() => {
@@ -823,9 +846,34 @@ export function TaskDetailScreen({
   const displayedChecklist = displayedSubmission?.checklist ?? task?.checklist;
   const displayedBiometric = displayedSubmission?.biometricVerified ?? task?.biometricVerified;
 
+  const handleAcceptRecheck = async (): Promise<void> => {
+    if (!task || actionInFlight) return;
+    const uid = currentUid;
+    if (!uid) return;
+    setActionInFlight(true);
+    try {
+      await acceptRecheckTask({
+        taskId: task.id,
+        technicianUid: uid,
+        technicianName: user?.name,
+      });
+      await refreshTasks();
+      await refreshTaskDetail(false);
+      setSnackbarMessage('Recheck accepted. You may now perform the rectification.');
+    } catch (error) {
+      setSnackbarMessage(
+        error instanceof Error ? error.message : 'Failed to accept recheck.',
+      );
+    } finally {
+      setActionInFlight(false);
+    }
+  };
+
   const handleAction = async (): Promise<void> => {
     if (!task) return;
-    if (!isUserAcknowledged) {
+    if (task.status === 'flagged') {
+      await handleAcceptRecheck();
+    } else if (!isUserAcknowledged) {
       await handleAcknowledge();
     } else {
       await startCompletionFlow();
@@ -944,6 +992,64 @@ export function TaskDetailScreen({
                 </View>
               ) : null}
 
+              {/* Flagged for Re-inspection Callout Banner */}
+              {(task.status === 'flagged' || task.status === 'rechecking' || Boolean(task.flagReason && task.status !== 'completed')) ? (
+                <View style={styles.flaggedCallout}>
+                  <View style={styles.flaggedHeaderRow}>
+                    <View style={styles.flagIconWrap}>
+                      <MaterialCommunityIcons
+                        name="flag-variant"
+                        size={18}
+                        color="#DC2626"
+                      />
+                    </View>
+                    <View style={styles.instructionTextWrapper}>
+                      <Text style={styles.flaggedLabel}>
+                        FLAGGED FOR RE-INSPECTION
+                        {task.inspectedByName ? ` BY ${task.inspectedByName.toUpperCase()}` : ''}
+                      </Text>
+                      <Text style={styles.flaggedText}>
+                        {task.flagReason || 'Supervisor flagged this task for quality re-inspection.'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {task.flagPhotoUrls && task.flagPhotoUrls.length > 0 ? (
+                    <View style={styles.flagPhotosSection}>
+                      <Text style={styles.flagPhotosHeader}>Supervisor Inspection Photos</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={styles.flagPhotosScroll}
+                      >
+                        {task.flagPhotoUrls.map((url, idx) => (
+                          <TouchableOpacity
+                            key={`${url}-${idx}`}
+                            onPress={() => {
+                              setSelectedViewerPhoto(url);
+                              setViewerCaption('Supervisor Inspection Flag Photo');
+                            }}
+                            style={styles.flagPhotoThumbWrap}
+                            accessible={true}
+                            accessibilityRole="button"
+                            accessibilityLabel={`View supervisor inspection photo ${idx + 1}`}
+                          >
+                            <Image
+                              source={{ uri: url }}
+                              style={styles.flagPhotoThumb}
+                              resizeMode="cover"
+                            />
+                            <View style={styles.flagPhotoZoomBadge}>
+                              <MaterialCommunityIcons name="magnify-plus" size={14} color="#FFFFFF" />
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+
               {/* Meta Tags */}
               <View style={styles.metaRow}>
                 <MetaPill
@@ -1007,9 +1113,11 @@ export function TaskDetailScreen({
               {!isHistoryView && task.status !== 'completed' && !isUserSubmitted ? (
                 <KlirButton
                   title={
-                    isUserAcknowledged
-                      ? 'Take Proof Photo'
-                      : 'Acknowledge Task'
+                    task.status === 'flagged'
+                      ? 'Accept Recheck'
+                      : isUserAcknowledged
+                        ? 'Take Proof Photo'
+                        : 'Acknowledge Task'
                   }
                   variant="primary"
                   loading={actionInFlight}
@@ -1017,9 +1125,11 @@ export function TaskDetailScreen({
                   onPress={() => void handleAction()}
                   style={styles.actionButton}
                   icon={
-                    isUserAcknowledged
-                      ? 'camera-outline'
-                      : 'clipboard-check-outline'
+                    task.status === 'flagged'
+                      ? 'clipboard-check-outline'
+                      : isUserAcknowledged
+                        ? 'camera-outline'
+                        : 'clipboard-check-outline'
                   }
                 />
               ) : null}
@@ -1867,6 +1977,86 @@ const styles = StyleSheet.create({
     color: '#78350F',
     fontWeight: '600',
     lineHeight: 19,
+  },
+  flaggedCallout: {
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    borderRadius: 10,
+    padding: 12,
+    gap: 10,
+  },
+  flaggedHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  flagIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 1,
+  },
+  flaggedLabel: {
+    fontFamily: INTER_FONT,
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#DC2626',
+    letterSpacing: 0.5,
+  },
+  flaggedText: {
+    fontFamily: INTER_FONT,
+    fontSize: 13,
+    color: '#991B1B',
+    fontWeight: '600',
+    lineHeight: 19,
+    marginTop: 2,
+  },
+  flagPhotosSection: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#FEE2E2',
+    gap: 6,
+  },
+  flagPhotosHeader: {
+    fontFamily: INTER_FONT,
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#991B1B',
+    letterSpacing: 0.3,
+  },
+  flagPhotosScroll: {
+    gap: 8,
+    paddingVertical: 2,
+  },
+  flagPhotoThumbWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    backgroundColor: '#FEE2E2',
+    position: 'relative',
+  },
+  flagPhotoThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  flagPhotoZoomBadge: {
+    position: 'absolute',
+    bottom: 3,
+    right: 3,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   teammateWaitingCallout: {
     flexDirection: 'row',

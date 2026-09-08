@@ -69,6 +69,7 @@ type TaskDocumentShape = {
   inspectedAt?: FirestoreDateValue;
   flagReason?: unknown;
   flagPhotoUrls?: unknown;
+  flaggedAt?: FirestoreDateValue;
   recheckCount?: unknown;
   recheckedBy?: unknown;
   recheckedAt?: FirestoreDateValue;
@@ -802,6 +803,7 @@ export function parseTaskDocument(
     inspectedAt: toDate(data.inspectedAt),
     flagReason: stringOrNull(data.flagReason),
     flagPhotoUrls: stringArray(data.flagPhotoUrls),
+    flaggedAt: toDate(data.flaggedAt),
     recheckCount: numberOrNull(data.recheckCount) ?? 0,
     recheckedBy: stringOrNull(data.recheckedBy),
     recheckedAt: toDate(data.recheckedAt),

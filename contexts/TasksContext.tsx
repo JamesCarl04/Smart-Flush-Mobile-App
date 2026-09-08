@@ -163,6 +163,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
             { key: 'assigned-ids', query: collection.where('assignedToIds', 'array-contains', user.uid) },
             { key: 'assigned-uid', query: collection.where('assignedTo', '==', user.uid) },
             { key: 'broadcast', query: collection.where('isBroadcast', '==', true) },
+            { key: 'rechecked-uid', query: collection.where('recheckedBy', '==', user.uid) },
           );
           if (user.email) {
             queryEntries.push({ key: 'assigned-email', query: collection.where('assignedTo', '==', user.email) });
@@ -211,38 +212,50 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     };
   }, [refreshTasks, role, saveCache, user]);
 
-  const inboxTasks = tasks.filter(
-    (task) =>
-      task.status !== 'completed' &&
-      !(
-        role !== 'supervisor' &&
-        Boolean(
-          user?.uid &&
-            ((task.submissions && task.submissions[user.uid]) ||
-              (task.completedByMap && task.completedByMap[user.uid]) ||
-              task.completedBy === user.uid ||
-              (task.completedBy &&
-                typeof task.completedBy === 'object' &&
-                (task.completedBy as Record<string, any>)[user.uid])),
-        )
-      ) &&
-      ((task.status === 'unassigned' &&
+  const inboxTasks = tasks.filter((task) => {
+    if (task.status === 'completed') {
+      return false;
+    }
+
+    const isFlaggedOrRechecking =
+      task.status === 'flagged' || task.status === 'rechecking';
+
+    if (!isFlaggedOrRechecking && role !== 'supervisor') {
+      const hasPriorSubmission = Boolean(
+        user?.uid &&
+          ((task.submissions && task.submissions[user.uid]) ||
+            (task.completedByMap && task.completedByMap[user.uid]) ||
+            task.completedBy === user.uid ||
+            (task.completedBy &&
+              typeof task.completedBy === 'object' &&
+              (task.completedBy as Record<string, any>)[user.uid])),
+      );
+      if (hasPriorSubmission) {
+        return false;
+      }
+    }
+
+    return (
+      (task.status === 'unassigned' &&
         (role === 'supervisor' || isBroadcastTask(task))) ||
-        task.status === 'assigned' ||
-        task.status === 'reassignment_needed' ||
-        task.status === 'flagged' ||
-        task.status === 'acknowledged' ||
-        task.status === 'rechecking' ||
-        task.assignedTo === user?.uid ||
-        task.assignedTo === user?.email ||
-        (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
-        isBroadcastTask(task) ||
-        task.completedBy === user?.uid ||
-        (task.submissions && Boolean(task.submissions[user?.uid ?? '']))),
-  );
+      task.status === 'assigned' ||
+      task.status === 'reassignment_needed' ||
+      task.status === 'flagged' ||
+      task.status === 'acknowledged' ||
+      task.status === 'rechecking' ||
+      task.assignedTo === user?.uid ||
+      task.assignedTo === user?.email ||
+      (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
+      isBroadcastTask(task) ||
+      task.recheckedBy === user?.uid ||
+      task.completedBy === user?.uid ||
+      (task.submissions && Boolean(task.submissions[user?.uid ?? '']))
+    );
+  });
 
   const activeTasks = inboxTasks.filter((task) => {
     if (
+      task.status !== 'rechecking' &&
       user?.uid &&
       ((task.submissions && Boolean(task.submissions[user.uid])) ||
         (task.completedByMap && Boolean(task.completedByMap[user.uid])) ||
@@ -282,6 +295,14 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
 
   const historyTasks = tasks
     .filter((task) => {
+      if (
+        task.status === 'flagged' ||
+        task.status === 'rechecking' ||
+        task.inspectionStatus === 'flagged'
+      ) {
+        return false;
+      }
+
       const hasUserSubmitted = Boolean(
         user?.uid && (
           (task.submissions && task.submissions[user.uid]) ||

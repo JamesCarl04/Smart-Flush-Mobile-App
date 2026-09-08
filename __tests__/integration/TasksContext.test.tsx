@@ -303,11 +303,12 @@ describe('TasksContext Integration', () => {
       </PaperProvider>,
     );
 
-    await waitFor(() => expect(where).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(where).toHaveBeenCalledTimes(5));
     expect(where).toHaveBeenCalledWith('assignedToIds', 'array-contains', 'user-tech-1');
     expect(where).toHaveBeenCalledWith('assignedTo', '==', 'user-tech-1');
     expect(where).toHaveBeenCalledWith('assignedTo', '==', 'tech1@smartflush.com');
     expect(where).toHaveBeenCalledWith('isBroadcast', '==', true);
+    expect(where).toHaveBeenCalledWith('recheckedBy', '==', 'user-tech-1');
     expect(broadOnSnapshot).not.toHaveBeenCalled();
   });
 
@@ -467,4 +468,261 @@ describe('TasksContext Integration', () => {
     // Tech 1 sees it in active tasks!
     expect(screen.getByTestId('active-count').props.children).toBe(1);
   });
+
+  it('includes solo-assigned flagged tasks in inboxTasks and excludes them from historyTasks', async () => {
+    const flaggedSoloTask: Task = {
+      id: 'task-flagged-solo',
+      deviceId: 'dev-solo-1',
+      type: 'maintenance',
+      component: 'flush_valve',
+      location: '1F Restroom A',
+      floor: '1F',
+      building: 'GB3',
+      shift: '1st',
+      triggerType: 'hardware_failure',
+      message: 'Repair flush valve',
+      assignedTo: 'user-tech-1',
+      status: 'flagged',
+      inspectionStatus: 'flagged',
+      flagReason: 'Water still running after valve repair',
+      completedBy: 'user-tech-1',
+      submissions: {
+        'user-tech-1': {
+          technicianUid: 'user-tech-1',
+          technicianName: 'Technician 1',
+          checklist: {} as any,
+          remarks: 'Fixed valve',
+          completedAt: new Date('2026-08-15T03:00:00Z'),
+          biometricVerified: true,
+        },
+      },
+      createdAt: new Date('2026-08-15T01:00:00Z'),
+      createdBy: 'system',
+    };
+
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([flaggedSoloTask]);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // Appears in inboxTasks
+    expect(screen.getByTestId('inbox-count').props.children).toBe(1);
+    expect(screen.getByTestId('inbox-task-flagged-solo')).toBeTruthy();
+
+    // MUST NOT appear in historyTasks
+    expect(screen.getByTestId('history-count').props.children).toBe(0);
+    expect(screen.queryByTestId('history-task-flagged-solo')).toBeNull();
+  });
+
+  it('includes multi-assigned flagged tasks in inboxTasks for all assignees and excludes from historyTasks', async () => {
+    const flaggedMultiTask: Task = {
+      id: 'task-flagged-multi',
+      deviceId: 'dev-multi-1',
+      type: 'maintenance',
+      component: 'pipe',
+      location: '2F Restroom B',
+      floor: '2F',
+      building: 'GB3',
+      shift: '1st',
+      triggerType: 'hardware_failure',
+      message: 'Replace pipe section',
+      assignedTo: null,
+      assignedToIds: ['user-tech-1', 'user-tech-2'],
+      status: 'flagged',
+      inspectionStatus: 'flagged',
+      flagReason: 'Pipe joint still dripping',
+      completedByMap: {
+        'user-tech-1': new Date('2026-08-15T03:00:00Z'),
+        'user-tech-2': new Date('2026-08-15T03:10:00Z'),
+      },
+      submissions: {
+        'user-tech-1': {
+          technicianUid: 'user-tech-1',
+          technicianName: 'Technician 1',
+          checklist: {} as any,
+          remarks: 'Done tech 1',
+          completedAt: new Date('2026-08-15T03:00:00Z'),
+          biometricVerified: true,
+        },
+        'user-tech-2': {
+          technicianUid: 'user-tech-2',
+          technicianName: 'Technician 2',
+          checklist: {} as any,
+          remarks: 'Done tech 2',
+          completedAt: new Date('2026-08-15T03:10:00Z'),
+          biometricVerified: true,
+        },
+      },
+      createdAt: new Date('2026-08-15T01:00:00Z'),
+      createdBy: 'system',
+    };
+
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([flaggedMultiTask]);
+
+    // 1. Check for user-tech-1
+    const { unmount } = render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    expect(screen.getByTestId('inbox-count').props.children).toBe(1);
+    expect(screen.getByTestId('inbox-task-flagged-multi')).toBeTruthy();
+    expect(screen.getByTestId('history-count').props.children).toBe(0);
+
+    unmount();
+
+    // 2. Check for user-tech-2
+    (useAuthHook.useAuth as jest.Mock).mockReturnValue({
+      user: {
+        uid: 'user-tech-2',
+        email: 'tech2@smartflush.com',
+        role: 'maintenance',
+        name: 'Jordan Technician',
+      },
+      role: 'maintenance',
+      loading: false,
+      logout: jest.fn(),
+    });
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    expect(screen.getByTestId('inbox-count').props.children).toBe(1);
+    expect(screen.getByTestId('inbox-task-flagged-multi')).toBeTruthy();
+    expect(screen.getByTestId('history-count').props.children).toBe(0);
+  });
+
+  it('includes rechecking task in activeTasks and inboxTasks even with prior submissions, and excludes from historyTasks', async () => {
+    const recheckingTask: Task = {
+      id: 'task-rechecking-1',
+      deviceId: 'dev-recheck-1',
+      type: 'maintenance',
+      component: 'flush_valve',
+      location: '1F Restroom A',
+      floor: '1F',
+      building: 'GB3',
+      shift: '1st',
+      triggerType: 'hardware_failure',
+      message: 'Rectify flush valve',
+      assignedTo: 'user-tech-1',
+      status: 'rechecking',
+      inspectionStatus: 'flagged',
+      flagReason: 'Water still running',
+      recheckedBy: 'user-tech-1',
+      submissions: {
+        'user-tech-1': {
+          technicianUid: 'user-tech-1',
+          technicianName: 'Technician 1',
+          checklist: {} as any,
+          remarks: 'Prior completion',
+          completedAt: new Date('2026-08-15T02:00:00Z'),
+          biometricVerified: true,
+        },
+      },
+      createdAt: new Date('2026-08-15T01:00:00Z'),
+      createdBy: 'system',
+    };
+
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([recheckingTask]);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // In inbox
+    expect(screen.getByTestId('inbox-count').props.children).toBe(1);
+    // In active tasks
+    expect(screen.getByTestId('active-count').props.children).toBe(1);
+    // NOT in history
+    expect(screen.getByTestId('history-count').props.children).toBe(0);
+  });
+
+  it('includes rechecking task in inboxTasks and activeTasks when user is recheckedBy even if originally assigned to someone else', async () => {
+    const reassignedRecheckTask: Task = {
+      id: 'task-recheck-handover',
+      deviceId: 'dev-valve-handover',
+      type: 'maintenance',
+      component: 'flush_valve',
+      location: '1F Restroom A',
+      floor: '1F',
+      building: 'GB3',
+      shift: '2nd',
+      triggerType: 'hardware_failure',
+      message: 'Rectify flush valve during 2nd shift',
+      assignedTo: 'user-tech-2',
+      assignedToIds: ['user-tech-2'],
+      status: 'rechecking',
+      inspectionStatus: 'flagged',
+      flagReason: 'Water still running',
+      recheckedBy: 'user-tech-1',
+      submissions: {
+        'user-tech-2': {
+          technicianUid: 'user-tech-2',
+          technicianName: 'Technician 2',
+          checklist: {} as any,
+          remarks: 'Prior attempt by tech 2',
+          completedAt: new Date('2026-08-15T02:00:00Z'),
+          biometricVerified: true,
+        },
+      },
+      createdAt: new Date('2026-08-15T01:00:00Z'),
+      createdBy: 'system',
+    };
+
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue([reassignedRecheckTask]);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // In inbox
+    expect(screen.getByTestId('inbox-count').props.children).toBe(1);
+    expect(screen.getByTestId('inbox-task-recheck-handover')).toBeTruthy();
+    // In active tasks
+    expect(screen.getByTestId('active-count').props.children).toBe(1);
+    // NOT in history
+    expect(screen.getByTestId('history-count').props.children).toBe(0);
+  });
 });
+

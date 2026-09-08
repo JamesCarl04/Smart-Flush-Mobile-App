@@ -87,16 +87,18 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
       const fallbackMatch = tasks.find((task) => {
         if (task.id !== targetTaskId) return false;
         if (task.status === 'completed') return false;
-        if (user?.uid && task.submissions && Boolean(task.submissions[user.uid])) return false;
-        if (user?.uid && task.completedByMap && Boolean(task.completedByMap[user.uid])) return false;
-        if (user?.uid && task.completedBy === user.uid) return false;
-        if (
-          user?.uid &&
-          task.completedBy &&
-          typeof task.completedBy === 'object' &&
-          Boolean((task.completedBy as Record<string, any>)[user.uid])
-        ) {
-          return false;
+        if (task.status !== 'rechecking') {
+          if (user?.uid && task.submissions && Boolean(task.submissions[user.uid])) return false;
+          if (user?.uid && task.completedByMap && Boolean(task.completedByMap[user.uid])) return false;
+          if (user?.uid && task.completedBy === user.uid) return false;
+          if (
+            user?.uid &&
+            task.completedBy &&
+            typeof task.completedBy === 'object' &&
+            Boolean((task.completedBy as Record<string, any>)[user.uid])
+          ) {
+            return false;
+          }
         }
         return true;
       });
@@ -113,7 +115,8 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
   const isUserAcknowledged = Boolean(
     activeTask && (
       (user?.uid && activeTask.acknowledgedBy?.[user.uid]) ||
-      (!isTeam && (activeTask.status === 'acknowledged' || activeTask.status === 'rechecking'))
+      (!isTeam && (activeTask.status === 'acknowledged' || activeTask.status === 'rechecking')) ||
+      activeTask.status === 'rechecking'
     )
   );
 

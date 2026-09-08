@@ -512,6 +512,42 @@ describe('tasks utility', () => {
       expect(task?.inspectionStatus).toBe('flagged');
       expect(task?.flagReason).toBe('Leak was not completely resolved');
     });
+
+    it('parses flaggedAt and flagPhotoUrls correctly', () => {
+      const task = parseTaskDocument('task-flagged-details', {
+        ...baseValidDoc,
+        status: 'flagged',
+        inspectionStatus: 'flagged',
+        flagReason: 'Water running',
+        flagPhotoUrls: ['https://example.com/flag1.jpg', 'https://example.com/flag2.jpg'],
+        flaggedAt: 1725712365678,
+      });
+
+      expect(task).not.toBeNull();
+      expect(task?.status).toBe('flagged');
+      expect(task?.flaggedAt).toBeInstanceOf(Date);
+      expect(task?.flaggedAt?.getTime()).toBe(1725712365678);
+      expect(task?.flagPhotoUrls).toEqual([
+        'https://example.com/flag1.jpg',
+        'https://example.com/flag2.jpg',
+      ]);
+    });
+
+    it('parses status as rechecking when rawStatus or inspectionStatus is rechecking', () => {
+      const task = parseTaskDocument('task-rechecking-details', {
+        ...baseValidDoc,
+        status: 'rechecking',
+        recheckCount: 1,
+        recheckedBy: 'tech-1',
+        recheckedAt: 1725712399000,
+      });
+
+      expect(task).not.toBeNull();
+      expect(task?.status).toBe('rechecking');
+      expect(task?.recheckCount).toBe(1);
+      expect(task?.recheckedBy).toBe('tech-1');
+      expect(task?.recheckedAt).toBeInstanceOf(Date);
+    });
   });
 
   describe('toDate', () => {
