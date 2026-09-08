@@ -63,7 +63,7 @@ async function verifyUserProfile(
       ? payload.data.role.trim().toLowerCase()
       : null;
 
-  if (roleString !== 'maintenance' && roleString !== 'supervisor') {
+  if (roleString !== 'maintenance' && roleString !== 'technician' && roleString !== 'supervisor') {
     throw new Error('Access denied. This app is for maintenance and supervisor accounts only.');
   }
 

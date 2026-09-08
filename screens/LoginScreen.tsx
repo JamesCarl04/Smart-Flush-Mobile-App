@@ -136,7 +136,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       return;
     }
 
-    if (user && (role === 'maintenance' || role === 'supervisor')) {
+    if (user && (role === 'maintenance' || role === 'technician' || role === 'supervisor')) {
       setSubmitting(false);
       setAwaitingRoleValidation(false);
       setErrorMessage(null);
