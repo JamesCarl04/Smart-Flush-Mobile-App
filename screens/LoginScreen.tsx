@@ -73,6 +73,8 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
   const [biometricType, setBiometricType] = useState<string>('Biometrics');
+  const [biometricIcon, setBiometricIcon] =
+    useState<keyof typeof MaterialCommunityIcons.glyphMap>('fingerprint');
 
   useEffect(() => {
     async function checkBiometrics(): Promise<void> {
@@ -94,24 +96,32 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         }
 
         if (hasHardware && isEnrolled) {
-          setBiometricsAvailable(true);
           const types =
             await LocalAuthentication.supportedAuthenticationTypesAsync();
-          if (
-            types.includes(
-              LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
-            )
-          ) {
-            setBiometricType('Face ID');
-          } else if (
-            types.includes(
-              LocalAuthentication.AuthenticationType.FINGERPRINT,
-            )
-          ) {
+          const hasFace = types.includes(
+            LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+          );
+          const hasFingerprint = types.includes(
+            LocalAuthentication.AuthenticationType.FINGERPRINT,
+          );
+
+          if (hasFace && hasFingerprint) {
+            setBiometricsAvailable(true);
+            setBiometricType('Face or Fingerprint');
+            setBiometricIcon('shield-account');
+          } else if (hasFace) {
+            setBiometricsAvailable(true);
+            setBiometricType(Platform.OS === 'ios' ? 'Face ID' : 'Face Unlock');
+            setBiometricIcon('face-recognition');
+          } else if (hasFingerprint) {
+            setBiometricsAvailable(true);
             setBiometricType('Fingerprint');
+            setBiometricIcon('fingerprint');
           } else {
-            setBiometricType('Biometrics');
+            setBiometricsAvailable(false);
           }
+        } else {
+          setBiometricsAvailable(false);
         }
       } catch {
         setBiometricsAvailable(false);
@@ -304,7 +314,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
                 <KlirButton
                   title={hasSavedCredentials ? `Unlock with ${biometricType}` : `Login with ${biometricType}`}
                   variant="secondary"
-                  icon="fingerprint"
+                  icon={biometricIcon}
                   disabled={isBusy}
                   onPress={() => {
                     void handleBiometricQuickResume();

@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Divider } from 'react-native-paper';
+import Constants from 'expo-constants';
 
 import {
   KLIR_COLORS,
@@ -151,7 +152,7 @@ export function ProfileSheetModal({
               {/* App Meta Footer */}
               <View style={styles.appMetaRow}>
                 <Text style={styles.appMetaText}>
-                  Klir Facility Ops • v1.0.0
+                  {`Klir Facility Ops • v${Constants.expoConfig?.version ?? '1.24.4'}`}
                 </Text>
                 <Text style={styles.appMetaSub}>SDCA Smart Flush System</Text>
               </View>
