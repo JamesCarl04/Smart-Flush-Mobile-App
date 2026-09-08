@@ -3,11 +3,12 @@
 > **Enterprise Mobile Client for Smart Flush IoT Ecosystem**  
 > *SDCA Annex Campus Edition • 4-Floor Facility Operations • St. Dominic College of Asia*
 
+[![App Version](https://img.shields.io/badge/Version-v1.24.4%20(Build%2059)-crimson.svg)](#-10-project-setup-installation--configuration)
 [![React Native](https://img.shields.io/badge/React%20Native-0.81.5-blue.svg?logo=react)](https://reactnative.dev/)
 [![Expo](https://img.shields.io/badge/Expo%20SDK-54.0-black.svg?logo=expo)](https://expo.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Storage%20%7C%20FCM-orange.svg?logo=firebase)](https://firebase.google.com/)
-[![Jest Tests](https://img.shields.io/badge/Tests-20%20Suites%20%7C%20188%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
+[![Jest Tests](https://img.shields.io/badge/Tests-24%20Suites%20%7C%20254%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
 [![UI Library](https://img.shields.io/badge/UI-React%20Native%20Paper%20MD3-purple.svg)](https://callstack.github.io/react-native-paper/)
 [![Target OS](https://img.shields.io/badge/Platform-Android%2014%2B%20(Dev%20Client)-green.svg?logo=android)](https://www.android.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](#)
@@ -138,12 +139,13 @@ graph TD
 | **Database** | **Cloud Firestore** | `^24.0.0` | Real-time bi-directional synchronisation of tasks and personnel rosters |
 | **File Storage** | **Firebase Storage** | `^24.0.0` | Encrypted cloud storage for forensic Before/After/Multi-Area proof photos |
 | **Push Notifications**| **Firebase Cloud Messaging** | `^24.0.0` | Background, foreground, and lock-screen dispatch work order alerts |
-| **Biometric Security**| **expo-local-authentication** | `~17.0.8` | Hardware fingerprint and facial recognition validation |
+| **Biometric Security**| **expo-local-authentication** | `~17.0.8` | Dual-biometric adaptive engine querying facial recognition and fingerprint hardware simultaneously |
 | **Image Compression**| **expo-image-manipulator** | `~14.0.8` | Client-side 1080p smart image downscaling ($~97\%$ bandwidth savings) |
 | **Proof Watermarking**| **react-native-view-shot** | `^5.1.0` | Burn-in metadata (timestamp, room, fixture ID, GPS tag) onto proof photos |
 | **Reporting & Export**| **expo-print** & **expo-sharing** | `~15.0.8` | Dynamic HTML-to-PDF rendering and native Android OS file sharing |
 | **Local Persistence**| **AsyncStorage** | `2.2.0` | Stale-While-Revalidate (SWR) cache and offline transaction queue |
-| **Automated Testing**| **Jest** & **RNTL** | `29.7.0` | Comprehensive unit, integration, and E2E regression suite (188 tests) |
+| **Release Automation**| **Node.js SemVer Engine** | `scripts/release.js` | Automated version bumping (`package.json`, `app.json`, `build.gradle`), `CHANGELOG.md` generation, and Git tagging |
+| **Automated Testing**| **Jest** & **RNTL** | `29.7.0` | Comprehensive unit, integration, and E2E regression suite (24 suites, 254 tests) |
 
 ---
 
@@ -241,6 +243,10 @@ Klir Mobile provides strict role-based isolation. When a user logs in, their pro
 | **Justine Lopez (Tech)** | `justine@gmail.com` | **`maintenance`** | **2nd Floor** (Left/Right Wings & PWD) | **Technician Inbox** |
 | **Maria Lindog** | `maria@gmail.com` | **`maintenance`** | **3rd Floor** (Left/Right Wings & PWD) | **Technician Inbox** |
 
+> [!NOTE]
+> **Role Bridging & Alias Support (`technician` $\leftrightarrow$ `maintenance`):**  
+> Klir Mobile transparently bridges the administrative web portal's `'technician'` role and legacy `'maintenance'` role. Whether an account is provisioned via the web Staff Management portal as `technician` or `maintenance`, `AuthContext.tsx` normalizes permissions, routing the user to the Custodial Technician workspace while preserving Firestore document integrity.
+
 ---
 
 ## 📱 5. Complete Screen & Page Directory (Every Screen Explained)
@@ -293,10 +299,14 @@ Klir Mobile comprises **13 dedicated screen views** and **5 shared system overla
   * Klir brand mark and SDCA institutional title.
   * Email input with format validation.
   * Password input with eye toggle to show/hide plaintext.
-  * **`[ Quick Biometric Unlock ]` Button:** Enables 1-tap login via Android Fingerprint or Face Unlock if credentials were previously saved in `@klir:biometric_vault`.
-  * **`[ Sign In ]` Button:** High-contrast crimson action button.
+  * **Dual-Biometric Adaptive UI Quick Unlock (`LocalAuthentication`):** Simultaneously queries hardware enrollment for both `FACIAL_RECOGNITION` and `FINGERPRINT` to dynamically configure the unlock affordance:
+    * **Both Enrolled:** Renders `[ Unlock with Face or Fingerprint ]` with a `shield-account` icon.
+    * **Face Only:** Renders `[ Unlock with Face ID ]` (iOS) or `[ Unlock with Face Unlock ]` (Android) with a `face-recognition` icon.
+    * **Fingerprint Only:** Renders `[ Unlock with Fingerprint ]` with a `fingerprint` icon.
+    * **Neither Enrolled:** The biometric button is gracefully omitted from the layout.
+  * **`[ Sign In ]` Button:** High-contrast crimson action button (`#B5121B`).
   * "Forgot Password?" navigation link.
-* **Safeguards:** Disables input during network calls; displays clear error messages for invalid credentials, unassigned roles, or inactive network.
+* **Safeguards:** Disables input during network calls; displays clear error messages for invalid credentials, unassigned roles, or inactive network. Ensures zero emojis or pulsing animations, using static accessible indicators.
 
 #### 2. Forgot Password Screen (`ForgotPasswordScreen.tsx`)
 * **Audience:** All users.
@@ -469,9 +479,9 @@ Klir Mobile comprises **13 dedicated screen views** and **5 shared system overla
 * **Capabilities:** Fullscreen black backdrop, pinch-to-zoom, pan, double-tap to reset, and display of burned metadata tags.
 
 #### 16. User Profile & Building Sheet (`ProfileSheetModal.tsx`)
-* **Audience:** All authenticated users.
+* **Audience:** All authenticated users (Custodians and Supervisors).
 * **Trigger:** Tapping the user avatar in the top navigation header.
-* **Capabilities:** Displays user full name, email, operational role, assigned building, active task count, app build version, and secure `[ Sign Out ]` CTA.
+* **Capabilities:** Displays user full name, email, operational role badge, assigned building zone, active task count, dynamic application build version (`v${Constants.expoConfig?.version ?? '1.24.4'}` resolving `v1.24.4` Build 59 for both roles), and secure `[ Sign Out ]` CTA.
 
 #### 17. Flagging & Recheck Reason Dialog (`FlaggedRemarksModal.tsx`)
 * **Audience:** Campus Supervisors.
@@ -740,26 +750,37 @@ npm run build:apk
 npm run build:dev
 ```
 
+### 5. Automated Git SemVer Release Engine
+Klir Mobile includes a zero-dependency, cross-platform release automation script (`scripts/release.js`) that analyzes Git commit history following Conventional Commits (`feat` $\rightarrow$ MINOR, `fix` $\rightarrow$ PATCH, `BREAKING CHANGE` $\rightarrow$ MAJOR):
+
+```powershell
+# Preview release version bump without touching files (dry run)
+npm run version:check
+
+# Execute release: bumps package.json, app.json, android/app/build.gradle, updates CHANGELOG.md, and creates git tag
+npm run release
+```
+
 ---
 
 ## 🧪 11. Quality Assurance & Testing Matrix
 
-Klir Mobile maintains a comprehensive test suite of **20 test suites** and **188 automated tests** covering unit logic, integration contexts, and end-to-end user journeys:
+Klir Mobile maintains a comprehensive test suite of **24 test suites** and **254 automated tests** (100% passing) covering unit logic, integration contexts, and end-to-end user journeys:
 
 ```powershell
-# Run the complete test suite (20 suites, 188 tests)
+# Run the complete test suite (24 suites, 254 tests passing)
 npm test
 
 # Run TypeScript strict typecheck (zero errors enforced)
 npm run typecheck
 
-# Run unit tests only
+# Run unit tests only (11 suites, 178 tests)
 npm run test:unit
 
-# Run integration tests only
+# Run integration tests only (10 suites)
 npm run test:integration
 
-# Run end-to-end flow tests only
+# Run end-to-end flow tests only (3 suites)
 npm run test:e2e
 
 # Run test coverage report
@@ -784,6 +805,7 @@ __tests__/
 │   ├── TaskExecutionModal.test.tsx         # 3-step modal state, photos & 1-tap checklist
 │   ├── TasksContext.test.tsx               # SWR hydration & Firestore snapshot updates
 │   └── screens/
+│       ├── ActiveTaskScreen.test.tsx       # Active assignment hero card & action states
 │       ├── HistoryScreen.test.tsx          # Range filtering, search & metrics calculation
 │       ├── InboxScreen.test.tsx            # Emergency alert card, filters & deduplication
 │       ├── LoginScreen.test.tsx            # Form validation, biometrics & role routing
@@ -791,8 +813,11 @@ __tests__/
 │       └── TaskDetailScreen.test.tsx       # 3-step full-screen flow & area photo tags
 │
 └── unit/
+    ├── LoginBiometrics.test.tsx            # Dual-biometric adaptive icon and label detection
     ├── MaintenanceUI.test.ts               # Design tokens, color contrast & badge logic
+    ├── ProfileSheetModal.test.tsx          # Dynamic SemVer app versioning & role badge display
     ├── api.test.ts                         # Authenticated fetch client & token attachment
+    ├── notifications.test.ts               # FCM token registration & unregistration handlers
     ├── report-export.test.ts               # CSV generation & PDF input formatting
     ├── restrooms.test.ts                   # 22-room SDCA facility mapping & fixture counts
     ├── supervisor-api.test.ts              # Reassignment, flagging & approval endpoints

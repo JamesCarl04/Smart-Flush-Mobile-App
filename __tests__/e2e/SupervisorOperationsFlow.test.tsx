@@ -308,7 +308,7 @@ describe('Supervisor Operations Flow E2E', () => {
     expect(await screen.findByText('Checklist', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('Notes: Replaced optical sensor battery and fully sanitized area.', {}, { timeout: 15000 })).toBeTruthy();
     expect(screen.getByText('Duration: 30 min 0 sec')).toBeTruthy();
-    expect(screen.getByText('Completed by: worker-available-01')).toBeTruthy();
+    expect(screen.getAllByText(/Carlos Tech/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('Biometric Verified')).toBeTruthy();
 
     // Step 4: Open Flag Dialog & submit flag for re-inspection

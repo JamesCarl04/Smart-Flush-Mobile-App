@@ -28,7 +28,7 @@ export type AutomationTrigger =
 
 export type AssignmentSource = 'initial_auto' | 'supervisor' | 'retry_auto';
 
-export type UserRole = 'maintenance' | 'supervisor';
+export type UserRole = 'maintenance' | 'technician' | 'supervisor';
 export type ChecklistValue = 'unchecked' | 'done' | 'na';
 
 export interface TaskChecklist {
