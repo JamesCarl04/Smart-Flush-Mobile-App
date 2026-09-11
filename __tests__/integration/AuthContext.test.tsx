@@ -3,8 +3,9 @@ import { Alert, Button, Text, View } from 'react-native';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import * as FirebaseAuth from '@react-native-firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { AuthProvider } from '../../contexts/AuthContext';
+import { AuthProvider, USER_PROFILE_CACHE_KEY } from '../../contexts/AuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { auth } from '../../lib/firebase';
 import { mockAuthModule, mockMessagingModule } from '../../jest.setup';
@@ -323,4 +324,144 @@ describe('AuthContext Integration', () => {
       expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
     });
   });
+
+  it('hydrates user profile instantly from AsyncStorage cache for 0ms startup', async () => {
+    const cachedProfile = {
+      uid: 'cached-tech-1',
+      email: 'cached@smartflush.com',
+      role: 'maintenance',
+      name: 'Cached Technician',
+      building: 'Engineering Wing',
+      shift: '1st',
+    };
+
+    await AsyncStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify(cachedProfile));
+
+    // Do not emit any Firebase onAuthStateChanged immediately
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation(() => jest.fn());
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    expect(screen.getByTestId('user-uid').props.children).toBe('cached-tech-1');
+    expect(screen.getByTestId('user-role').props.children).toBe('maintenance');
+    expect(screen.getByTestId('user-name').props.children).toBe('Cached Technician');
+  });
+
+  it('optimistically clears user and role state immediately upon logout', async () => {
+    const mockFirebaseUser = {
+      uid: 'maint-fast-logout',
+      email: 'fast@smartflush.com',
+      displayName: 'Fast Logout User',
+      getIdToken: jest.fn().mockResolvedValue('token-fast'),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation((_auth, callback) => {
+      callback(mockFirebaseUser);
+      return jest.fn();
+    });
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: {
+          id: 'maint-fast-logout',
+          email: 'fast@smartflush.com',
+          role: 'maintenance',
+          name: 'Fast Logout User',
+        },
+      }),
+    });
+
+    // Make signOut return a slow pending promise to verify optimistic reset
+    let resolveSignOut: () => void;
+    (FirebaseAuth.signOut as jest.Mock).mockImplementation(
+      () => new Promise<void>((resolve) => { resolveSignOut = resolve; }),
+    );
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    expect(screen.getByTestId('user-uid').props.children).toBe('maint-fast-logout');
+
+    // Press logout
+    fireEvent.press(screen.getByTestId('logout-button'));
+
+    // Optimistic reset should immediately transition to NO_USER without waiting for signOut to resolve
+    expect(screen.getByTestId('user-uid').props.children).toBe('NO_USER');
+    expect(screen.getByTestId('user-role').props.children).toBe('NO_ROLE');
+
+    // Resolve signOut to cleanup
+    resolveSignOut!();
+  });
+
+  it('preserves cached profile and stays logged in when network fails during startup revalidation', async () => {
+    const cachedProfile = {
+      uid: 'offline-worker-1',
+      email: 'offline@smartflush.com',
+      role: 'maintenance',
+      name: 'Offline Worker',
+      building: 'South Wing',
+      shift: '1st',
+    };
+
+    await AsyncStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify(cachedProfile));
+
+    const mockFirebaseUser = {
+      uid: 'offline-worker-1',
+      email: 'offline@smartflush.com',
+      displayName: 'Offline Worker',
+      getIdToken: jest.fn().mockResolvedValue('token-offline'),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation((_auth, callback) => {
+      callback(mockFirebaseUser);
+      return jest.fn();
+    });
+
+    // Simulate network failure when revalidating
+    global.fetch = jest.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    // Should stay logged in with cached profile
+    expect(screen.getByTestId('user-uid').props.children).toBe('offline-worker-1');
+    expect(screen.getByTestId('user-role').props.children).toBe('maintenance');
+    expect(screen.getByTestId('user-name').props.children).toBe('Offline Worker');
+
+    // Should not have called signOut
+    expect(FirebaseAuth.signOut).not.toHaveBeenCalled();
+  });
 });
+
+

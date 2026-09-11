@@ -176,7 +176,9 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
           setTasks(merged);
           saveCache(merged);
           setLoading(false);
-          setErrorMessage(null);
+          if (merged.length > 0) {
+            setErrorMessage(null);
+          }
         };
 
         for (const { key, query } of queryEntries) {
@@ -217,39 +219,56 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       return false;
     }
 
-    const isFlaggedOrRechecking =
-      task.status === 'flagged' || task.status === 'rechecking';
+    if (role === 'supervisor') {
+      return true;
+    }
 
-    if (!isFlaggedOrRechecking && role !== 'supervisor') {
-      const hasPriorSubmission = Boolean(
-        user?.uid &&
-          ((task.submissions && task.submissions[user.uid]) ||
-            (task.completedByMap && task.completedByMap[user.uid]) ||
-            task.completedBy === user.uid ||
-            (task.completedBy &&
-              typeof task.completedBy === 'object' &&
-              (task.completedBy as Record<string, any>)[user.uid])),
-      );
-      if (hasPriorSubmission) {
-        return false;
-      }
+    const isUserAssigned = Boolean(
+      user?.uid && (
+        task.assignedTo === user.uid ||
+        task.assignedTo === user.email ||
+        (task.assignedToIds && task.assignedToIds.includes(user.uid)) ||
+        (task.status === 'rechecking' && task.recheckedBy === user.uid)
+      )
+    );
+
+    // If flagged, strictly scope to the accountable worker (assigned tech or original submitter if unassigned)
+    if (task.status === 'flagged') {
+      const hasUserCompleted =
+        task.completedBy === user?.uid ||
+        Boolean(user?.uid && (task.submissions?.[user.uid] || task.completedByMap?.[user.uid]));
+      const isAccountable =
+        isUserAssigned ||
+        (!task.assignedTo &&
+          (!task.assignedToIds || task.assignedToIds.length === 0) &&
+          hasUserCompleted);
+      return isAccountable;
+    }
+
+    if (task.status === 'rechecking') {
+      return isUserAssigned;
+    }
+
+    // For other active tasks, if the technician already submitted, hide it from inbox
+    const hasPriorSubmission = Boolean(
+      user?.uid &&
+        ((task.submissions && task.submissions[user.uid]) ||
+          (task.completedByMap && task.completedByMap[user.uid]) ||
+          task.completedBy === user.uid ||
+          (task.completedBy &&
+            typeof task.completedBy === 'object' &&
+            (task.completedBy as Record<string, any>)[user.uid])),
+    );
+    if (hasPriorSubmission) {
+      return false;
     }
 
     return (
-      (task.status === 'unassigned' &&
-        (role === 'supervisor' || isBroadcastTask(task))) ||
-      task.status === 'assigned' ||
+      (task.status === 'unassigned' && isBroadcastTask(task)) ||
       task.status === 'reassignment_needed' ||
-      task.status === 'flagged' ||
-      task.status === 'acknowledged' ||
-      task.status === 'rechecking' ||
-      task.assignedTo === user?.uid ||
-      task.assignedTo === user?.email ||
-      (task.assignedToIds && task.assignedToIds.includes(user?.uid ?? '')) ||
       isBroadcastTask(task) ||
-      task.recheckedBy === user?.uid ||
-      task.completedBy === user?.uid ||
-      (task.submissions && Boolean(task.submissions[user?.uid ?? '']))
+      ((task.status === 'assigned' || task.status === 'acknowledged') &&
+        isUserAssigned)
     );
   });
 

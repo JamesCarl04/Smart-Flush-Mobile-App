@@ -50,7 +50,14 @@ import { ImageViewerModal } from '../components/ImageViewerModal';
 import { KlirButton } from '../components/KlirButton';
 import { useAuth } from '../hooks/useAuth';
 import { useSupervisorContext } from '../contexts/SupervisorContext';
-import { exportReportCSV, exportReportPDF } from '../lib/report-export';
+import {
+  exportReportCSV,
+  exportReportPDF,
+  exportAuditLogCSV,
+  exportAuditLogPDF,
+  calculateComplianceKPIs,
+} from '../lib/report-export';
+import { fetchAuditLogs, logTaskAudit, type AuditLogEntry } from '../lib/audit-logger';
 import { auth, db } from '../lib/firebase';
 import {
   approveTask,
@@ -1126,6 +1133,15 @@ export function SupervisorTaskDetailScreen({
   const [reason, setReason] = useState('Manual reassignment');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [flagOverride, setFlagOverride] = useState(false);
+
+  const isFlagged = task?.status === 'flagged';
+  const originalTechId =
+    task?.completedBy ||
+    (task?.submissions && Object.keys(task.submissions)[0]) ||
+    (task?.completedByMap && Object.keys(task.completedByMap)[0]) ||
+    task?.assignedTo;
+  const originalTechName = getAssigneeName(originalTechId, people, task);
 
   const toggleAssignee = (personId: string) => {
     setSelectedAssignees((prev) =>
@@ -1140,6 +1156,11 @@ export function SupervisorTaskDetailScreen({
       return;
     }
 
+    if (isFlagged && (!flagOverride || reason.trim().length < 5)) {
+      setMessage('Mandatory override reason (min 5 characters) required for shift handoff.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const assigneeNames: Record<string, string> = {};
@@ -1150,10 +1171,14 @@ export function SupervisorTaskDetailScreen({
         }
       });
 
+      const finalReason = isFlagged
+        ? `[Shift Handoff Override] ${reason.trim()}`
+        : reason;
+
       const payload: ReassignTaskInput = {
         taskId: task.id,
         newAssigneeUid: selectedAssignees[0],
-        reason,
+        reason: finalReason,
         supervisorUid: user.uid,
         supervisorName: user.name || undefined,
         assigneeNames,
@@ -1162,6 +1187,16 @@ export function SupervisorTaskDetailScreen({
         payload.newAssigneeUids = selectedAssignees;
       }
       await reassignTask(payload);
+      void logTaskAudit(
+        'TASK_REASSIGNED',
+        task,
+        { uid: user.uid, name: user.name, role: 'supervisor' },
+        {
+          reason: finalReason,
+          newAssignee: selectedAssignees.join(','),
+          previousAssignee: task.assignedTo || originalTechId || undefined,
+        },
+      );
       setMessage('Task reassigned.');
       await refresh();
     } catch (caught) {
@@ -1247,9 +1282,75 @@ export function SupervisorTaskDetailScreen({
               </View>
             </Card.Content>
           </Card>
+        ) : isFlagged && !flagOverride ? (
+          <Card mode="elevated" style={[styles.personCard, styles.cardElevation, { borderColor: '#FCA5A5', borderWidth: 1 }]}>
+            <Card.Content style={styles.cardContent}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}>
+                <MaterialCommunityIcons name="shield-alert-outline" size={24} color="#DC2626" />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontWeight: '700', color: '#991B1B', fontSize: 15 }}>
+                    Direct Accountability (ISO 9001 / CAPA)
+                  </Text>
+                  <Text style={{ color: '#475569', fontSize: 13, marginTop: 2 }}>
+                    This work order was flagged for rework and is locked to the original technician ({originalTechName}) for corrective action.
+                  </Text>
+                </View>
+              </View>
+
+              {task.flagReason ? (
+                <View style={{ backgroundColor: '#FEF2F2', borderRadius: 8, padding: 10, marginTop: 10, borderWidth: 1, borderColor: '#FEE2E2' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: '#991B1B' }}>Defect / Flag Reason:</Text>
+                  <Text style={{ fontSize: 13, color: '#B91C1C', marginTop: 2 }}>{task.flagReason}</Text>
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                testID="override-reassign-button"
+                style={{
+                  marginTop: 14,
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  backgroundColor: '#F8FAFC',
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: '#CBD5E1',
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                }}
+                onPress={() => {
+                  setFlagOverride(true);
+                  setReason('');
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Override and reassign flagged task"
+              >
+                <MaterialCommunityIcons name="account-switch-outline" size={18} color={KLIR_COLORS.primary} />
+                <Text style={{ color: KLIR_COLORS.primary, fontWeight: '700', fontSize: 13 }}>
+                  Override &amp; Reassign (Shift Handoff / Technician Unavailable)
+                </Text>
+              </TouchableOpacity>
+            </Card.Content>
+          </Card>
         ) : (
           <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
             <Card.Content style={styles.cardContent}>
+              {isFlagged && flagOverride && (
+                <View style={{ backgroundColor: '#FFFBEB', borderRadius: 8, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: '#FDE68A' }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: '#B45309' }}>
+                      Shift Handoff Override Active
+                    </Text>
+                    <TouchableOpacity onPress={() => { setFlagOverride(false); setReason('Manual reassignment'); }}>
+                      <Text style={{ fontSize: 12, color: '#B45309', textDecorationLine: 'underline', fontWeight: '600' }}>Cancel</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={{ fontSize: 12, color: '#78350F', marginTop: 2 }}>
+                    Mandatory justification required for audit logging under ISO 9001 &amp; NIST SP 800-92.
+                  </Text>
+                </View>
+              )}
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text variant="titleMedium" style={styles.cardHeaderTitle}>
                   Select Team Member
@@ -1291,7 +1392,8 @@ export function SupervisorTaskDetailScreen({
               </View>
 
               <TextInput
-                label="Reason"
+                label={isFlagged ? "Mandatory Justification Reason (min 5 chars)" : "Reason"}
+                placeholder={isFlagged ? "e.g., Technician off-duty / shift ended / emergency handoff" : "Manual reassignment"}
                 value={reason}
                 onChangeText={setReason}
                 mode="outlined"
@@ -1301,10 +1403,11 @@ export function SupervisorTaskDetailScreen({
               />
 
               <KlirButton
-                title="Reassign Task"
+                testID="confirm-reassign-button"
+                title={isFlagged ? "Confirm Shift Handoff Reassignment" : "Reassign Task"}
                 variant="primary"
                 loading={submitting}
-                disabled={selectedAssignees.length === 0 || submitting}
+                disabled={selectedAssignees.length === 0 || submitting || (isFlagged && reason.trim().length < 5)}
                 onPress={() => void submit()}
                 style={[styles.reassignButton, styles.cardElevation]}
               />
@@ -1651,6 +1754,11 @@ export function CompletedReviewDetailScreen({
         supervisorUid: user.uid,
         supervisorName: user.name,
       });
+      void logTaskAudit('TASK_APPROVED', task, {
+        uid: user.uid,
+        name: user.name,
+        role: 'supervisor',
+      });
       Alert.alert('Task Approved', 'The maintenance task has been approved successfully.');
       navigation.goBack();
     } catch (caught) {
@@ -1674,6 +1782,31 @@ export function CompletedReviewDetailScreen({
         supervisorName: user.name,
         flagPhotoUrls: flagPhotos,
       });
+      const originalTech =
+        task.completedBy ||
+        (task.submissions && Object.keys(task.submissions)[0]) ||
+        (task.completedByMap && Object.keys(task.completedByMap)[0]) ||
+        task.assignedTo;
+      if (typeof db?.collection === 'function' && originalTech) {
+        try {
+          await db.collection('tasks').doc(task.id).update({
+            status: 'flagged',
+            inspectionStatus: 'flagged',
+            assignedTo: originalTech,
+            flagReason: reason.trim(),
+            flaggedAt: new Date(),
+            flaggedBy: user.uid,
+          });
+        } catch {
+          // ignore
+        }
+      }
+      void logTaskAudit(
+        'TASK_FLAGGED',
+        task,
+        { uid: user.uid, name: user.name, role: 'supervisor' },
+        { reason: reason.trim(), previousAssignee: originalTech || undefined },
+      );
       setVisible(false);
       setReason('');
       setFlagPhotos([]);
@@ -2179,8 +2312,27 @@ export function SupervisorReportsScreen({
   const { user } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
   const [timeframe, setTimeframe] = useState<ReportTimeframe>('today');
+  const [reportType, setReportType] = useState<'operations' | 'audit'>('operations');
+  const [allAuditLogs, setAllAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [loadingAudit, setLoadingAudit] = useState(false);
   const [exportingType, setExportingType] = useState<'pdf' | 'csv' | null>(null);
   const isCompactWidth = windowWidth < 420;
+
+  const loadAuditData = useCallback(async () => {
+    setLoadingAudit(true);
+    try {
+      const logs = await fetchAuditLogs({ timeframe: 'all' });
+      setAllAuditLogs(logs);
+    } catch {
+      // ignore
+    } finally {
+      setLoadingAudit(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAuditData();
+  }, [loadAuditData]);
 
   const completedTasks = useMemo(() => {
     return tasks.filter(
@@ -2274,6 +2426,43 @@ export function SupervisorReportsScreen({
     };
   }, [filteredTasks]);
 
+  const auditKpis = useMemo(() => {
+    return calculateComplianceKPIs(allAuditLogs, tasks);
+  }, [allAuditLogs, tasks]);
+
+  const auditLogs = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+    );
+    const startOfWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const startOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      now.getDate(),
+    );
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+
+    return allAuditLogs.filter((log) => {
+      const logDate = new Date(log.timestamp);
+      switch (timeframe) {
+        case 'today':
+          return logDate >= startOfToday;
+        case 'week':
+          return logDate >= startOfWeek;
+        case 'month':
+          return logDate >= startOfMonth;
+        case 'year':
+          return logDate >= startOfYear;
+        case 'all':
+        default:
+          return true;
+      }
+    });
+  }, [allAuditLogs, timeframe]);
+
   const timeframeTabs: Array<{ id: ReportTimeframe; label: string }> = [
     { id: 'today', label: 'Today' },
     { id: 'week', label: 'This Week' },
@@ -2335,6 +2524,41 @@ export function SupervisorReportsScreen({
     }
   };
 
+  const handleExportAuditPDF = async (): Promise<void> => {
+    setExportingType('pdf');
+    try {
+      const currentTab = timeframeTabs.find((t) => t.id === timeframe);
+      await exportAuditLogPDF({
+        timeframeLabel: currentTab?.label ?? 'All Time',
+        supervisorName: user?.name ?? user?.email ?? 'Facility Supervisor',
+        building: user?.building ?? 'SDCA Annex Building',
+        generatedAt: new Date(),
+        logs: auditLogs,
+        kpis: auditKpis,
+      });
+    } catch {
+      Alert.alert('Export Failed', 'Unable to generate or share Audit PDF report.');
+    } finally {
+      setExportingType(null);
+    }
+  };
+
+  const handleExportAuditCSV = async (): Promise<void> => {
+    setExportingType('csv');
+    try {
+      const currentTab = timeframeTabs.find((t) => t.id === timeframe);
+      await exportAuditLogCSV({
+        timeframe,
+        timeframeLabel: currentTab?.label ?? 'All Time',
+        logs: auditLogs,
+      });
+    } catch {
+      Alert.alert('Export Failed', 'Unable to generate or share Audit CSV.');
+    } finally {
+      setExportingType(null);
+    }
+  };
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -2342,12 +2566,55 @@ export function SupervisorReportsScreen({
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={loading}
-            onRefresh={() => void refresh()}
+            refreshing={loading || loadingAudit}
+            onRefresh={() => {
+              void refresh();
+              void loadAuditData();
+            }}
             colors={[KLIR_COLORS.primary]}
           />
         }
       >
+        {/* Report Scope Selector */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#F1F5F9', borderRadius: 10, padding: 3, borderWidth: 1, borderColor: '#E2E8F0' }}>
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              borderRadius: 8,
+              alignItems: 'center',
+              backgroundColor: reportType === 'operations' ? '#FFFFFF' : 'transparent',
+              ...(reportType === 'operations' ? sharedShadow : {}),
+            }}
+            onPress={() => setReportType('operations')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: reportType === 'operations' }}
+            accessibilityLabel="Operations Tasks Report"
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: reportType === 'operations' ? KLIR_COLORS.primary : '#64748B' }}>
+              Operations Tasks
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={{
+              flex: 1,
+              paddingVertical: 8,
+              borderRadius: 8,
+              alignItems: 'center',
+              backgroundColor: reportType === 'audit' ? '#FFFFFF' : 'transparent',
+              ...(reportType === 'audit' ? sharedShadow : {}),
+            }}
+            onPress={() => setReportType('audit')}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: reportType === 'audit' }}
+            accessibilityLabel="System Audit Trail"
+          >
+            <Text style={{ fontSize: 13, fontWeight: '700', color: reportType === 'audit' ? KLIR_COLORS.primary : '#64748B' }}>
+              System Audit Trail
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Timeframe Filter Tabs */}
         <ScrollView
           horizontal
@@ -2382,231 +2649,396 @@ export function SupervisorReportsScreen({
           })}
         </ScrollView>
 
-        {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Inspection Completion</Text>
+        {reportType === 'operations' ? (
+          <>
+            {/* Section Heading */}
+            <Text style={styles.sectionHeaderTitle}>Inspection Completion</Text>
 
-        {/* Supervisor QA Audit KPI Card */}
-        <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
-          <Card.Content style={styles.cardContent}>
-            <View style={styles.rowBetween}>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                  Inspection Overview
-                </Text>
-                <Text style={styles.metricFooterText}>
-                  {metrics.approvedCount} approved • {metrics.flaggedCount} flagged • {metrics.pendingAuditCount} pending review
-                </Text>
-              </View>
-              <View style={styles.complianceBadge}>
-                <Text style={styles.complianceBadgeNumber}>{metrics.complianceRate}</Text>
-                <Text style={styles.complianceBadgeLabel}>Inspected</Text>
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Section Heading */}
-        <Text style={styles.sectionHeaderTitle}>Performance Summary</Text>
-
-        {/* Analytics Summary 2x2 Bento KPI Cards */}
-        <View style={styles.metricsGrid}>
-          <Card
-            mode="contained"
-            style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
-          >
-            <Card.Content style={styles.metricTileContent}>
-              <Text variant="labelMedium" style={styles.metricLabel}>
-                Tasks Completed
-              </Text>
-              <Text variant="displaySmall" style={styles.metricBigNumber}>
-                {metrics.total}
-              </Text>
-              <Text style={styles.metricFooterText}>Completed in timeframe</Text>
-            </Card.Content>
-          </Card>
-
-          <Card
-            mode="contained"
-            style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
-          >
-            <Card.Content style={styles.metricTileContent}>
-              <Text variant="labelMedium" style={styles.metricLabel}>
-                Avg Resolution Time
-              </Text>
-              <Text variant="displaySmall" style={styles.metricBigNumber}>
-                {metrics.avgDuration}
-              </Text>
-              <Text style={styles.metricFooterText}>Average duration</Text>
-            </Card.Content>
-          </Card>
-
-          <Card
-            mode="contained"
-            style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
-          >
-            <Card.Content style={styles.metricTileContent}>
-              <Text variant="labelMedium" style={styles.metricLabel}>
-                Photo Proof
-              </Text>
-              <Text variant="displaySmall" style={styles.metricBigNumber}>
-                {metrics.photoPairsCount}
-              </Text>
-              <Text style={styles.metricFooterText}>Before & after sets</Text>
-            </Card.Content>
-          </Card>
-
-          <Card
-            mode="contained"
-            style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
-          >
-            <Card.Content style={styles.metricTileContent}>
-              <Text variant="labelMedium" style={styles.metricLabel}>
-                Biometric Verified
-              </Text>
-              <Text variant="displaySmall" style={styles.metricBigNumber}>
-                {metrics.biometricPct}
-              </Text>
-              <Text style={styles.metricFooterText}>Verified with fingerprint</Text>
-            </Card.Content>
-          </Card>
-        </View>
-
-        {/* Section Heading */}
-        <Text
-          style={styles.sectionHeaderTitle}
-          accessibilityRole="header"
-        >
-          Export Reports
-        </Text>
-
-        {/* Export Operations Action Card */}
-        <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
-          <Card.Content style={styles.cardContent}>
-            <View style={{ gap: 12 }}>
-              <View style={{ gap: 3 }}>
-                <Text variant="titleMedium" style={styles.cardHeaderTitle}>
-                  Export Reports
-                </Text>
-                <Text style={styles.metricFooterText}>
-                  Download PDF summaries or export spreadsheet data for{' '}
-                  <Text style={{ fontWeight: '700', color: '#0F172A' }}>
-                    {timeframeTabs.find((t) => t.id === timeframe)?.label}
-                  </Text>{' '}
-                  ({filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'})
-                </Text>
-              </View>
-              <View
-                testID="supervisor-export-actions"
-                style={[
-                  styles.exportActions,
-                  isCompactWidth && styles.exportActionsStacked,
-                ]}
-              >
-                <KlirButton
-                  testID="supervisor-export-pdf"
-                  title="Export PDF Report"
-                  variant="primary"
-                  icon="file-pdf-box"
-                  loading={exportingType === 'pdf'}
-                  disabled={exportingType !== null || filteredTasks.length === 0}
-                  onPress={() => void handleExportPDF()}
-                  containerStyle={[
-                    styles.exportButtonContainer,
-                    !isCompactWidth && styles.exportButtonContainerWide,
-                  ]}
-                  style={styles.exportButton}
-                  textStyle={styles.exportButtonText}
-                />
-                <KlirButton
-                  testID="supervisor-export-csv"
-                  title="Export CSV"
-                  variant="outline"
-                  icon="file-delimited-outline"
-                  loading={exportingType === 'csv'}
-                  disabled={exportingType !== null || filteredTasks.length === 0}
-                  onPress={() => void handleExportCSV()}
-                  containerStyle={[
-                    styles.exportButtonContainer,
-                    !isCompactWidth && styles.exportButtonContainerWide,
-                  ]}
-                  style={styles.exportButton}
-                  textStyle={styles.exportButtonText}
-                />
-              </View>
-            </View>
-          </Card.Content>
-        </Card>
-
-        {/* Submissions Log Feed */}
-        <Text style={styles.sectionHeaderTitle}>
-          Completed Tasks ({filteredTasks.length})
-        </Text>
-
-        {filteredTasks.length === 0 ? (
-          <View style={styles.emptyCenteredContainer}>
-            <Text style={styles.emptyCenteredText}>No completed tasks</Text>
-          </View>
-        ) : (
-          filteredTasks.map((item) => (
-            <Card
-              key={item.id}
-              mode="elevated"
-              style={[styles.taskCard, styles.cardElevation]}
-              onPress={() =>
-                navigation.navigate('CompletedReviewDetail', {
-                  taskId: item.id,
-                })
-              }
-              accessible={true}
-              accessibilityRole="button"
-              accessibilityLabel={`${item.location}, ${item.floor}. Completed by ${getAssigneeName(item.completedBy ?? item.assignedTo, people, item)}`}
-            >
+            {/* Supervisor QA Audit KPI Card */}
+            <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
               <Card.Content style={styles.cardContent}>
                 <View style={styles.rowBetween}>
-                  <Text variant="titleMedium" style={styles.taskLocationTitle}>
-                    {item.location}
-                  </Text>
-                  <View
-                    style={[
-                      styles.teamBadge,
-                      styles.teamBadgeAvailable,
-                    ]}
-                  >
-                    <Text style={styles.teamBadgeTextAvailable}>
-                      Completed
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                      Inspection Overview
+                    </Text>
+                    <Text style={styles.metricFooterText}>
+                      {metrics.approvedCount} approved • {metrics.flaggedCount} flagged • {metrics.pendingAuditCount} pending review
                     </Text>
                   </View>
-                </View>
-
-                <Text variant="bodyMedium" style={styles.taskComponentText}>
-                  {item.component} • {item.floor}, {item.building}
-                </Text>
-
-                <View style={{ marginVertical: 4 }}>
-                  <AssigneeAvatarCluster
-                    task={item}
-                    people={people}
-                    showNames={true}
-                  />
-                </View>
-
-                <View style={styles.rowBetween}>
-                  <Text variant="bodySmall" style={styles.taskAssigneeText}>
-                    Completed: {formatDate(item.completedAt)}
-                  </Text>
-                  <Text
-                    variant="bodySmall"
-                    style={{
-                      color: KLIR_COLORS.slateMuted,
-                      fontWeight: '700',
-                    }}
-                  >
-                    Duration: {formatDuration(item.workDuration ?? 0)}
-                  </Text>
+                  <View style={styles.complianceBadge}>
+                    <Text style={styles.complianceBadgeNumber}>{metrics.complianceRate}</Text>
+                    <Text style={styles.complianceBadgeLabel}>Inspected</Text>
+                  </View>
                 </View>
               </Card.Content>
             </Card>
-          ))
+
+            {/* Section Heading */}
+            <Text style={styles.sectionHeaderTitle}>Performance Summary</Text>
+
+            {/* Analytics Summary 2x2 Bento KPI Cards */}
+            <View style={styles.metricsGrid}>
+              <Card
+                mode="contained"
+                style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
+              >
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>
+                    Tasks Completed
+                  </Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {metrics.total}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Completed in timeframe</Text>
+                </Card.Content>
+              </Card>
+
+              <Card
+                mode="contained"
+                style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
+              >
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>
+                    Avg Resolution Time
+                  </Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {metrics.avgDuration}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Average duration</Text>
+                </Card.Content>
+              </Card>
+
+              <Card
+                mode="contained"
+                style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
+              >
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>
+                    Photo Proof
+                  </Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {metrics.photoPairsCount}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Before &amp; after sets</Text>
+                </Card.Content>
+              </Card>
+
+              <Card
+                mode="contained"
+                style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}
+              >
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>
+                    Biometric Verified
+                  </Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {metrics.biometricPct}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Verified with fingerprint</Text>
+                </Card.Content>
+              </Card>
+            </View>
+
+            {/* Section Heading */}
+            <Text
+              style={styles.sectionHeaderTitle}
+              accessibilityRole="header"
+            >
+              Export Reports
+            </Text>
+
+            {/* Export Operations Action Card */}
+            <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
+              <Card.Content style={styles.cardContent}>
+                <View style={{ gap: 12 }}>
+                  <View style={{ gap: 3 }}>
+                    <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                      Export Reports
+                    </Text>
+                    <Text style={styles.metricFooterText}>
+                      Download PDF summaries or export spreadsheet data for{' '}
+                      <Text style={{ fontWeight: '700', color: '#0F172A' }}>
+                        {timeframeTabs.find((t) => t.id === timeframe)?.label}
+                      </Text>{' '}
+                      ({filteredTasks.length} {filteredTasks.length === 1 ? 'task' : 'tasks'})
+                    </Text>
+                  </View>
+                  <View
+                    testID="supervisor-export-actions"
+                    style={[
+                      styles.exportActions,
+                      isCompactWidth && styles.exportActionsStacked,
+                    ]}
+                  >
+                    <KlirButton
+                      testID="supervisor-export-pdf"
+                      title="Export PDF Report"
+                      variant="primary"
+                      icon="file-pdf-box"
+                      loading={exportingType === 'pdf'}
+                      disabled={exportingType !== null || filteredTasks.length === 0}
+                      onPress={() => void handleExportPDF()}
+                      containerStyle={[
+                        styles.exportButtonContainer,
+                        !isCompactWidth && styles.exportButtonContainerWide,
+                      ]}
+                      style={styles.exportButton}
+                      textStyle={styles.exportButtonText}
+                    />
+                    <KlirButton
+                      testID="supervisor-export-csv"
+                      title="Export CSV"
+                      variant="outline"
+                      icon="file-delimited-outline"
+                      loading={exportingType === 'csv'}
+                      disabled={exportingType !== null || filteredTasks.length === 0}
+                      onPress={() => void handleExportCSV()}
+                      containerStyle={[
+                        styles.exportButtonContainer,
+                        !isCompactWidth && styles.exportButtonContainerWide,
+                      ]}
+                      style={styles.exportButton}
+                      textStyle={styles.exportButtonText}
+                    />
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Submissions Log Feed */}
+            <Text style={styles.sectionHeaderTitle}>
+              Completed Tasks ({filteredTasks.length})
+            </Text>
+
+            {filteredTasks.length === 0 ? (
+              <View style={styles.emptyCenteredContainer}>
+                <Text style={styles.emptyCenteredText}>No completed tasks</Text>
+              </View>
+            ) : (
+              filteredTasks.map((item) => (
+                <Card
+                  key={item.id}
+                  mode="elevated"
+                  style={[styles.taskCard, styles.cardElevation]}
+                  onPress={() =>
+                    navigation.navigate('CompletedReviewDetail', {
+                      taskId: item.id,
+                    })
+                  }
+                  accessible={true}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.location}, ${item.floor}. Completed by ${getAssigneeName(item.completedBy ?? item.assignedTo, people, item)}`}
+                >
+                  <Card.Content style={styles.cardContent}>
+                    <View style={styles.rowBetween}>
+                      <Text variant="titleMedium" style={styles.taskLocationTitle}>
+                        {item.location}
+                      </Text>
+                      <View
+                        style={[
+                          styles.teamBadge,
+                          styles.teamBadgeAvailable,
+                        ]}
+                      >
+                        <Text style={styles.teamBadgeTextAvailable}>
+                          Completed
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text variant="bodyMedium" style={styles.taskComponentText}>
+                      {item.component} • {item.floor}, {item.building}
+                    </Text>
+
+                    <View style={{ marginVertical: 4 }}>
+                      <AssigneeAvatarCluster
+                        task={item}
+                        people={people}
+                        showNames={true}
+                      />
+                    </View>
+
+                    <View style={styles.rowBetween}>
+                      <Text variant="bodySmall" style={styles.taskAssigneeText}>
+                        Completed: {formatDate(item.completedAt)}
+                      </Text>
+                      <Text
+                        variant="bodySmall"
+                        style={{
+                          color: KLIR_COLORS.slateMuted,
+                          fontWeight: '700',
+                        }}
+                      >
+                        Duration: {formatDuration(item.workDuration ?? 0)}
+                      </Text>
+                    </View>
+                  </Card.Content>
+                </Card>
+              ))
+            )}
+          </>
+        ) : (
+          <>
+            {/* Audit Compliance Standard Card */}
+            <Card mode="elevated" style={[styles.personCard, styles.cardElevation, { borderColor: '#BAE6FD', borderWidth: 1 }]}>
+              <Card.Content style={styles.cardContent}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <MaterialCommunityIcons name="shield-check" size={26} color="#0284C7" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: '700', color: '#0369A1', fontSize: 14 }}>
+                      NIST SP 800-92 &amp; ISO 27001 (A.8.15) Compliance
+                    </Text>
+                    <Text style={{ color: '#475569', fontSize: 12, marginTop: 2 }}>
+                      Append-only non-repudiation audit trail tracking authentication, technician fast-response SLAs, supervisor QA approvals, and administrative governance.
+                    </Text>
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Multi-Period Compliance Matrix Cards */}
+            <Text style={styles.sectionHeaderTitle}>Compliance KPI Aggregations</Text>
+            <View style={styles.metricsGrid}>
+              <Card mode="contained" style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}>
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>User Logins</Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {auditKpis.day.totalLogins}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Today • {auditKpis.week.totalLogins} This Week</Text>
+                </Card.Content>
+              </Card>
+
+              <Card mode="contained" style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}>
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>Tasks Created</Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {auditKpis.day.tasksCreated}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Today • {auditKpis.week.tasksCreated} This Week</Text>
+                </Card.Content>
+              </Card>
+
+              <Card mode="contained" style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}>
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>Avg SLA Response</Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {auditKpis.day.avgResponseSeconds}s
+                  </Text>
+                  <Text style={styles.metricFooterText}>Today • {auditKpis.week.avgResponseSeconds}s This Week</Text>
+                </Card.Content>
+              </Card>
+
+              <Card mode="contained" style={[styles.metricTile, styles.standardMetricTile, styles.cardElevation]}>
+                <Card.Content style={styles.metricTileContent}>
+                  <Text variant="labelMedium" style={styles.metricLabel}>First-Time Pass Rate</Text>
+                  <Text variant="displaySmall" style={styles.metricBigNumber}>
+                    {auditKpis.day.firstTimePassRate}
+                  </Text>
+                  <Text style={styles.metricFooterText}>Approved without rework</Text>
+                </Card.Content>
+              </Card>
+            </View>
+
+            {/* Export Audit Trail Card */}
+            <Text style={styles.sectionHeaderTitle}>Export Audit Trail</Text>
+            <Card mode="elevated" style={[styles.personCard, styles.cardElevation]}>
+              <Card.Content style={styles.cardContent}>
+                <View style={{ gap: 12 }}>
+                  <View style={{ gap: 3 }}>
+                    <Text variant="titleMedium" style={styles.cardHeaderTitle}>
+                      Export Full Compliance Audit Trail
+                    </Text>
+                    <Text style={styles.metricFooterText}>
+                      Export complete 5 Ws chronological logs for your academic research paper (Day, Week, Month metrics included).
+                    </Text>
+                  </View>
+                  <View
+                    testID="supervisor-export-audit-actions"
+                    style={[
+                      styles.exportActions,
+                      isCompactWidth && styles.exportActionsStacked,
+                    ]}
+                  >
+                    <KlirButton
+                      testID="supervisor-export-audit-pdf"
+                      title="Export Audit PDF"
+                      variant="primary"
+                      icon="file-pdf-box"
+                      loading={exportingType === 'pdf'}
+                      disabled={exportingType !== null}
+                      onPress={() => void handleExportAuditPDF()}
+                      containerStyle={[
+                        styles.exportButtonContainer,
+                        !isCompactWidth && styles.exportButtonContainerWide,
+                      ]}
+                      style={styles.exportButton}
+                      textStyle={styles.exportButtonText}
+                    />
+                    <KlirButton
+                      testID="supervisor-export-audit-csv"
+                      title="Export Audit CSV"
+                      variant="outline"
+                      icon="file-delimited-outline"
+                      loading={exportingType === 'csv'}
+                      disabled={exportingType !== null}
+                      onPress={() => void handleExportAuditCSV()}
+                      containerStyle={[
+                        styles.exportButtonContainer,
+                        !isCompactWidth && styles.exportButtonContainerWide,
+                      ]}
+                      style={styles.exportButton}
+                      textStyle={styles.exportButtonText}
+                    />
+                  </View>
+                </View>
+              </Card.Content>
+            </Card>
+
+            {/* Chronological Audit Event Feed */}
+            <Text style={styles.sectionHeaderTitle}>
+              Audit Event Records ({auditLogs.length})
+            </Text>
+
+            {auditLogs.length === 0 ? (
+              <View style={styles.emptyCenteredContainer}>
+                <Text style={styles.emptyCenteredText}>No audit event records in this timeframe</Text>
+              </View>
+            ) : (
+              auditLogs.slice(0, 30).map((log) => (
+                <Card key={log.id} mode="elevated" style={[styles.taskCard, styles.cardElevation]}>
+                  <Card.Content style={styles.cardContent}>
+                    <View style={styles.rowBetween}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={{ fontWeight: '700', fontSize: 13, color: '#1E293B' }}>
+                          {log.actionType}
+                        </Text>
+                      </View>
+                      <View style={[styles.teamBadge, styles.teamBadgeAvailable]}>
+                        <Text style={styles.teamBadgeTextAvailable}>
+                          {log.actorRole.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#475569' }}>
+                      {log.actorName} • {log.localTimestamp}
+                    </Text>
+                    {log.details ? (
+                      <Text style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>
+                        {log.details}
+                      </Text>
+                    ) : null}
+                    {log.reason ? (
+                      <Text style={{ fontSize: 11, color: '#B91C1C', fontStyle: 'italic', marginTop: 2 }}>
+                        Reason: {log.reason}
+                      </Text>
+                    ) : null}
+                  </Card.Content>
+                </Card>
+              ))
+            )}
+          </>
         )}
       </ScrollView>
     </View>

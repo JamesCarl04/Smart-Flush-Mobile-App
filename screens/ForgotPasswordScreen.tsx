@@ -21,6 +21,7 @@ import {
   KLIR_TYPOGRAPHY,
 } from '../components/MaintenanceUI';
 import { auth } from '../lib/firebase';
+import { logAuditEvent } from '../lib/audit-logger';
 import type { AuthStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
@@ -62,6 +63,17 @@ export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {
       setIsError(false);
       setMessage(null);
       await sendPasswordResetEmail(auth, trimmedEmail);
+      void logAuditEvent({
+        actionType: 'PASSWORD_RESET_DISPATCHED',
+        category: 'ADMIN',
+        actorId: trimmedEmail,
+        actorName: trimmedEmail,
+        actorRole: 'system',
+        targetEntityId: trimmedEmail,
+        targetEntityType: 'user',
+        details: `Password reset email dispatched to ${trimmedEmail}`,
+        metadata: { email: trimmedEmail },
+      });
       setMessage('Password reset email sent. Please check your inbox.');
     } catch (error) {
       setIsError(true);

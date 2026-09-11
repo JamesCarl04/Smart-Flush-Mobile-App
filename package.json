@@ -15,7 +15,7 @@
     "test:e2e": "node ./node_modules/jest/bin/jest.js __tests__/e2e",
     "test:coverage": "node ./node_modules/jest/bin/jest.js --coverage",
     "ios": "expo run:ios",
-    "build:apk": "npx eas-cli build --platform android --profile preview",
+    "build:apk": "npx eas-cli build --platform android --profile preview --non-interactive",
     "build:dev": "npx eas-cli build --platform android --profile development",
     "version:check": "node scripts/release.js --dry-run",
     "release": "node scripts/release.js"

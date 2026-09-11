@@ -8,7 +8,7 @@
 [![Expo](https://img.shields.io/badge/Expo%20SDK-54.0-black.svg?logo=expo)](https://expo.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Storage%20%7C%20FCM-orange.svg?logo=firebase)](https://firebase.google.com/)
-[![Jest Tests](https://img.shields.io/badge/Tests-24%20Suites%20%7C%20254%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
+[![Jest Tests](https://img.shields.io/badge/Tests-25%20Suites%20%7C%20284%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
 [![UI Library](https://img.shields.io/badge/UI-React%20Native%20Paper%20MD3-purple.svg)](https://callstack.github.io/react-native-paper/)
 [![Target OS](https://img.shields.io/badge/Platform-Android%2014%2B%20(Dev%20Client)-green.svg?logo=android)](https://www.android.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](#)
@@ -557,46 +557,62 @@ Supervisors can generate audit reports and export data directly from the **Repor
 
 ```mermaid
 flowchart TD
-    SelectFilter[Supervisor Selects Timeframe<br/>Today • 7 Days • 30 Days • All Time] --> FetchData[Aggregate Completed Tasks & Calculate KPIs]
+    SelectFilter[Supervisor Selects Timeframe<br/>Today • 7 Days • 30 Days • All Time] --> Choice{Choose Export Tier}
     
-    FetchData --> SummaryView[Render Executive Compliance Dashboard<br/>Compliance % • Avg Duration • Avg Response • Biometric %]
+    Choice -->|Tier 1: Operations QA| OpsReport[Operational Quality & Work Order Report<br/>Checklist Scores • Before/After Photos • Turnaround]
+    Choice -->|Tier 2: System Audit Trail| AuditReport[NIST SP 800-92 / ISO 27001 Audit Ledger<br/>Multi-Period Aggregations: Today • Week • Month<br/>Auth Events • Supervisor Actions • Admin Deletions]
     
-    SummaryView --> Choice{Choose Export Format}
+    OpsReport --> ExportType1{Format Choice}
+    AuditReport --> ExportType2{Format Choice}
     
-    Choice -->|PDF Document| HTMLTemplate[Populate SDCA Branded HTML Template]
-    HTMLTemplate --> PrintEngine[expo-print: Compile to PDF]
-    PrintEngine --> SharePDF[expo-sharing: Open Android Share Sheet<br/>Print • Drive • Gmail • WhatsApp]
+    ExportType1 -->|PDF Document| HTMLTemplate1[Populate SDCA Operational HTML Template]
+    ExportType1 -->|CSV Spreadsheet| CSVBuilder1[Generate 17-Column Work Order CSV]
     
-    Choice -->|CSV Spreadsheet| CSVBuilder[Format RFC 4180 17-Column Data String]
-    CSVBuilder --> FileSystem[expo-file-system: Write to Cache]
-    FileSystem --> ShareCSV[expo-sharing: Share CSV Spreadsheet]
+    ExportType2 -->|PDF Compliance| HTMLTemplate2[Compile Executive Compliance Matrix & Ledger Table]
+    ExportType2 -->|CSV Audit Trail| CSVBuilder2[Generate 15-Column Chronological Event CSV]
+    
+    HTMLTemplate1 --> PrintEngine[expo-print: Compile to PDF]
+    HTMLTemplate2 --> PrintEngine
+    CSVBuilder1 --> FileSystem[expo-file-system: Write to Cache]
+    CSVBuilder2 --> FileSystem
+    
+    PrintEngine --> ShareEngine[expo-sharing: Open Android Share Sheet<br/>Print • Drive • Gmail • Institutional Records]
+    FileSystem --> ShareEngine
 ```
 
-### Executive KPI Summary Metrics
+### Dual-Tier Export Architecture
 
-| Metric | Calculation / Definition | Operational Significance |
-| :--- | :--- | :--- |
-| **Total Completed** | Count of all resolved work orders within timeframe | Workload volume tracking |
-| **Compliance Rate** | Percentage of tasks with verified checklist & photo proofs | Institutional quality benchmark |
-| **Average Turnaround** | Mean time from task acceptance (`acknowledgedAt`) to completion (`completedAt`) | Cleaning efficiency measurement |
-| **Average Response** | Mean time from alert generation (`createdAt`) to acknowledgement (`acknowledgedAt`) | Squad dispatch responsiveness |
-| **Biometric Verification** | Percentage of submissions signed with hardware biometric verification | Fraud prevention & audit integrity |
-| **Approved vs. Flagged** | Ratio of tasks passed on first inspection vs. returned for re-cleaning | Quality consistency indicator |
+#### Tier 1: Operational Task Quality & Inspection Report
+Focuses on completed custodial work orders, cleaning quality benchmarks, and photographic evidence:
+* **Checklist Compliance:** 10-point SDCA F-TGS 203 sanitation adherence.
+* **Photo Verification:** Before and After camera pairs with digital watermarks.
+* **Turnaround & Response Metrics:** Mean execution duration and dispatch responsiveness.
+
+#### Tier 2: System Audit Trail & Compliance Ledger (NIST SP 800-92, ISO 27001, 21 CFR Part 11)
+Designed for institutional accreditation, regulatory compliance, and academic research papers:
+* **Multi-Period Executive KPI Matrix:** Automated comparison across **Today (24h)**, **This Week (7d)**, and **This Month (30d)**:
+  * **User Authentications & Terminations:** Total logins and logouts/shift ends per period.
+  * **Work Order Volume:** Tasks created (automated IoT vs. manual) and tasks completed.
+  * **SLA Performance:** Average response time (alert to acknowledgement) and average execution time.
+  * **First-Time Pass Rate (FTPR):** Ratio of tasks approved on first inspection vs. returned for rework ($\frac{\text{Approved}}{\text{Approved} + \text{Flagged}} \times 100\%$).
+  * **Administrative Soft-Deletions:** Number of cancelled/archived work orders with recorded justification.
+* **Chronological 5 Ws Event Ledger:** Tabular audit trail capturing *Who* (actor, role), *What* (action type, category), *When* (ISO 8601 UTC + local time), *Where* (floor, room, target entity), and *Why* (rationale, SLA metadata).
+* **Immutability & Sign-Off:** Append-only records backed by dual supervisor and quality assurance officer signature blocks.
 
 ### Export Formats
 
-#### 1. Official SDCA PDF Compliance Report (`expo-print`)
-* Generates a formal, printable PDF document bearing the **St. Dominic College of Asia** institutional header.
-* Contains the executive summary banner, KPI metric cards, and a detailed audit table of all completed work orders.
+#### 1. Official SDCA PDF Compliance Documents (`expo-print`)
+* Generates formal, printable PDF documents bearing the **St. Dominic College of Asia** institutional header.
+* Tier 1 exports provide operational task metrics; Tier 2 exports compile the multi-period executive compliance matrix and chronological ledger.
 * Opens the native Android sharing dialog for instant printing, emailing, or saving to Google Drive.
 
-#### 2. RFC 4180 CSV Spreadsheet Export (`expo-file-system`)
-* Exports a standard CSV file with 17 operational audit columns:
-  1. `Task ID` • 2. `Restroom / Location` • 3. `Floor` • 4. `Building` • 5. `Component` • 6. `Trigger Type` • 7. `Technician(s)` • 8. `Created At` • 9. `Completed At` • 10. `Work Duration (Seconds)` • 11. `Biometric Verified` • 12. `Inspection Status` • 13. `Inspected By` • 14. `Inspected At` • 15. `Flag Reason` • 16. `Recheck Count` • 17. `Remarks`
+#### 2. RFC 4180 CSV Spreadsheet Exports (`expo-file-system`)
+* **Operations Work Order CSV (17 Columns):** `Task ID`, `Restroom / Location`, `Floor`, `Building`, `Component`, `Trigger Type`, `Technician(s)`, `Created At`, `Completed At`, `Work Duration (Seconds)`, `Biometric Verified`, `Inspection Status`, `Inspected By`, `Inspected At`, `Flag Reason`, `Recheck Count`, `Remarks`.
+* **System Audit Trail CSV (15 Columns):** `Event ID`, `Timestamp (UTC)`, `Local Date`, `Local Time`, `Actor Name`, `Actor Role`, `Event Category`, `Action Type`, `Target Entity ID`, `Location`, `Details / Change Summary`, `Justification / Reason`, `Response Time (s)`, `Work Duration (s)`, `Biometric Verified`.
 
 ---
 
-## 🚀 8. The 12 Core Production Engineering Modules
+## 🚀 8. The 13 Core Production Engineering Modules
 
 ### 1. Real IoT Hardware Failure Detection & UV Anti-Spam
 * Telemetry alarms (valve stuck open, pump failure, sensor disconnect) automatically evaluate against alert thresholds to generate high-urgency work orders.
@@ -606,13 +622,15 @@ flowchart TD
 * Custom `deduplicateTasks()` logic guarantees that SWR cache merges and Firestore snapshots never render duplicate task cards.
 * Dedicated tabs for **All**, **Active**, and **Flagged** tasks with customized empty states.
 
-### 3. Conflict-Free Task Reassignment Engine & Worker Locking
-* Tasks are locked once acknowledged or completed to prevent conflicting reassignments (`409 Conflict`).
-* When a supervisor reassigns an unacknowledged task, the previous technician's state is released (`isAvailable = true`), the new assignee is locked, and an FCM push notification is dispatched.
+### 3. Conflict-Free Task Reassignment Engine & Direct Accountability Lock (ISO 9001 / CAPA)
+* **Direct Accountability Lock:** When a completed task is flagged by a supervisor, reassignment is **locked by default** and routes directly to the original technician who performed the work. This enforces individual accountability and prevents task dumping.
+* **Authorized Supervisor Override:** If the original worker is off-shift or unavailable, supervisors can toggle an override requiring a mandatory justification ($\ge 5$ characters) to reassign.
+* **Clean UI Role Separation:** `AssigneeAvatarCluster` displays the current active rework technician separately from previous submitters, eliminating multi-assignee confusion on work cards.
 
-### 4. Zero-Flicker SWR & Instant 0ms Cache Hydration
-* On startup, the app instantly hydrates state from local cache (`@klir:technician_tasks` and `@klir:supervisor_tasks`) in 0ms.
-* Background revalidation updates the UI without full-screen loading spinners or layout jumps.
+### 4. Zero-Flicker SWR, 0ms User Profile Hydration & Optimistic Logout
+* **0ms Profile Hydration:** On app launch, user credentials and verified roles hydrate instantly from `@klir:cached_user_profile` in `AsyncStorage`, eliminating `<AppStartupSkeleton />` delays.
+* **Optimistic Immediate Logout:** Tapping "End Shift & Log Out" immediately nullifies session state, removing the lower navbar and navigating to Login in 0ms while push notification token deregistration completes cleanly in the background.
+* **Offline Session Resilience:** Transient network dropouts during background profile revalidation do not wipe local credentials or cause sudden sign-outs.
 
 ### 5. 1-Tap SDCA F-TGS 203 Sanitation Checklist
 * Streamlined checklist interface in `TaskExecutionModal.tsx` and `TaskDetailScreen.tsx`.
@@ -642,6 +660,10 @@ flowchart TD
 
 ### 12. Executive Compliance Reports & Native PDF/CSV Export Engine
 * Fully integrated reporting engine generating institutional SDCA PDF compliance certificates and RFC 4180 CSV spreadsheets with native Android sharing.
+
+### 13. Append-Only System Audit Trail Engine (`audit-logger.ts` & `firestore.rules`)
+* Implements NIST SP 800-92, ISO 27001 (A.8.15), and 21 CFR Part 11 append-only compliance.
+* Captures immutable audit entries across authentication, supervisor governance, custodial SLAs, and administrative soft-deletions with zero update/delete permissions in Firestore security rules.
 
 ---
 
@@ -765,16 +787,16 @@ npm run release
 
 ## 🧪 11. Quality Assurance & Testing Matrix
 
-Klir Mobile maintains a comprehensive test suite of **24 test suites** and **254 automated tests** (100% passing) covering unit logic, integration contexts, and end-to-end user journeys:
+Klir Mobile maintains a comprehensive test suite of **25 test suites** and **284 automated tests** (100% passing) covering unit logic, integration contexts, and end-to-end user journeys:
 
 ```powershell
-# Run the complete test suite (24 suites, 254 tests passing)
+# Run the complete test suite (25 suites, 284 tests passing)
 npm test
 
 # Run TypeScript strict typecheck (zero errors enforced)
 npm run typecheck
 
-# Run unit tests only (11 suites, 178 tests)
+# Run unit tests only (12 suites, 208 tests)
 npm run test:unit
 
 # Run integration tests only (10 suites)
@@ -817,8 +839,9 @@ __tests__/
     ├── MaintenanceUI.test.ts               # Design tokens, color contrast & badge logic
     ├── ProfileSheetModal.test.tsx          # Dynamic SemVer app versioning & role badge display
     ├── api.test.ts                         # Authenticated fetch client & token attachment
+    ├── audit-logger.test.ts                # NIST/ISO 5 Ws audit logger & AsyncStorage queue
     ├── notifications.test.ts               # FCM token registration & unregistration handlers
-    ├── report-export.test.ts               # CSV generation & PDF input formatting
+    ├── report-export.test.ts               # Multi-period compliance KPIs, CSV & PDF generators
     ├── restrooms.test.ts                   # 22-room SDCA facility mapping & fixture counts
     ├── supervisor-api.test.ts              # Reassignment, flagging & approval endpoints
     ├── task-api.test.ts                    # Acknowledgement & completion API contracts

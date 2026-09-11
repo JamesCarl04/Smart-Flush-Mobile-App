@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function isMaintenance() {
-      return currentUserRole() == 'maintenance';
+      return currentUserRole() == 'maintenance' || currentUserRole() == 'technician' || currentUserRole() == 'worker';
     }
 
     function isStaff() {
@@ -64,6 +64,16 @@ service cloud.firestore {
       allow read: if isStaff();
       allow create: if isAuthenticated() && currentUserRole() != 'viewer';
       allow update, delete: if isAdmin();
+    }
+
+    // ── Audit Logs (NIST SP 800-92, ISO 27001, 21 CFR Part 11 Append-Only Immutability) ──
+    match /auditLogs/{logId} {
+      // Supervisors and admins can read audit logs for reporting, verification, and academic analysis
+      allow read: if isSupervisor() || isAdmin();
+      // Authenticated staff can append new audit records
+      allow create: if isStaff();
+      // Immutability: Audit log records cannot be modified or deleted by anyone
+      allow update, delete: if false;
     }
 
     // ── IoT Devices & Hardware Telemetry ─────────────────────────

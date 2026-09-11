@@ -325,11 +325,10 @@ describe('TasksContext Integration', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+      expect(screen.getByTestId('error-message').props.children).toBe(
+        'Unable to refresh maintenance tasks: Network connection failed',
+      );
     });
-
-    expect(screen.getByTestId('error-message').props.children).toBe(
-      'Unable to refresh maintenance tasks: Network connection failed',
-    );
 
     fireEvent.press(screen.getByTestId('clear-error-btn'));
 

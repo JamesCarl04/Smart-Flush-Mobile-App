@@ -25,6 +25,7 @@ import { FlaggedRemarksModal } from '../components/FlaggedRemarksModal';
 import { AuthContext } from '../contexts/AuthContext';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask, acceptRecheckTask } from '../lib/task-api';
+import { logTaskAudit } from '../lib/audit-logger';
 import { getRestroomLabel } from '../lib/restrooms';
 import { getTaskDisplayStatus } from '../lib/tasks';
 import type { InboxStackParamList, Task } from '../types';
@@ -222,6 +223,18 @@ export function InboxScreen({ navigation }: Props): React.JSX.Element {
         technicianUid: user.uid,
         technicianName: user.name,
       });
+      void logTaskAudit(
+        'RECHECK_STARTED',
+        task,
+        {
+          uid: user.uid,
+          name: user.name ?? user.uid,
+          role: user.role || 'technician',
+        },
+        {
+          reason: task.flagReason || undefined,
+        },
+      );
       await refreshTasks();
       setFlaggedTaskToReview(null);
       navigateToActiveTaskWorkspace(task.id);

@@ -48,6 +48,7 @@ import {
   getTaskDisplayStatus,
 } from '../lib/tasks';
 import { acknowledgeTask, acceptRecheckTask, fetchTask } from '../lib/task-api';
+import { logTaskAudit } from '../lib/audit-logger';
 import { getRestroomLabel } from '../lib/restrooms';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
@@ -431,6 +432,19 @@ export function TaskDetailScreen({
       }
 
       await acknowledgeTask(task.id);
+      void logTaskAudit(
+        'TASK_ACKNOWLEDGED',
+        task,
+        {
+          uid,
+          name: user?.name ?? uid,
+          role: user?.role || 'technician',
+        },
+        {
+          assignmentType: isTeam ? 'team' : 'individual',
+          acknowledgedAt: acknowledgedAt.toISOString(),
+        },
+      );
       setTask(
         isTeam
           ? {
@@ -576,6 +590,19 @@ export function TaskDetailScreen({
     try {
       const verified = await runBiometricCheck();
       setBiometricVerified(verified);
+      void logTaskAudit(
+        'TASK_STARTED',
+        task,
+        {
+          uid: currentUid,
+          name: user?.name ?? currentUid,
+          role: user?.role || 'technician',
+        },
+        {
+          biometricVerified: verified,
+          startedAt: new Date().toISOString(),
+        },
+      );
       await takePhoto('before');
     } catch (error) {
       setSnackbarMessage(
@@ -680,6 +707,28 @@ export function TaskDetailScreen({
         isFullyCompleted = !(task.assignedToIds && task.assignedToIds.length > 1);
         setSnackbarMessage('Saved offline. Will sync when connected.');
       }
+
+      const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === 'done' || v === 'na').length}/10`;
+      const elapsedWorkDuration = task.workDuration ?? (task.acknowledgedAt ? Math.max(0, Math.round((completedAt.getTime() - task.acknowledgedAt.getTime()) / 1000)) : 0);
+
+      void logTaskAudit(
+        'TASK_COMPLETED',
+        task,
+        {
+          uid,
+          name: user?.name ?? uid,
+          role: user?.role || 'technician',
+        },
+        {
+          duration: elapsedWorkDuration,
+          biometricVerified,
+          checklistScore: completedScore,
+          isFullyCompleted,
+          isRecheck: task.status === 'rechecking',
+          offlineSynced: !online,
+          remarks,
+        },
+      );
 
       await refreshTasks();
       setTask({
@@ -857,6 +906,18 @@ export function TaskDetailScreen({
         technicianUid: uid,
         technicianName: user?.name,
       });
+      void logTaskAudit(
+        'RECHECK_STARTED',
+        task,
+        {
+          uid,
+          name: user?.name ?? uid,
+          role: user?.role || 'technician',
+        },
+        {
+          reason: task.flagReason || undefined,
+        },
+      );
       await refreshTasks();
       await refreshTaskDetail(false);
       setSnackbarMessage('Recheck accepted. You may now perform the rectification.');

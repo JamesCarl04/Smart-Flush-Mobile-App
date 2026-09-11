@@ -1,11 +1,15 @@
 import { createContext, useEffect, useState, type PropsWithChildren } from 'react';
 import { Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
 
 import { getRequiredConfigValue, runtimeConfig } from '../lib/config';
 import { auth } from '../lib/firebase';
 import { unregisterPushNotificationsAsync } from '../lib/notifications';
+import { logAuthAudit } from '../lib/audit-logger';
 import type { AuthContextValue, AuthUser, UserRole } from '../types';
+
+export const USER_PROFILE_CACHE_KEY = '@klir:cached_user_profile';
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 interface ProfileResponse {
@@ -101,45 +105,135 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true);
+    let isMounted = true;
 
+    // 1. Fast profile hydration from local storage for 0ms initial load
+    (async () => {
+      try {
+        const cachedRaw = await AsyncStorage.getItem(USER_PROFILE_CACHE_KEY);
+        if (cachedRaw && isMounted) {
+          const cachedUser = JSON.parse(cachedRaw) as AuthUser;
+          if (cachedUser?.uid && cachedUser?.role) {
+            setUser((prev) => prev ?? cachedUser);
+            setRole((prev) => prev ?? cachedUser.role);
+            setLoading(false);
+          }
+        }
+      } catch (err) {
+        console.warn('[AuthContext] Error hydrating cached user profile:', err);
+      }
+    })();
+
+    // 2. Stale-while-revalidate listener with Firebase Auth
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
-        setUser(null);
-        setRole(null);
-        setLoading(false);
+        if (isMounted) {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+        }
+        void AsyncStorage.removeItem(USER_PROFILE_CACHE_KEY).catch(() => {});
         return;
       }
 
       try {
         const verifiedUser = await verifyUserProfile(firebaseUser);
-        setUser(verifiedUser);
-        setRole(verifiedUser.role);
+        if (isMounted) {
+          setUser(verifiedUser);
+          setRole(verifiedUser.role);
+          setLoading(false);
+        }
+        void AsyncStorage.setItem(USER_PROFILE_CACHE_KEY, JSON.stringify(verifiedUser)).catch((storageErr) => {
+          console.warn('[AuthContext] Failed to cache user profile:', storageErr);
+        });
+        void logAuthAudit('AUTH_LOGIN', verifiedUser);
       } catch (error) {
+        // If the error is network/offline related and we have a cached profile for this user, do not force logout
+        let hasValidCachedUser = false;
+        try {
+          const cachedRaw = await AsyncStorage.getItem(USER_PROFILE_CACHE_KEY);
+          if (cachedRaw) {
+            const parsed = JSON.parse(cachedRaw) as AuthUser;
+            if (parsed?.uid === firebaseUser.uid && parsed?.role) {
+              hasValidCachedUser = true;
+              if (isMounted) {
+                setUser((prev) => prev ?? parsed);
+                setRole((prev) => prev ?? parsed.role);
+                setLoading(false);
+              }
+            }
+          }
+        } catch {
+          // ignore cache read error
+        }
+
+        const isNetworkError =
+          error instanceof TypeError ||
+          (error instanceof Error &&
+            (error.message.includes('Network') ||
+              error.message.includes('network') ||
+              error.message.includes('Failed to fetch') ||
+              error.message.includes('timeout')));
+
+        if (hasValidCachedUser && isNetworkError) {
+          console.warn('[AuthContext] Network offline/unavailable during revalidation; preserving cached profile.');
+          return;
+        }
+
         const message =
           error instanceof Error
             ? error.message
             : 'Unable to verify your maintenance account.';
 
-        setUser(null);
-        setRole(null);
+        if (isMounted) {
+          setUser(null);
+          setRole(null);
+          setLoading(false);
+        }
+        void AsyncStorage.removeItem(USER_PROFILE_CACHE_KEY).catch(() => {});
         Alert.alert('Authentication error', message);
         await safeSignOut();
-      } finally {
-        setLoading(false);
       }
     });
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   const logout = async (): Promise<void> => {
-    try {
-      await unregisterPushNotificationsAsync();
-    } catch (error) {
-      console.warn('[AuthContext] Error unregistering push notifications on logout:', error);
+    const prevUser = user;
+
+    // 1. Optimistically reset user and role immediately for 0ms screen/navbar transition
+    setUser(null);
+    setRole(null);
+    setLoading(false);
+
+    // 2. Invalidate cached profile
+    void AsyncStorage.removeItem(USER_PROFILE_CACHE_KEY).catch((err) => {
+      console.warn('[AuthContext] Error clearing user profile cache on logout:', err);
+    });
+
+    // 3. Log auth logout audit trail
+    if (prevUser) {
+      void logAuthAudit('AUTH_LOGOUT', prevUser);
     }
-    await signOut(auth);
+
+    // 4. Background push token unregistration with bounded 1500ms timeout
+    const unregisterPushTask = Promise.race([
+      unregisterPushNotificationsAsync(),
+      new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+    ]).catch((error) => {
+      console.warn('[AuthContext] Error or timeout unregistering push notifications on logout:', error);
+    });
+
+    // 5. Firebase signOut
+    try {
+      await Promise.allSettled([unregisterPushTask, signOut(auth)]);
+    } catch (signOutError) {
+      console.warn('[AuthContext] Failed to sign out:', signOutError);
+    }
   };
 
   return (

@@ -1,5 +1,33 @@
 import type { MaintenancePerson } from './supervisor-api';
 import type { Task, TaskChecklist } from '../types';
+import type { AuditLogEntry } from './audit-logger';
+
+export interface AuditComplianceKPIs {
+  periodLabel: string;
+  totalLogins: number;
+  totalLogouts: number;
+  tasksCreated: number;
+  tasksCompleted: number;
+  avgResponseSeconds: number;
+  avgWorkDurationSeconds: number;
+  approvedCount: number;
+  flaggedCount: number;
+  firstTimePassRate: string;
+  softDeletedCount: number;
+}
+
+export interface AuditLogPDFInput {
+  timeframeLabel: string;
+  supervisorName: string;
+  building: string;
+  generatedAt: Date;
+  logs: AuditLogEntry[];
+  kpis: {
+    day: AuditComplianceKPIs;
+    week: AuditComplianceKPIs;
+    month: AuditComplianceKPIs;
+  };
+}
 
 export interface ReportPDFInput {
   timeframeLabel: string;
@@ -543,3 +571,407 @@ export function generateReportHTML(input: ReportPDFInput): string {
 </body>
 </html>`;
 }
+
+export function generateAuditLogHTML(input: AuditLogPDFInput): string {
+  const { timeframeLabel, supervisorName, building, generatedAt, logs, kpis } = input;
+  const generatedDateFormatted = formatDate(generatedAt);
+  const safeLogs = Array.isArray(logs) ? logs : [];
+
+  const defaultPeriodKPIs: AuditComplianceKPIs = {
+    periodLabel: '',
+    totalLogins: 0,
+    totalLogouts: 0,
+    tasksCreated: 0,
+    tasksCompleted: 0,
+    avgResponseSeconds: 0,
+    avgWorkDurationSeconds: 0,
+    approvedCount: 0,
+    flaggedCount: 0,
+    firstTimePassRate: '100%',
+    softDeletedCount: 0,
+  };
+
+  const dayKpi = { ...defaultPeriodKPIs, ...(kpis?.day || {}) };
+  const weekKpi = { ...defaultPeriodKPIs, ...(kpis?.week || {}) };
+  const monthKpi = { ...defaultPeriodKPIs, ...(kpis?.month || {}) };
+
+  const dayPeriodLabel = escapeHtml(dayKpi.periodLabel?.trim() || 'Today (24h)');
+  const weekPeriodLabel = escapeHtml(weekKpi.periodLabel?.trim() || 'This Week (7d)');
+  const monthPeriodLabel = escapeHtml(monthKpi.periodLabel?.trim() || 'This Month (30d)');
+
+  const logRowsHTML = safeLogs
+    .map((log, index) => {
+      const localTime = log.localTimestamp || formatDate(new Date(log.timestamp));
+      const actorRoleUpper = (log.actorRole || 'system').toUpperCase();
+      const categoryUpper = (log.category || 'SYSTEM').toUpperCase();
+
+      let roleBadgeClass = 'badge-standard';
+      if (log.actorRole === 'admin') roleBadgeClass = 'badge-flagged';
+      else if (log.actorRole === 'supervisor') roleBadgeClass = 'badge-bio';
+      else if (log.actorRole === 'maintenance' || log.actorRole === 'technician') roleBadgeClass = 'badge-approved';
+
+      let catBadgeClass = 'badge-pending';
+      if (log.category === 'AUTH') catBadgeClass = 'badge-standard';
+      else if (log.category === 'SUPERVISOR') catBadgeClass = 'badge-bio';
+      else if (log.category === 'MAINTENANCE') catBadgeClass = 'badge-approved';
+      else if (log.category === 'ADMIN') catBadgeClass = 'badge-flagged';
+
+      const detailsEscaped = escapeHtml(log.details || 'No details provided');
+      const reasonEscaped = log.reason ? `<div style="color: #b91c1c; font-weight: 600; font-size: 10px; margin-top: 2px;">Reason: ${escapeHtml(log.reason)}</div>` : '';
+      const entityEscaped = escapeHtml(log.targetEntityId || 'N/A');
+      const locationEscaped = escapeHtml(log.location || 'Facility');
+
+      return `
+      <tr>
+        <td class="col-index">${index + 1}</td>
+        <td class="col-timeline" style="font-size: 10px;">${localTime}</td>
+        <td class="col-tech">
+          <div style="font-weight: 600;">${escapeHtml(log.actorName)}</div>
+          <span class="badge ${roleBadgeClass}" style="font-size: 8px; padding: 2px 4px;">${actorRoleUpper}</span>
+        </td>
+        <td>
+          <span class="badge ${catBadgeClass}" style="font-size: 8px; padding: 2px 4px;">${categoryUpper}</span>
+          <div style="font-weight: 700; font-size: 10px; margin-top: 2px; color: #1e293b;">${escapeHtml(log.actionType)}</div>
+        </td>
+        <td style="font-size: 10px;">
+          <div>${locationEscaped}</div>
+          <div style="color: #64748b; font-size: 9px;">${entityEscaped}</div>
+        </td>
+        <td style="font-size: 10px;">
+          <div>${detailsEscaped}</div>
+          ${reasonEscaped}
+        </td>
+      </tr>`;
+    })
+    .join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Klir System Audit Trail &amp; Compliance Report</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 12mm 15mm 15mm 15mm;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      color: #0f172a;
+      background: #ffffff;
+      font-size: 11px;
+      line-height: 1.4;
+      padding: 10px;
+    }
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+    .brand-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0284c7;
+      letter-spacing: -0.5px;
+    }
+    .brand-sub {
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      margin-top: 2px;
+    }
+    .compliance-badge {
+      display: inline-block;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      color: #166534;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+    .meta-table {
+      font-size: 10px;
+      text-align: right;
+    }
+    .meta-table td {
+      padding: 2px 4px;
+    }
+    .meta-label {
+      color: #64748b;
+      font-weight: 600;
+    }
+    .meta-val {
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e293b;
+      border-left: 3px solid #0284c7;
+      padding-left: 8px;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .kpi-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 16px;
+      font-size: 10px;
+    }
+    .kpi-table th, .kpi-table td {
+      border: 1px solid #e2e8f0;
+      padding: 6px 8px;
+      text-align: left;
+    }
+    .kpi-table th {
+      background: #f8fafc;
+      font-weight: 700;
+      color: #334155;
+    }
+    .kpi-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    .kpi-table .num-col {
+      text-align: center;
+      font-weight: 600;
+    }
+    .kpi-table .highlight-col {
+      text-align: center;
+      font-weight: 700;
+      color: #0284c7;
+    }
+    .table-container {
+      width: 100%;
+      margin-bottom: 16px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+    th, td {
+      border: 1px solid #e2e8f0;
+      padding: 6px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f1f5f9;
+      font-weight: 700;
+      color: #334155;
+      font-size: 9px;
+      text-transform: uppercase;
+    }
+    tr:nth-child(even) {
+      background: #fafafa;
+    }
+    .col-index { width: 4%; text-align: center; color: #64748b; }
+    .col-timeline { width: 14%; }
+    .col-tech { width: 18%; }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 9px;
+    }
+    .badge-approved { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .badge-flagged { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge-pending { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+    .badge-bio { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
+    .badge-standard { background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .signoff-section {
+      margin-top: 24px;
+      padding-top: 14px;
+      border-top: 1px dashed #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      page-break-inside: avoid;
+    }
+    .signoff-box {
+      width: 45%;
+    }
+    .signoff-line {
+      border-bottom: 1px solid #0f172a;
+      height: 32px;
+      margin-bottom: 4px;
+    }
+    .signoff-label {
+      font-size: 9px;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .report-footer {
+      margin-top: 20px;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 8px;
+      text-align: center;
+      font-size: 9px;
+      color: #64748b;
+      line-height: 1.3;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <div class="header-container">
+    <div>
+      <div class="brand-title">KLIR FACILITY GOVERNANCE</div>
+      <div class="brand-sub">Comprehensive System Audit Trail &amp; Compliance Ledger</div>
+      <div class="compliance-badge">NIST SP 800-92 • ISO 27001 (A.8.15) • 21 CFR Part 11 Append-Only</div>
+    </div>
+    <div>
+      <table class="meta-table">
+        <tr>
+          <td class="meta-label">Audit Scope:</td>
+          <td class="meta-val">${escapeHtml(timeframeLabel)}</td>
+        </tr>
+        <tr>
+          <td class="meta-label">Exported By:</td>
+          <td class="meta-val">${escapeHtml(supervisorName)}</td>
+        </tr>
+        <tr>
+          <td class="meta-label">Facility:</td>
+          <td class="meta-val">${escapeHtml(building)}</td>
+        </tr>
+        <tr>
+          <td class="meta-label">Timestamp (UTC):</td>
+          <td class="meta-val">${generatedDateFormatted}</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Executive Compliance KPI Matrix (Day, Week, Month) -->
+  <div class="section-title">Executive Compliance &amp; Operational Aggregations</div>
+  <table class="kpi-table">
+    <thead>
+      <tr>
+        <th>Operational &amp; Compliance Metric</th>
+        <th class="highlight-col">${dayPeriodLabel}</th>
+        <th class="highlight-col">${weekPeriodLabel}</th>
+        <th class="highlight-col">${monthPeriodLabel}</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>User Authentications (Logins / Shift Starts)</strong></td>
+        <td class="num-col">${dayKpi.totalLogins}</td>
+        <td class="num-col">${weekKpi.totalLogins}</td>
+        <td class="num-col">${monthKpi.totalLogins}</td>
+      </tr>
+      <tr>
+        <td><strong>User Terminations (Logouts / Shift Ends)</strong></td>
+        <td class="num-col">${dayKpi.totalLogouts}</td>
+        <td class="num-col">${weekKpi.totalLogouts}</td>
+        <td class="num-col">${monthKpi.totalLogouts}</td>
+      </tr>
+      <tr>
+        <td><strong>Work Orders Created (Automated &amp; Manual)</strong></td>
+        <td class="num-col">${dayKpi.tasksCreated}</td>
+        <td class="num-col">${weekKpi.tasksCreated}</td>
+        <td class="num-col">${monthKpi.tasksCreated}</td>
+      </tr>
+      <tr>
+        <td><strong>Work Orders Completed</strong></td>
+        <td class="num-col">${dayKpi.tasksCompleted}</td>
+        <td class="num-col">${weekKpi.tasksCompleted}</td>
+        <td class="num-col">${monthKpi.tasksCompleted}</td>
+      </tr>
+      <tr>
+        <td><strong>Average SLA Response Time (Seconds)</strong></td>
+        <td class="num-col">${dayKpi.avgResponseSeconds}s</td>
+        <td class="num-col">${weekKpi.avgResponseSeconds}s</td>
+        <td class="num-col">${monthKpi.avgResponseSeconds}s</td>
+      </tr>
+      <tr>
+        <td><strong>Average Work Execution Duration</strong></td>
+        <td class="num-col">${formatDurationSeconds(dayKpi.avgWorkDurationSeconds)}</td>
+        <td class="num-col">${formatDurationSeconds(weekKpi.avgWorkDurationSeconds)}</td>
+        <td class="num-col">${formatDurationSeconds(monthKpi.avgWorkDurationSeconds)}</td>
+      </tr>
+      <tr>
+        <td><strong>Supervisor Approved Work Orders</strong></td>
+        <td class="num-col">${dayKpi.approvedCount}</td>
+        <td class="num-col">${weekKpi.approvedCount}</td>
+        <td class="num-col">${monthKpi.approvedCount}</td>
+      </tr>
+      <tr>
+        <td><strong>Supervisor Flagged Tasks (Defects / Rework)</strong></td>
+        <td class="num-col">${dayKpi.flaggedCount}</td>
+        <td class="num-col">${weekKpi.flaggedCount}</td>
+        <td class="num-col">${monthKpi.flaggedCount}</td>
+      </tr>
+      <tr>
+        <td><strong>First-Time Pass Rate (FTPR)</strong></td>
+        <td class="highlight-col">${dayKpi.firstTimePassRate}</td>
+        <td class="highlight-col">${weekKpi.firstTimePassRate}</td>
+        <td class="highlight-col">${monthKpi.firstTimePassRate}</td>
+      </tr>
+      <tr>
+        <td><strong>Administrative Soft-Deletions / Cancellations</strong></td>
+        <td class="num-col">${dayKpi.softDeletedCount}</td>
+        <td class="num-col">${weekKpi.softDeletedCount}</td>
+        <td class="num-col">${monthKpi.softDeletedCount}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Chronological Audit Trail Log -->
+  <div class="section-title">Chronological System Audit Trail (${safeLogs.length} Log Records)</div>
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th class="col-index">#</th>
+          <th class="col-timeline">Timestamp (Local)</th>
+          <th class="col-tech">Actor &amp; Role</th>
+          <th>Action Type</th>
+          <th>Location / Entity</th>
+          <th>Event Summary &amp; Rationale</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${logRowsHTML || '<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No audit event records captured in this timeframe.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Signoff Section -->
+  <div class="signoff-section">
+    <div class="signoff-box">
+      <div class="signoff-line"></div>
+      <div class="signoff-label">Supervising Officer Signature &amp; Date</div>
+      <div style="font-weight: 700; font-size: 10px; margin-top: 2px;">${escapeHtml(supervisorName)}</div>
+    </div>
+    <div class="signoff-box" style="text-align: right;">
+      <div class="signoff-line"></div>
+      <div class="signoff-label">Quality Assurance / Compliance Officer</div>
+      <div style="font-weight: 700; font-size: 10px; margin-top: 2px;">Institutional Auditor</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="report-footer">
+    <div>KLIR Smart Restroom System • St. Dominic College of Asia Facility Operations</div>
+    <div>Strictly Append-Only Immutability Ledger • Complies with 21 CFR Part 11 &amp; ISO 27001</div>
+  </div>
+
+</body>
+</html>`;
+}
+

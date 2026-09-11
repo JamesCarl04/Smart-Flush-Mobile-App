@@ -223,14 +223,35 @@ const mockSupervisorTasks: Task[] = [
   },
 ];
 
+const mockFlaggedTask: Task = {
+  id: 'task-flagged-5',
+  deviceId: 'dev-valve-5',
+  restroomName: '5F Executive Restroom',
+  type: 'maintenance',
+  component: 'flush_valve',
+  location: '5F Executive Restroom',
+  floor: '5F',
+  building: 'GB3 Building',
+  shift: '1st',
+  triggerType: 'maintenance',
+  message: 'Flagged rework on sensor valve',
+  assignedTo: 'person-offline-9',
+  assignedToIds: ['person-offline-9'],
+  status: 'flagged',
+  flagReason: 'Missing photo proof and uncleaned drain',
+  createdAt: new Date(),
+  createdBy: 'system',
+};
+
 describe('Supervisor Screens Integration Suite', () => {
   const mockNavigation: any = {
     navigate: jest.fn(),
     goBack: jest.fn(),
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await AsyncStorage.clear();
     (useAuthHook.useAuth as jest.Mock).mockReturnValue({
       user: {
         uid: 'sup-user-1',
@@ -389,6 +410,71 @@ describe('Supervisor Screens Integration Suite', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Task reassigned.')).toBeTruthy();
+      });
+    });
+
+    it('enforces direct accountability locking by default on flagged rework tasks and requires override justification', async () => {
+      (supervisorApi.fetchSupervisorTasks as jest.Mock).mockResolvedValue([
+        ...mockSupervisorTasks,
+        mockFlaggedTask,
+      ]);
+
+      renderWithSupervisor(
+        <SupervisorTaskDetailScreen
+          navigation={mockNavigation}
+          route={{
+            key: 'SupervisorTaskDetail',
+            name: 'SupervisorTaskDetail',
+            params: { taskId: 'task-flagged-5' },
+          }}
+        />,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/Direct Accountability/i)).toBeTruthy();
+      });
+
+      expect(screen.getByText(/Missing photo proof and uncleaned drain/)).toBeTruthy();
+
+      // Override button is present
+      const overrideButton = screen.getByTestId('override-reassign-button');
+      expect(overrideButton).toBeTruthy();
+
+      // Press override
+      fireEvent.press(overrideButton);
+
+      // Now Shift Handoff Override Active banner is displayed
+      await waitFor(() => {
+        expect(screen.getByText(/Shift Handoff Override Active/i)).toBeTruthy();
+      });
+
+      // Select replacement technician (Juan Cruz)
+      expect(screen.getByText('Juan Cruz')).toBeTruthy();
+      fireEvent.press(screen.getByText('Juan Cruz'));
+
+      // Confirm button is disabled because reason is empty (< 5 chars)
+      const confirmButton = screen.getByTestId('confirm-reassign-button');
+      expect(confirmButton.props.accessibilityState?.disabled).toBe(true);
+
+      // Enter valid justification (>= 5 chars)
+      const reasonInput = screen.getByPlaceholderText(/Technician off-duty/i);
+      fireEvent.changeText(reasonInput, 'Tech on emergency medical leave');
+
+      // Now confirm button is enabled
+      expect(confirmButton.props.accessibilityState?.disabled).toBe(false);
+
+      // Press confirm
+      fireEvent.press(confirmButton);
+
+      await waitFor(() => {
+        expect(supervisorApi.reassignTask).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-flagged-5',
+            newAssigneeUid: 'person-1',
+            reason: '[Shift Handoff Override] Tech on emergency medical leave',
+            supervisorUid: 'sup-user-1',
+          }),
+        );
       });
     });
   });

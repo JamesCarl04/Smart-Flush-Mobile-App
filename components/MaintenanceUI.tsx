@@ -1457,7 +1457,28 @@ export function AssigneeAvatarCluster({
   }
 
   // Multi-assignee or standard assigned task
-  const rawTargetIds = allWorkerIds.length > 0 ? allWorkerIds : assignedIds;
+  const isFlaggedOrRechecking =
+    task.status === 'flagged' || task.status === 'rechecking';
+  const priorSubmitterUid =
+    task.completedBy ||
+    (task.submissions && Object.keys(task.submissions)[0]) ||
+    (task.completedByMap && Object.keys(task.completedByMap)[0]);
+  const previousSubmitterId =
+    isFlaggedOrRechecking &&
+    priorSubmitterUid &&
+    !assignedIds.includes(priorSubmitterUid)
+      ? priorSubmitterUid
+      : null;
+
+  const rawTargetIds =
+    isFlaggedOrRechecking && assignedIds.length > 0
+      ? assignedIds
+      : task.status !== 'completed' && assignedIds.length > 0
+        ? assignedIds
+        : allWorkerIds.length > 0
+          ? allWorkerIds
+          : assignedIds;
+
   const targetIds = [...rawTargetIds].sort((a, b) => {
     if (a === b) return 0;
     if (currentUserId && a === currentUserId) return -1;
@@ -1477,10 +1498,11 @@ export function AssigneeAvatarCluster({
   });
   if (targetIds.length === 0) return null;
 
-  const isTeam =
-    targetIds.length > 1 ||
-    task.assignmentType === 'team' ||
-    Boolean(task.assignedToIds && task.assignedToIds.length > 1);
+  const isTeam = isFlaggedOrRechecking
+    ? targetIds.length > 1
+    : targetIds.length > 1 ||
+      task.assignmentType === 'team' ||
+      Boolean(task.assignedToIds && task.assignedToIds.length > 1);
 
   const doneCount = targetIds.filter((uid) =>
     Boolean(
@@ -1524,13 +1546,15 @@ export function AssigneeAvatarCluster({
               task.submissions?.[uid],
           );
 
-          const hasSubmitted = Boolean(
-            task.submissions?.[uid] ||
-              task.completedByMap?.[uid] ||
-              (task.status === 'completed' &&
-                (task.completedBy === uid ||
-                  (task.completedBy == null && task.assignedTo === uid))),
-          );
+          const hasSubmitted = isFlaggedOrRechecking
+            ? Boolean(task.status === 'completed' && task.completedBy === uid)
+            : Boolean(
+                task.submissions?.[uid] ||
+                  task.completedByMap?.[uid] ||
+                  (task.status === 'completed' &&
+                    (task.completedBy === uid ||
+                      (task.completedBy == null && task.assignedTo === uid))),
+              );
 
           const statusLabel = hasSubmitted
             ? 'Submitted'
@@ -1615,6 +1639,14 @@ export function AssigneeAvatarCluster({
           </View>
         ) : null}
       </View>
+      {showNames && previousSubmitterId ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+          <MaterialCommunityIcons name="history" size={12} color="#64748B" />
+          <Text style={{ fontSize: 11, color: '#64748B', fontStyle: 'italic' }}>
+            Original Submitter: {resolveWorkerName(previousSubmitterId).displayName} (Flagged Work)
+          </Text>
+        </View>
+      ) : null}
     </View>
   );
 }
