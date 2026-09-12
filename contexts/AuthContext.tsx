@@ -2,9 +2,10 @@ import { createContext, useEffect, useState, type PropsWithChildren } from 'reac
 import { Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 import { getRequiredConfigValue, runtimeConfig } from '../lib/config';
-import { auth } from '../lib/firebase';
+import { auth, db } from '../lib/firebase';
 import { unregisterPushNotificationsAsync } from '../lib/notifications';
 import { logAuthAudit } from '../lib/audit-logger';
 import type { AuthContextValue, AuthUser, UserRole } from '../types';
@@ -147,6 +148,27 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
           console.warn('[AuthContext] Failed to cache user profile:', storageErr);
         });
         void logAuthAudit('AUTH_LOGIN', verifiedUser);
+
+        // Client-side Firestore fallback update for online presence
+        void (async () => {
+          try {
+            const userDoc = await db.collection('users').doc(firebaseUser.uid).get();
+            const docExists =
+              typeof (userDoc as any).exists === 'function'
+                ? (userDoc as any).exists()
+                : Boolean((userDoc as any).exists);
+            const docData = userDoc.data();
+            const currentStatus = docExists && docData ? (docData as Record<string, unknown>).status : null;
+            const targetStatus = currentStatus === 'on_task' ? 'on_task' : 'available';
+            await db.collection('users').doc(firebaseUser.uid).update({
+              isOnline: true,
+              status: targetStatus,
+              lastSeen: firestore.FieldValue.serverTimestamp(),
+            });
+          } catch (err) {
+            console.warn('[AuthContext] Client-side presence fallback update failed:', err);
+          }
+        })();
       } catch (error) {
         // If the error is network/offline related and we have a cached profile for this user, do not force logout
         let hasValidCachedUser = false;
@@ -220,7 +242,46 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       void logAuthAudit('AUTH_LOGOUT', prevUser);
     }
 
-    // 4. Background push token unregistration with bounded 1500ms timeout
+    const uid = prevUser?.uid || auth.currentUser?.uid;
+
+    // 4. Dispatch fast bounded backend notification and client Firestore update (1500ms timeout)
+    const backendLogoutPromise = (async () => {
+      try {
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) return;
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+
+        await fetch(buildApiUrl('/api/auth/logout'), {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+      } catch (err) {
+        console.warn('[AuthContext] Backend logout request failed or timed out:', err);
+      }
+    })();
+
+    const clientPresencePromise = (async () => {
+      if (!uid) return;
+      try {
+        const timeoutPromise = new Promise<void>((resolve) => setTimeout(resolve, 1500));
+        const updatePromise = db.collection('users').doc(uid).update({
+          isOnline: false,
+          status: 'offline',
+          lastSeen: firestore.FieldValue.serverTimestamp(),
+        });
+        await Promise.race([updatePromise, timeoutPromise]);
+      } catch (err) {
+        console.warn('[AuthContext] Client-side offline presence update failed:', err);
+      }
+    })();
+
+    // 5. Background push token unregistration with bounded 1500ms timeout
     const unregisterPushTask = Promise.race([
       unregisterPushNotificationsAsync(),
       new Promise<void>((resolve) => setTimeout(resolve, 1500)),
@@ -228,9 +289,14 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       console.warn('[AuthContext] Error or timeout unregistering push notifications on logout:', error);
     });
 
-    // 5. Firebase signOut
+    // 6. Proceed with push token unregistration and signOut(auth)
     try {
-      await Promise.allSettled([unregisterPushTask, signOut(auth)]);
+      await Promise.allSettled([
+        backendLogoutPromise,
+        clientPresencePromise,
+        unregisterPushTask,
+        signOut(auth),
+      ]);
     } catch (signOutError) {
       console.warn('[AuthContext] Failed to sign out:', signOutError);
     }

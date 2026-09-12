@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, USER_PROFILE_CACHE_KEY } from '../../contexts/AuthContext';
 import { useAuth } from '../../hooks/useAuth';
 import { auth } from '../../lib/firebase';
-import { mockAuthModule, mockMessagingModule } from '../../jest.setup';
+import { mockAuthModule, mockMessagingModule, mockFirestoreDoc } from '../../jest.setup';
 
 function TestAuthConsumer(): React.JSX.Element {
   const { user, role, loading, logout } = useAuth();
@@ -461,6 +461,80 @@ describe('AuthContext Integration', () => {
 
     // Should not have called signOut
     expect(FirebaseAuth.signOut).not.toHaveBeenCalled();
+  });
+
+  it('synchronizes online presence on login and transitions to offline on logout', async () => {
+    const mockFirebaseUser = {
+      uid: 'tech-presence-1',
+      email: 'tech-presence@smartflush.com',
+      displayName: 'Presence Tech',
+      getIdToken: jest.fn().mockResolvedValue('token-presence'),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation((_auth, callback) => {
+      callback(mockFirebaseUser);
+      return jest.fn();
+    });
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: {
+          id: 'tech-presence-1',
+          email: 'tech-presence@smartflush.com',
+          role: 'maintenance',
+        },
+      }),
+    });
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    // Verify online presence update on login
+    await waitFor(() => {
+      expect(mockFirestoreDoc.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isOnline: true,
+          status: 'available',
+        }),
+      );
+    });
+
+    mockFirestoreDoc.update.mockClear();
+
+    // Trigger logout
+    fireEvent.press(screen.getByTestId('logout-button'));
+
+    // Verify offline presence update and backend notification on logout
+    await waitFor(() => {
+      expect(mockFirestoreDoc.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          isOnline: false,
+          status: 'offline',
+        }),
+      );
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/auth/logout'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: expect.stringMatching(/^Bearer /),
+        }),
+      }),
+    );
   });
 });
 
