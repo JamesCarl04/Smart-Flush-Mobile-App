@@ -132,25 +132,33 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   }, []);
 
   useEffect(() => {
-    if (!awaitingRoleValidation || loading) {
+    if (!awaitingRoleValidation) {
       return;
     }
 
-    if (user && (role === 'maintenance' || role === 'technician' || role === 'supervisor')) {
-      setSubmitting(false);
-      setAwaitingRoleValidation(false);
-      setErrorMessage(null);
+    if (user) {
+      if (role === 'maintenance' || role === 'technician' || role === 'supervisor') {
+        setSubmitting(false);
+        setAwaitingRoleValidation(false);
+        setErrorMessage(null);
+      } else if (role !== null) {
+        setSubmitting(false);
+        setAwaitingRoleValidation(false);
+        setErrorMessage(
+          'Access denied. This app is for maintenance and supervisor accounts only.',
+        );
+      }
       return;
     }
 
-    if (!user) {
+    const timer = setTimeout(() => {
       setSubmitting(false);
       setAwaitingRoleValidation(false);
-      setErrorMessage(
-        'Access denied. This app is for maintenance and supervisor accounts only.',
-      );
-    }
-  }, [awaitingRoleValidation, loading, role, user]);
+      setErrorMessage('Unable to verify account role. Please try again.');
+    }, 10000);
+
+    return () => clearTimeout(timer);
+  }, [awaitingRoleValidation, role, user]);
 
   const handleLogin = async (): Promise<void> => {
     if (!email.trim() || !password) {
@@ -221,7 +229,7 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
     }
   };
 
-  const isBusy = submitting || (awaitingRoleValidation && loading);
+  const isBusy = submitting || awaitingRoleValidation;
 
   return (
     <KeyboardAvoidingView
