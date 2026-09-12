@@ -11,10 +11,35 @@ export interface MaintenancePerson {
   isOnline?: boolean | null;
   status?: string | null;
   isActive?: boolean | null;
+  lastSeen?: unknown;
   currentTaskId: string | null;
   shift: string | null;
   building: string | null;
   supervisorUid: string | null;
+}
+
+export const PRESENCE_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
+
+export function extractTimestampMillis(value: unknown): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value instanceof Date) return value.getTime();
+  if (typeof (value as { toMillis?: () => unknown }).toMillis === 'function') {
+    const millis = (value as { toMillis: () => unknown }).toMillis();
+    if (typeof millis === 'number' && Number.isFinite(millis)) return millis;
+  }
+  if (typeof (value as { _seconds?: unknown })._seconds === 'number') {
+    const seconds = (value as { _seconds: number })._seconds;
+    const nanoseconds = typeof (value as { _nanoseconds?: unknown })._nanoseconds === 'number'
+      ? (value as { _nanoseconds: number })._nanoseconds
+      : 0;
+    return seconds * 1000 + Math.floor(nanoseconds / 1_000_000);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = new Date(value).getTime();
+    if (!Number.isNaN(parsed)) return parsed;
+  }
+  return null;
 }
 
 export async function fetchMaintenancePersonnel(): Promise<MaintenancePerson[]> {
@@ -28,6 +53,9 @@ export async function fetchMaintenancePersonnel(): Promise<MaintenancePerson[]> 
           if (role !== 'maintenance' && role !== 'technician' && role !== 'worker') {
             return null;
           }
+          const lastSeenMillis = extractTimestampMillis(data.lastSeen);
+          const isFresh = lastSeenMillis !== null && Date.now() - lastSeenMillis <= PRESENCE_TIMEOUT_MS;
+          const isOnline = data.status !== 'offline' && data.isOnline !== false && isFresh;
           return {
             id: doc.id,
             displayName:
@@ -35,10 +63,11 @@ export async function fetchMaintenancePersonnel(): Promise<MaintenancePerson[]> 
                 ? data.displayName.trim()
                 : data.email ?? doc.id,
             email: typeof data.email === 'string' ? data.email : null,
-            isAvailable: data.status !== 'offline' && data.isOnline !== false,
-            isOnline: data.isOnline !== false,
+            isAvailable: isOnline,
+            isOnline,
             status: typeof data.status === 'string' ? data.status : null,
             isActive: data.isActive !== false,
+            lastSeen: data.lastSeen,
             currentTaskId: typeof data.currentTaskId === 'string' ? data.currentTaskId : null,
             shift: typeof data.shift === 'string' ? data.shift : '1st',
             building: typeof data.building === 'string' ? data.building : 'SDCA Annex Building',
@@ -183,7 +212,13 @@ export function getPersonOperationalStatus(
     return { status: 'offline', activeTask: null };
   }
 
-  // Any active technician on duty with no current work order is Available
+  // Check lastSeen freshness
+  const lastSeenMillis = extractTimestampMillis(person.lastSeen);
+  if (lastSeenMillis === null || Date.now() - lastSeenMillis > PRESENCE_TIMEOUT_MS) {
+    return { status: 'offline', activeTask: null };
+  }
+
+  // Any active technician on duty with fresh heartbeat and no current work order is Available
   return { status: 'available', activeTask: null };
 }
 

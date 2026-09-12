@@ -13,6 +13,8 @@ import { db } from '../lib/firebase';
 import {
   fetchMaintenancePersonnel,
   fetchSupervisorTasks,
+  extractTimestampMillis,
+  PRESENCE_TIMEOUT_MS,
   type MaintenancePerson,
 } from '../lib/supervisor-api';
 import {
@@ -216,10 +218,19 @@ export function SupervisorProvider({
                           ? data.displayName.trim()
                           : data.email ?? doc.id,
                       email: typeof data.email === 'string' ? data.email : null,
-                      isAvailable: data.status !== 'offline' && data.isOnline !== false,
-                      isOnline: data.isOnline !== false,
+                      isAvailable: (() => {
+                        const ls = extractTimestampMillis(data.lastSeen);
+                        const isFresh = ls !== null && Date.now() - ls <= PRESENCE_TIMEOUT_MS;
+                        return data.status !== 'offline' && data.isOnline !== false && isFresh;
+                      })(),
+                      isOnline: (() => {
+                        const ls = extractTimestampMillis(data.lastSeen);
+                        const isFresh = ls !== null && Date.now() - ls <= PRESENCE_TIMEOUT_MS;
+                        return data.status !== 'offline' && data.isOnline !== false && isFresh;
+                      })(),
                       status: typeof data.status === 'string' ? data.status : null,
                       isActive: data.isActive !== false,
+                      lastSeen: data.lastSeen,
                       currentTaskId:
                         typeof data.currentTaskId === 'string'
                           ? data.currentTaskId

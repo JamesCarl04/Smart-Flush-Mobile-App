@@ -1,5 +1,5 @@
 import { createContext, useEffect, useState, type PropsWithChildren } from 'react';
-import { Alert } from 'react-native';
+import { Alert, AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { onAuthStateChanged, signOut } from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -234,6 +234,59 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
       unsubscribe();
     };
   }, []);
+
+  // 3. Foreground periodic heartbeat (60s) & AppState background/foreground transitions
+  useEffect(() => {
+    if (!user?.uid) {
+      return;
+    }
+
+    const uid = user.uid;
+
+    // Periodic 60s heartbeat while user is logged in & foregrounded
+    const intervalId = setInterval(async () => {
+      try {
+        if (AppState.currentState === 'active') {
+          await db.collection('users').doc(uid).update({
+            lastSeen: firestore.FieldValue.serverTimestamp(),
+            isOnline: true,
+          });
+        }
+      } catch (heartbeatErr) {
+        // Silent catch for network drops
+      }
+    }, 60_000);
+
+    // AppState lifecycle listener (active <-> background/inactive)
+    const subscription = AppState.addEventListener('change', async (nextState: AppStateStatus) => {
+      try {
+        if (nextState === 'background' || nextState === 'inactive') {
+          await db.collection('users').doc(uid).update({
+            isOnline: false,
+            status: 'offline',
+            lastSeen: firestore.FieldValue.serverTimestamp(),
+          });
+        } else if (nextState === 'active') {
+          const userDoc = await db.collection('users').doc(uid).get();
+          const docData = userDoc.data();
+          const currentStatus = docData ? (docData as Record<string, unknown>).status : null;
+          const targetStatus = currentStatus === 'on_task' ? 'on_task' : 'available';
+          await db.collection('users').doc(uid).update({
+            isOnline: true,
+            status: targetStatus,
+            lastSeen: firestore.FieldValue.serverTimestamp(),
+          });
+        }
+      } catch (appStateErr) {
+        console.warn('[AuthContext] AppState presence transition failed:', appStateErr);
+      }
+    });
+
+    return () => {
+      clearInterval(intervalId);
+      subscription.remove();
+    };
+  }, [user?.uid]);
 
   const logout = async (): Promise<void> => {
     const prevUser = user;
