@@ -160,11 +160,22 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
             const docData = userDoc.data();
             const currentStatus = docExists && docData ? (docData as Record<string, unknown>).status : null;
             const targetStatus = currentStatus === 'on_task' ? 'on_task' : 'available';
-            await db.collection('users').doc(firebaseUser.uid).update({
-              isOnline: true,
-              status: targetStatus,
-              lastSeen: firestore.FieldValue.serverTimestamp(),
-            });
+            if (docExists) {
+              await db.collection('users').doc(firebaseUser.uid).update({
+                isOnline: true,
+                status: targetStatus,
+                lastSeen: firestore.FieldValue.serverTimestamp(),
+              });
+            } else {
+              await db.collection('users').doc(firebaseUser.uid).set(
+                {
+                  isOnline: true,
+                  status: targetStatus,
+                  lastSeen: firestore.FieldValue.serverTimestamp(),
+                },
+                { merge: true },
+              );
+            }
           } catch (err) {
             console.warn('[AuthContext] Client-side presence fallback update failed:', err);
           }
