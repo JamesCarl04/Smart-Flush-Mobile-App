@@ -8,7 +8,7 @@
 [![Expo](https://img.shields.io/badge/Expo%20SDK-54.0-black.svg?logo=expo)](https://expo.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Storage%20%7C%20FCM-orange.svg?logo=firebase)](https://firebase.google.com/)
-[![Jest Tests](https://img.shields.io/badge/Tests-25%20Suites%20%7C%20284%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
+[![Jest Tests](https://img.shields.io/badge/Tests-25%20Suites%20%7C%20285%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
 [![UI Library](https://img.shields.io/badge/UI-React%20Native%20Paper%20MD3-purple.svg)](https://callstack.github.io/react-native-paper/)
 [![Target OS](https://img.shields.io/badge/Platform-Android%2014%2B%20(Dev%20Client)-green.svg?logo=android)](https://www.android.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](#)
@@ -28,7 +28,7 @@
    - [D. Interactive Sheets & System Modals](#d-interactive-sheets--system-modals)
 6. [🧼 The 3-Step Maintenance Execution Workflow](#-6-the-3-step-maintenance-execution-workflow)
 7. [📊 Supervisor Compliance Reporting & Data Export System](#-7-supervisor-compliance-reporting--data-export-system)
-8. [🚀 The 12 Core Production Engineering Modules](#-8-the-12-core-production-engineering-modules)
+8. [🚀 The 14 Core Production Engineering Modules](#-8-the-14-core-production-engineering-modules)
 9. [🎨 The "Design 3's" System & UX Principles](#-9-the-design-3s-system--ux-principles)
 10. [⚙️ Project Setup, Installation & Configuration](#-10-project-setup-installation--configuration)
 11. [🧪 Quality Assurance & Testing Matrix](#-11-quality-assurance--testing-matrix)
@@ -145,7 +145,7 @@ graph TD
 | **Reporting & Export**| **expo-print** & **expo-sharing** | `~15.0.8` | Dynamic HTML-to-PDF rendering and native Android OS file sharing |
 | **Local Persistence**| **AsyncStorage** | `2.2.0` | Stale-While-Revalidate (SWR) cache and offline transaction queue |
 | **Release Automation**| **Node.js SemVer Engine** | `scripts/release.js` | Automated version bumping (`package.json`, `app.json`, `build.gradle`), `CHANGELOG.md` generation, and Git tagging |
-| **Automated Testing**| **Jest** & **RNTL** | `29.7.0` | Comprehensive unit, integration, and E2E regression suite (24 suites, 254 tests) |
+| **Automated Testing**| **Jest** & **RNTL** | `29.7.0` | Comprehensive unit, integration, and E2E regression suite (25 suites, 285 tests) |
 
 ---
 
@@ -306,7 +306,9 @@ Klir Mobile comprises **13 dedicated screen views** and **5 shared system overla
     * **Neither Enrolled:** The biometric button is gracefully omitted from the layout.
   * **`[ Sign In ]` Button:** High-contrast crimson action button (`#B5121B`).
   * "Forgot Password?" navigation link.
-* **Safeguards:** Disables input during network calls; displays clear error messages for invalid credentials, unassigned roles, or inactive network. Ensures zero emojis or pulsing animations, using static accessible indicators.
+* **Safeguards:**
+  * **Zero-Delay (0ms) Instant Auth Hydration:** Implements 0ms local profile and role claim hydration from persistent `@klir:cached_user_profile` storage on initial app launch and cold boot. This eliminates race conditions during asynchronous Firestore user document fetching and prevents premature "Access Denied" or "Unauthorized Role" error flashes while credentials revalidate.
+  * Disables inputs during in-flight network calls; displays clear, actionable error dialogs for invalid credentials, unassigned roles, or network dropouts. Ensures zero emojis or pulsing animations, relying strictly on accessible, static high-contrast indicators.
 
 #### 2. Forgot Password Screen (`ForgotPasswordScreen.tsx`)
 * **Audience:** All users.
@@ -326,15 +328,16 @@ Klir Mobile comprises **13 dedicated screen views** and **5 shared system overla
 #### 3. Primary Alert Inbox Screen (`InboxScreen.tsx`)
 * **Audience:** Custodial Technicians (`role: maintenance`).
 * **Route:** `MainNavigator` $\rightarrow$ `InboxTab` $\rightarrow$ `InboxHome`.
-* **Purpose:** The daily operational hub for technicians. It receives real-time IoT alerts and scheduled work orders, displaying them in priority order.
+* **Purpose:** The daily operational hub for technicians. It receives real-time IoT alerts and scheduled work orders, displaying them in priority order. Work orders flagged by a supervisor and rechecking tasks are prioritized at the very top of the feed to ensure immediate corrective attention.
 * **Key Visual Elements:**
   * **Emergency Priority Card:** When an IoT hardware failure occurs (e.g. pump failure, continuous flush, severe leak), a vibrant red priority banner docks at the top with an immediate `[ Open Priority Task → ]` button.
+  * **Flagged Task Remediation Callout:** Returned tasks display high-contrast warning indicators, supervisor remarks, and an immediate `[ Review Remarks & Accept Recheck ]` action button at the top of the queue.
   * **Segmented Triple-Filter Tabs:**
     * **`All`**: Complete list of tasks assigned to this technician or their floor zone.
     * **`Active`**: Tasks currently accepted and in progress (`acknowledged` or `rechecking`).
     * **`Flagged`**: Work orders returned by the supervisor requiring corrective re-inspection.
   * **Task Cards:** Display restroom name, floor, fixture ID, urgency badge (`Critical`, `High`, `Normal`), relative timestamp (`2m ago`), and single-tap action buttons (`[ Acknowledge & Start ]` or `[ Review Remarks & Accept Recheck ]`).
-* **Safeguards:** Strict deduplication ensures identical tasks never appear twice; pull-to-refresh provides instant manual sync.
+* **Safeguards:** Flagged and rechecking tasks take top display priority over standard tasks; strict deduplication ensures identical tasks never appear twice; pull-to-refresh provides instant manual sync.
 
 #### 4. Active Task Screen (`ActiveTaskScreen.tsx`)
 * **Audience:** Custodial Technicians.
@@ -350,13 +353,14 @@ Klir Mobile comprises **13 dedicated screen views** and **5 shared system overla
 #### 5. Full Task Detail Screen (`TaskDetailScreen.tsx`)
 * **Audience:** Custodial Technicians (and Supervisors in audit mode).
 * **Route:** `InboxStack` / `HistoryStack` $\rightarrow$ `TaskDetail`.
-* **Purpose:** Comprehensive, full-page execution view providing an alternative to the modal workflow. Supports full checklist verification, camera capture, and submission.
+* **Purpose:** Comprehensive, full-page execution view providing an alternative to the modal workflow. Supports full checklist verification, camera capture, multi-technician teammate inspection, and submission.
 * **Key Visual Elements:**
   * **Segmented Flow Header:** Visual indicator showing progression through **Details**, **Checklist**, and **Summary**.
+  * **Interactive Teammate Tags:** For broadcast or multi-technician assignments (`assignedToIds`), renders interactive teammate chips displaying co-assigned personnel, preserving squad visibility without state clobbering.
   * **Full Checklist Accordion:** Categorized items (Dusting, Fixtures, Disinfection) with quick toggles.
   * **1-Tap Quick Action:** Shows `[ Check All as Done (1-Tap) ]` when incomplete, and `[ Reset All Items ]` when done.
   * **Camera Capture Frames:** High-resolution preview viewports with active timestamp watermarks.
-* **Safeguards:** Prevents submission until 100% of checklist items are marked and initial photo proof is captured.
+* **Safeguards:** Prevents submission until 100% of checklist items are marked and initial photo proof is captured; preserves team member assignments across lifecycle state changes.
 
 #### 6. Task History & Analytics Screen (`HistoryScreen.tsx`)
 * **Audience:** Custodial Technicians.
@@ -364,12 +368,13 @@ Klir Mobile comprises **13 dedicated screen views** and **5 shared system overla
 * **Purpose:** Allows technicians to review their completed work, inspect before/after photos, and track personal performance metrics.
 * **Key Visual Elements:**
   * **Performance KPI Banner:**
-    * **Completed Tasks:** Total work orders resolved.
+    * **Completed Tasks:** Total work orders resolved and approved.
     * **Average Turnaround:** Mean time from task acceptance to completion.
     * **Compliance Rate:** Percentage of tasks submitted with full biometric and checklist compliance.
   * **Timeframe Filters:** Quick pills for **Today**, **7 Days**, and **All**.
   * **Real-time Search Bar:** Filter by restroom name, fixture ID, or task description.
   * **History Card Feed:** Displays completion time, duration pill (`12 min 30 sec`), Before/After image thumbnail pairs, and biometric verified badges.
+* **Safeguards:** Flagged and rechecking tasks are **strictly excluded** from completed History and its KPI metrics until they receive formal supervisor sign-off and approval (`status: 'approved'`), preventing unfinished or rejected rework from distorting completion totals.
 
 ---
 
@@ -549,6 +554,12 @@ Custodians complete 10 standardized maintenance tasks organized into 3 logical c
 * **Biometric Identity Lock:** Tapping `[ Complete & Verify Biometrics 🔒 ]` prompts for the technician's fingerprint or face scan, cryptographically stamping their identity into the completion record.
 * **Offline Resilience:** If network connection is lost, the complete package (photos, checklist, watermarks, timestamps) is saved locally and queued for automatic upload upon reconnection.
 
+### Closed-Loop Supervisor QA, Priority Inbox Routing & History Exclusion
+* **Supervisor Review & Direct Accountability Lock:** Upon submission, the work order transitions to `status: 'completed'` in the supervisor's QA inspection queue. If the supervisor flags deficiencies (e.g. uncleaned mirrors, missing consumables), the work order locks directly to the original technician who executed it.
+* **Priority Inbox Routing:** Flagged work orders (`status: 'flagged'`) immediately appear at the top of the technician's **Inbox** tab with highest urgency and supervisor remarks, requiring the technician to review and accept the recheck (`status: 'rechecking'`).
+* **Strict History Exclusion:** Rework in `flagged` or `rechecking` state is **strictly excluded** from the technician's completed **History** tab and analytics KPIs until the supervisor conducts a secondary inspection and grants final approval (`status: 'approved'`).
+* **Multi-Technician Broadcast & Teammate Coordination:** When tasks are dispatched to multiple technicians (`assignedToIds`), Task Detail displays interactive teammate tags. The system preserves squad assignments across lifecycle state transitions while storing individual checklist and photo submissions under `submissions[uid]` without conflict.
+
 ---
 
 ## 📊 7. Supervisor Compliance Reporting & Data Export System
@@ -612,7 +623,7 @@ Designed for institutional accreditation, regulatory compliance, and academic re
 
 ---
 
-## 🚀 8. The 13 Core Production Engineering Modules
+## 🚀 8. The 14 Core Production Engineering Modules
 
 ### 1. Real IoT Hardware Failure Detection & UV Anti-Spam
 * Telemetry alarms (valve stuck open, pump failure, sensor disconnect) automatically evaluate against alert thresholds to generate high-urgency work orders.
@@ -650,9 +661,11 @@ Designed for institutional accreditation, regulatory compliance, and academic re
 * Sensitive operations (QA review access, task completion) are protected behind `LocalAuthentication.authenticateAsync`.
 * Provides a secure password fallback dialog when biometric hardware is unavailable.
 
-### 10. Multi-Assignee & Broadcast Team Safeguards
-* For team-wide broadcast tasks (`assignedToIds.length > 1`), individual technician contributions are recorded independently under `submissions[uid]`.
-* Prevents team members from overwriting each other's work orders.
+### 10. Multi-Technician Assignment, Broadcast Dispatch & Teammate Preservation
+* **Broadcast Dispatch Workflows:** Supports team-wide dispatches across multiple technicians (`assignedToIds`), allowing squads to coordinate on heavy-traffic facilities.
+* **Interactive Teammate Tags:** Task cards and the full Task Detail view display interactive teammate tags, maintaining full visibility into co-assigned personnel throughout the task lifecycle.
+* **Independent Submissions & Conflict-Free Sync:** Individual technician contributions and checklists are recorded independently under `submissions[uid]`, preventing concurrent technicians from clobbering or overwriting each other's progress.
+* **Lifecycle State & Roster Preservation:** The complete roster of assigned personnel is preserved across all lifecycle state changes (`assigned` $\rightarrow$ `acknowledged` $\rightarrow$ `completed` $\rightarrow$ `rechecking` $\rightarrow$ `approved`).
 
 ### 11. Offline-First Synchronization Engine
 * Tasks completed without cellular or Wi-Fi connectivity are stored in local `AsyncStorage`.
@@ -661,7 +674,13 @@ Designed for institutional accreditation, regulatory compliance, and academic re
 ### 12. Executive Compliance Reports & Native PDF/CSV Export Engine
 * Fully integrated reporting engine generating institutional SDCA PDF compliance certificates and RFC 4180 CSV spreadsheets with native Android sharing.
 
-### 13. Append-Only System Audit Trail Engine (`audit-logger.ts` & `firestore.rules`)
+### 13. 60s Foreground Presence Heartbeat & AppState Background Listener
+* **60s Foreground Presence Timer:** While the app is active in the foreground, a background timer periodically updates `/users/{uid}` in Firestore with `lastSeen: serverTimestamp()`, signaling live availability to the supervisor team.
+* **AppState Lifecycle Transition Listener:** Listens to React Native `AppState` change events (`active`, `background`, `inactive`). When the app transitions to the background or device lock, it immediately sets `isOnline: false`; upon returning to the foreground (`active`), it re-establishes `isOnline: true` and dispatches an immediate heartbeat.
+* **Session Logout Synchronization:** Logging out immediately clears local presence and transitions `isOnline: false` in Firestore, ensuring staff availability counts remain accurate.
+* **Cross-Platform Watchdog Coordination:** Seamlessly drives the Web Dashboard's 2-minute presence watchdog and the supervisor's live squad capacity metrics.
+
+### 14. Append-Only System Audit Trail Engine (`audit-logger.ts` & `firestore.rules`)
 * Implements NIST SP 800-92, ISO 27001 (A.8.15), and 21 CFR Part 11 append-only compliance.
 * Captures immutable audit entries across authentication, supervisor governance, custodial SLAs, and administrative soft-deletions with zero update/delete permissions in Firestore security rules.
 
@@ -787,22 +806,22 @@ npm run release
 
 ## 🧪 11. Quality Assurance & Testing Matrix
 
-Klir Mobile maintains a comprehensive test suite of **25 test suites** and **284 automated tests** (100% passing) covering unit logic, integration contexts, and end-to-end user journeys:
+Klir Mobile maintains a comprehensive test suite of **25 test suites** and **285 automated tests** (100% passing) covering unit logic, integration contexts, and end-to-end user journeys:
 
 ```powershell
-# Run the complete test suite (25 suites, 284 tests passing)
+# Run the complete test suite (25 suites, 285 tests passing)
 npm test
 
 # Run TypeScript strict typecheck (zero errors enforced)
 npm run typecheck
 
-# Run unit tests only (12 suites, 208 tests)
+# Run unit tests only (12 suites, 199 tests)
 npm run test:unit
 
-# Run integration tests only (10 suites)
+# Run integration tests only (10 suites, 81 tests)
 npm run test:integration
 
-# Run end-to-end flow tests only (3 suites)
+# Run end-to-end flow tests only (3 suites, 5 tests)
 npm run test:e2e
 
 # Run test coverage report
