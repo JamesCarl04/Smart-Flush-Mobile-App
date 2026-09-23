@@ -22,25 +22,13 @@ import {
 } from '../components/MaintenanceUI';
 import { auth } from '../lib/firebase';
 import { logAuditEvent } from '../lib/audit-logger';
+import { getSanitizedPasswordResetErrorMessage } from '../lib/auth-errors';
 import type { AuthStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
 function getResetErrorMessage(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code)
-      : null;
-
-  if (code === 'auth/invalid-email') {
-    return 'Enter a valid email address before requesting a password reset.';
-  }
-
-  if (code === 'auth/user-not-found') {
-    return 'No account was found for that email address.';
-  }
-
-  return 'We could not send the reset email right now. Please try again.';
+  return getSanitizedPasswordResetErrorMessage(error);
 }
 
 export function ForgotPasswordScreen({ navigation }: Props): React.JSX.Element {

@@ -64,7 +64,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     );
   };
 
-  it('renders "Face or Fingerprint" with "shield-account" icon when both are enrolled', async () => {
+  it('renders "Unlock with biometrics" with "shield-account" icon when both are enrolled', async () => {
     (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
     (LocalAuthentication.isEnrolledAsync as jest.Mock).mockResolvedValue(true);
     (LocalAuthentication.supportedAuthenticationTypesAsync as jest.Mock).mockResolvedValue([
@@ -75,12 +75,12 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Login with Face or Fingerprint')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
       expect(screen.getByTestId('icon-shield-account')).toBeTruthy();
     });
   });
 
-  it('renders "Face ID" on iOS with "face-recognition" icon when only face is enrolled', async () => {
+  it('renders "Unlock with biometrics" on iOS with "face-recognition" icon when only face is enrolled', async () => {
     Object.defineProperty(Platform, 'OS', { get: () => 'ios', configurable: true });
 
     (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
@@ -92,12 +92,12 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Login with Face ID')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
       expect(screen.getByTestId('icon-face-recognition')).toBeTruthy();
     });
   });
 
-  it('renders "Face Unlock" on Android with "face-recognition" icon when only face is enrolled', async () => {
+  it('renders "Unlock with biometrics" on Android with "face-recognition" icon when only face is enrolled', async () => {
     Object.defineProperty(Platform, 'OS', { get: () => 'android', configurable: true });
 
     (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
@@ -109,12 +109,12 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Login with Face Unlock')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
       expect(screen.getByTestId('icon-face-recognition')).toBeTruthy();
     });
   });
 
-  it('renders "Fingerprint" with "fingerprint" icon when only fingerprint is enrolled', async () => {
+  it('renders "Unlock with biometrics" with "fingerprint" icon when only fingerprint is enrolled', async () => {
     (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
     (LocalAuthentication.isEnrolledAsync as jest.Mock).mockResolvedValue(true);
     (LocalAuthentication.supportedAuthenticationTypesAsync as jest.Mock).mockResolvedValue([
@@ -124,12 +124,12 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Login with Fingerprint')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
       expect(screen.getByTestId('icon-fingerprint')).toBeTruthy();
     });
   });
 
-  it('renders "Unlock with Face or Fingerprint" when credentials are vault-cached', async () => {
+  it('renders "Unlock with biometrics" when credentials are vault-cached', async () => {
     jest.spyOn(AsyncStorage, 'getItem').mockResolvedValue(
       JSON.stringify({ email: 'tech@sdca.edu.ph', password: 'password123' }),
     );
@@ -144,7 +144,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Unlock with Face or Fingerprint')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
       expect(screen.getByTestId('icon-shield-account')).toBeTruthy();
     });
   });
@@ -156,8 +156,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.queryByText(/Face/i)).toBeNull();
-      expect(screen.queryByText(/Fingerprint/i)).toBeNull();
+      expect(screen.queryByText('Unlock with biometrics')).toBeNull();
       expect(screen.queryByTestId('icon-shield-account')).toBeNull();
       expect(screen.queryByTestId('icon-fingerprint')).toBeNull();
     });
@@ -173,8 +172,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.queryByText(/Face/i)).toBeNull();
-      expect(screen.queryByText(/Fingerprint/i)).toBeNull();
+      expect(screen.queryByText('Unlock with biometrics')).toBeNull();
       expect(screen.queryByTestId('icon-shield-account')).toBeNull();
       expect(screen.queryByTestId('icon-fingerprint')).toBeNull();
     });
@@ -187,8 +185,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.queryByText(/Face/i)).toBeNull();
-      expect(screen.queryByText(/Fingerprint/i)).toBeNull();
+      expect(screen.queryByText('Unlock with biometrics')).toBeNull();
       expect(screen.queryByTestId('icon-shield-account')).toBeNull();
       expect(screen.queryByTestId('icon-fingerprint')).toBeNull();
     });
@@ -215,10 +212,10 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Unlock with Face or Fingerprint')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
     });
 
-    fireEvent.press(screen.getByText('Unlock with Face or Fingerprint'));
+    fireEvent.press(screen.getByText('Unlock with biometrics'));
 
     await waitFor(() => {
       expect(LocalAuthentication.authenticateAsync).toHaveBeenCalledWith(
@@ -247,15 +244,82 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     renderScreen();
 
     await waitFor(() => {
-      expect(screen.getByText('Login with Fingerprint')).toBeTruthy();
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
     });
 
-    fireEvent.press(screen.getByText('Login with Fingerprint'));
+    fireEvent.press(screen.getByText('Unlock with biometrics'));
 
     await waitFor(() => {
       expect(
         screen.getByText(
           'Please log in with your email and password first to enable biometric login.',
+        ),
+      ).toBeTruthy();
+    });
+  });
+
+  it('displays user-friendly sanitized error when account is disabled during biometric login', async () => {
+    jest.spyOn(AsyncStorage, 'getItem').mockResolvedValue(
+      JSON.stringify({ email: 'disabled.tech@sdca.edu.ph', password: 'vaultPassword123' }),
+    );
+
+    (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
+    (LocalAuthentication.isEnrolledAsync as jest.Mock).mockResolvedValue(true);
+    (LocalAuthentication.supportedAuthenticationTypesAsync as jest.Mock).mockResolvedValue([
+      LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION,
+    ]);
+    (LocalAuthentication.authenticateAsync as jest.Mock).mockResolvedValue({
+      success: true,
+    });
+    (FirebaseAuth.signInWithEmailAndPassword as jest.Mock).mockRejectedValue(
+      new Error('[auth/user-disabled] The user account has been disabled by an administrator.'),
+    );
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('Unlock with biometrics'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Your account has been deactivated or disabled. Please contact your supervisor or facility administrator.',
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByText(/auth\/user-disabled/)).toBeNull();
+    });
+  });
+
+  it('displays lockout guidance when biometric scanner returns lockout error', async () => {
+    jest.spyOn(AsyncStorage, 'getItem').mockResolvedValue(
+      JSON.stringify({ email: 'locked.tech@sdca.edu.ph', password: 'vaultPassword123' }),
+    );
+
+    (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
+    (LocalAuthentication.isEnrolledAsync as jest.Mock).mockResolvedValue(true);
+    (LocalAuthentication.supportedAuthenticationTypesAsync as jest.Mock).mockResolvedValue([
+      LocalAuthentication.AuthenticationType.FINGERPRINT,
+    ]);
+    (LocalAuthentication.authenticateAsync as jest.Mock).mockResolvedValue({
+      success: false,
+      error: 'lockout',
+    });
+
+    renderScreen();
+
+    await waitFor(() => {
+      expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
+    });
+
+    fireEvent.press(screen.getByText('Unlock with biometrics'));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Too many failed biometric attempts. Please log in with your password.',
         ),
       ).toBeTruthy();
     });

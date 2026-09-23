@@ -113,6 +113,7 @@ describe('Offline Resilience Flow E2E', () => {
 
     // Step 1b: Network goes offline (e.g. basement/isolated restroom without WiFi/cellular)
     (Network as any).__setNetworkState(false, false);
+    mockFirestoreDoc.update.mockClear();
 
     // Step 2: Worker takes Before photo, completes checklist, and takes After photo offline
     const takeProofBtn = screen.getByText('Take Proof Photo');

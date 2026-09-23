@@ -1,5 +1,5 @@
 // ═════════════════════════════════════════════════════════════════════════════
-// Smart Flush ESP32 Firmware — Enterprise Edition with Edge Fault Detection
+// Smart Flush ESP32 Firmware — Enterprise Edition with Live Serial Telemetry
 // ═════════════════════════════════════════════════════════════════════════════
 
 #include <WiFi.h>
@@ -44,8 +44,8 @@ int PERSON_GONE_CONFIRM_MS    = 3000;   // Confirmation delay before closing lid
 
 #define LID_OPEN_POS          0         // Servo angle for lid open
 #define LID_CLOSE_POS         180       // Servo angle for lid closed
-#define OPEN_TIME             2500      // Servo travel time (ms)
-#define CLOSE_TIME            2500      // Servo travel time (ms)
+#define OPEN_TIME             2000      // Servo travel time (ms)
+#define CLOSE_TIME            2000      // Servo travel time (ms)
 
 // ── 4. State Enum ─────────────────────────────────────────────────────────────
 enum State {
@@ -60,6 +60,19 @@ enum State {
 
 State currentState = STANDBY;
 
+const char* getStateName(State s) {
+  switch (s) {
+    case STANDBY:               return "STANDBY";
+    case PERSON_DETECTED:       return "PERSON_DETECTED";
+    case LID_OPEN:              return "LID_OPEN";
+    case WAITING_FOR_DEPARTURE: return "WAITING_FOR_DEPARTURE";
+    case LID_CLOSING:           return "LID_CLOSING";
+    case FLUSHING:              return "FLUSHING";
+    case UV_ACTIVE:             return "UV_ACTIVE";
+    default:                    return "UNKNOWN";
+  }
+}
+
 // ── 5. Global Variables & Objects ─────────────────────────────────────────────
 Servo servo1;
 
@@ -69,6 +82,11 @@ float flushDuration           = 0;
 
 unsigned long lastUltrasonicPublish = 0;
 unsigned long lastDistanceTrigger   = 0;
+unsigned long lastSerialTelemetry   = 0;
+unsigned long lastDeparturePrint    = 0;
+unsigned long lastGracePrint        = 0;
+unsigned long lastFlushPrint        = 0;
+unsigned long lastUvPrint           = 0;
 unsigned long lastReconnectAttempt  = 0;
 unsigned long lastLedBlink          = 0;
 unsigned long lastLeakCheck         = 0;
@@ -81,7 +99,8 @@ unsigned long standbyEnteredAt      = 0;
 unsigned long stallOccupiedSince    = 0;
 
 float distanceBuffer[5]       = {999, 999, 999, 999, 999};
-int distanceIndex             = 0;
+uint8_t distanceIndex         = 0;
+float lastRawDistance         = 999.0;
 bool ledState                 = false;
 bool occupancyAlertSent       = false;
 
@@ -99,12 +118,12 @@ void clearDistanceBuffer() {
     distanceBuffer[i] = 999.0;
   }
   distanceIndex = 0;
-  Serial.printf("[%lu] [SENSOR] Distance buffer reset\n", millis());
+  Serial.printf("[%lu] [SENSOR] Distance buffer reset to [999, 999, 999, 999, 999]\n", millis());
 }
 
 // ── 8. Alert Publishing Helper ────────────────────────────────────────────────
 void publishHardwareAlert(const char* component, const char* message, const char* severity) {
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<384> doc;
   doc["deviceId"]   = DEVICE_ID;
   doc["location"]   = RESTROOM_LOCATION;
   doc["component"]  = component;
@@ -112,19 +131,23 @@ void publishHardwareAlert(const char* component, const char* message, const char
   doc["severity"]   = severity; // "critical" | "warning"
   doc["timestamp"]  = millis();
 
-  char buffer[256];
+  char buffer[384];
   serializeJson(doc, buffer);
   client.publish("toilet/alerts/hardware", buffer, true);
-  Serial.printf("[%lu] [ALERT (%s)] Component '%s': %s\n", millis(), severity, component, message);
+  Serial.println("══════════════════════════════════════════════════════════════");
+  Serial.printf(">>> [ALERT (%s)] Component '%s': %s\n", severity, component, message);
+  Serial.println("══════════════════════════════════════════════════════════════");
 }
 
 // ── 9. Servo Functions ────────────────────────────────────────────────────────
 void openLid() {
-  Serial.printf("[%lu] [LID] Opening — moving servo to %d°\n", millis(), LID_OPEN_POS);
+  Serial.printf("[%lu] [LID] Opening — moving servo to %d°...\n", millis(), LID_OPEN_POS);
   servo1.attach(SERVO1_PIN);
-  delay(10);
+  delay(15);
   servo1.write(LID_OPEN_POS);
   delay(OPEN_TIME);
+  servo1.detach(); // Detach to save power, stop motor hum, and prevent brownouts
+  Serial.printf("[%lu] [LID] Open position reached. Servo detached.\n", millis());
 
   StaticJsonDocument<128> doc;
   doc["deviceId"]  = DEVICE_ID;
@@ -136,14 +159,13 @@ void openLid() {
 }
 
 void closeLid() {
-  Serial.printf("[%lu] [LID] Closing — moving servo to %d°\n", millis(), LID_CLOSE_POS);
-  if (!servo1.attached()) {
-    servo1.attach(SERVO1_PIN);
-    delay(10);
-  }
+  Serial.printf("[%lu] [LID] Closing — moving servo to %d°...\n", millis(), LID_CLOSE_POS);
+  servo1.attach(SERVO1_PIN);
+  delay(15);
   servo1.write(LID_CLOSE_POS);
   delay(CLOSE_TIME);
   servo1.detach();
+  Serial.printf("[%lu] [LID] Closed position reached. Servo detached.\n", millis());
 
   StaticJsonDocument<128> doc;
   doc["deviceId"]  = DEVICE_ID;
@@ -154,7 +176,7 @@ void closeLid() {
   client.publish("toilet/events/lid", buffer);
 }
 
-// ── 10. Distance Measurement ──────────────────────────────────────────────────
+// ── 10. Distance Measurement with Live Output ─────────────────────────────────
 float getDistance(bool shouldUpdate = true) {
   if (shouldUpdate && millis() - lastDistanceTrigger >= 200) {
     lastDistanceTrigger = millis();
@@ -163,12 +185,14 @@ float getDistance(bool shouldUpdate = true) {
     digitalWrite(TRIG_PIN, HIGH);
     delayMicroseconds(10);
     digitalWrite(TRIG_PIN, LOW);
-    long duration = pulseIn(ECHO_PIN, HIGH, 60000);
-    float dist = duration / 58.0;
-    if (dist > 0 && dist < 400) {
-      distanceBuffer[distanceIndex % 5] = dist;
-      distanceIndex++;
-    }
+
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout (~5 meters max)
+    float dist = (duration == 0) ? 999.0 : (duration / 58.0);
+    if (dist <= 0 || dist > 400) dist = 999.0;
+
+    lastRawDistance = dist;
+    distanceBuffer[distanceIndex % 5] = dist;
+    distanceIndex = (distanceIndex + 1) % 5;
   }
 
   float sorted[5];
@@ -182,7 +206,7 @@ float getDistance(bool shouldUpdate = true) {
       }
     }
   }
-  return sorted[2];
+  return sorted[2]; // Median
 }
 
 void publishDistance(float distance) {
@@ -190,7 +214,7 @@ void publishDistance(float distance) {
     lastUltrasonicPublish = millis();
     StaticJsonDocument<128> doc;
     doc["deviceId"]  = DEVICE_ID;
-    doc["distance"]  = distance;
+    doc["distance"]  = (distance >= 999.0) ? -1 : distance;
     doc["unit"]      = "cm";
     doc["timestamp"] = millis();
     char buffer[128];
@@ -204,15 +228,21 @@ void checkLeakageInStandby() {
   if (currentState == STANDBY) {
     if (millis() - lastLeakCheck >= 5000) {
       lastLeakCheck = millis();
-      if (pulseCount > LEAK_PULSE_THRESHOLD) {
+
+      noInterrupts();
+      int idlePulses = pulseCount;
+      pulseCount = 0; // Clear window so pulses don't accumulate indefinitely
+      interrupts();
+
+      if (idlePulses > LEAK_PULSE_THRESHOLD) {
         publishHardwareAlert(
           "water_leak",
           "Continuous water flow detected while toilet is idle (Stuck flapper valve or pipe leakage).",
           "critical"
         );
-        noInterrupts();
-        pulseCount = 0;
-        interrupts();
+      } else {
+        Serial.printf("[%lu] [LEAK MONITOR] Standby idle flow check: %d pulses in 5s (Limit: %d) -> Pipe OK\n",
+                      millis(), idlePulses, LEAK_PULSE_THRESHOLD);
       }
     }
   }
@@ -220,63 +250,113 @@ void checkLeakageInStandby() {
 
 // ── 12. WiFi & MQTT ───────────────────────────────────────────────────────────
 void connectWiFi() {
-  Serial.printf("[%lu] [WIFI] Connecting to %s...\n", millis(), WIFI_SSID);
+  Serial.printf("\n[%lu] [WIFI] Connecting to '%s'...\n", millis(), WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED) {
-    if (millis() - start >= 20000) {
-      Serial.printf("[%lu] [WIFI] Connection timeout!\n", millis());
+    if (millis() - start >= 15000) {
+      Serial.printf("[%lu] [WIFI] Connection timeout! Will retry in main loop...\n", millis());
       return;
     }
     delay(500);
     Serial.print(".");
   }
-  Serial.printf("\n[%lu] [WIFI] Connected! IP: %s\n", millis(), WiFi.localIP().toString().c_str());
+  Serial.printf("\n[%lu] [WIFI] Connected! IP: %s | RSSI: %d dBm\n",
+                millis(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
 }
 
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message = "";
   for (int i = 0; i < length; i++) message += (char)payload[i];
-  Serial.printf("[%lu] [MQTT] Received [%s]: %s\n", millis(), topic, message.c_str());
+  Serial.printf("[%lu] [MQTT RECEIVED] [%s]: %s\n", millis(), topic, message.c_str());
 
   if (String(topic) == "toilet/commands/pump") {
     digitalWrite(PUMP_PIN, message == "ON" ? LOW : HIGH);
+    Serial.printf("[%lu] [COMMAND] Pump set to: %s\n", millis(), message.c_str());
   }
   if (String(topic) == "toilet/commands/uv") {
-    digitalWrite(UV_PIN, message == "ON" ? LOW : HIGH);
+    if (message == "OFF" && currentState == UV_ACTIVE) {
+      digitalWrite(UV_PIN, HIGH);
+      float elapsed = (millis() - uvStartTime) / 1000.0;
+      StaticJsonDocument<128> doc;
+      doc["deviceId"]  = DEVICE_ID;
+      doc["duration"]  = elapsed;
+      doc["completed"] = false;
+      doc["reason"]    = "manual_stop";
+      doc["timestamp"] = millis();
+      char buffer[128];
+      serializeJson(doc, buffer);
+      client.publish("toilet/events/uv", buffer);
+      currentState = STANDBY;
+      standbyEnteredAt = millis();
+      clearDistanceBuffer();
+      Serial.printf("[%lu] [UV] Manual OFF abort during active cycle (%.1fs)\n", millis(), elapsed);
+    } else {
+      digitalWrite(UV_PIN, message == "ON" ? LOW : HIGH);
+      Serial.printf("[%lu] [COMMAND] UV set to: %s\n", millis(), message.c_str());
+    }
   }
   if (String(topic) == "toilet/commands/lid") {
-    if (message == "OPEN")  openLid();
+    if (message == "OPEN") {
+      if (currentState == UV_ACTIVE) {
+        digitalWrite(UV_PIN, HIGH);
+        float elapsed = (millis() - uvStartTime) / 1000.0;
+        StaticJsonDocument<128> doc;
+        doc["deviceId"]  = DEVICE_ID;
+        doc["duration"]  = elapsed;
+        doc["completed"] = false;
+        doc["reason"]    = "lid_opened";
+        doc["timestamp"] = millis();
+        char buffer[128];
+        serializeJson(doc, buffer);
+        client.publish("toilet/events/uv", buffer);
+        Serial.printf("[%lu] [UV] Aborted: Lid opened during UV (%.1fs)\n", millis(), elapsed);
+      }
+      openLid();
+      currentState = LID_OPEN;
+      lidOpenedAt = millis();
+    }
     if (message == "CLOSE") closeLid();
   }
   if (String(topic) == "toilet/commands/config") {
     StaticJsonDocument<200> doc;
     deserializeJson(doc, message);
-    if (doc.containsKey("pumpDuration")) PUMP_DURATION_MS = (int)doc["pumpDuration"] * 1000;
-    if (doc.containsKey("uvDuration"))   UV_DURATION_MS   = (int)doc["uvDuration"] * 1000;
-    if (doc.containsKey("threshold"))    DETECTION_THRESHOLD_CM = (int)doc["threshold"];
+    if (doc.containsKey("pumpDuration")) {
+      PUMP_DURATION_MS = (int)doc["pumpDuration"] * 1000;
+      Serial.printf("[%lu] [CONFIG] Pump Duration updated: %d ms\n", millis(), PUMP_DURATION_MS);
+    }
+    if (doc.containsKey("uvDuration")) {
+      UV_DURATION_MS = (int)doc["uvDuration"] * 1000;
+      Serial.printf("[%lu] [CONFIG] UV Duration updated: %d ms\n", millis(), UV_DURATION_MS);
+    }
+    if (doc.containsKey("threshold")) {
+      DETECTION_THRESHOLD_CM = (int)doc["threshold"];
+      Serial.printf("[%lu] [CONFIG] Detection Threshold updated: %d cm\n", millis(), DETECTION_THRESHOLD_CM);
+    }
   }
 }
 
 bool connectMQTT() {
-  Serial.printf("[%lu] [MQTT] Connecting to HiveMQ broker...\n", millis());
+  Serial.printf("[%lu] [MQTT] Connecting to HiveMQ broker (%s:%d)...\n", millis(), MQTT_BROKER, MQTT_PORT);
   
+  String clientId = "ESP32SmartFlush_" + String(DEVICE_ID);
   const char* willTopic = "toilet/status/lwt";
-  const char* willPayload = "{\"status\":\"offline\",\"deviceId\":\"TOILET_ESP32_01\"}";
+  const char* willPayload = "{\"status\":\"offline\",\"deviceId\":\"" DEVICE_ID "\"}";
 
-  if (client.connect("ESP32SmartFlush", MQTT_USER, MQTT_PASS, willTopic, 1, true, willPayload)) {
-    Serial.printf("[%lu] [MQTT] Connected successfully!\n", millis());
-    client.publish("toilet/status/lwt", "{\"status\":\"online\",\"deviceId\":\"TOILET_ESP32_01\"}", true);
+  if (client.connect(clientId.c_str(), MQTT_USER, MQTT_PASS, willTopic, 1, true, willPayload)) {
+    Serial.printf("[%lu] [MQTT] Connected successfully as '%s'!\n", millis(), clientId.c_str());
+    client.publish("toilet/status/lwt", "{\"status\":\"online\",\"deviceId\":\"" DEVICE_ID "\"}", true);
 
     client.subscribe("toilet/commands/pump");
     client.subscribe("toilet/commands/uv");
     client.subscribe("toilet/commands/lid");
     client.subscribe("toilet/commands/config");
+    Serial.printf("[%lu] [MQTT] Subscribed to command topics\n", millis());
     digitalWrite(LED_PIN, HIGH);
     return true;
   }
 
-  Serial.printf("[%lu] [MQTT] Failed rc=%d\n", millis(), client.state());
+  Serial.printf("[%lu] [MQTT] Connection failed, rc=%d (Will retry in 5s)\n", millis(), client.state());
   return false;
 }
 
@@ -305,37 +385,57 @@ void updateLED() {
   }
 }
 
-// ── 13. State Machine with Fault Detection ────────────────────────────────────
+// ── 13. State Machine with Verbose Serial Diagnostics ─────────────────────────
 void updateStateMachine(float distance) {
+  // Safety check: Never leave pump on outside FLUSHING state
+  if (currentState != FLUSHING && digitalRead(PUMP_PIN) == LOW) {
+    digitalWrite(PUMP_PIN, HIGH);
+    Serial.printf("[%lu] [SAFETY INTERLOCK] Pump was active outside FLUSHING! Forcing PUMP OFF.\n", millis());
+  }
+
   switch (currentState) {
 
     case STANDBY:
       if (standbyEnteredAt > 0 && millis() - standbyEnteredAt < STANDBY_SETTLE_MS) {
-        break;
+        break; // Settling period
       }
       if (distance > 0 && distance < DETECTION_THRESHOLD_CM) {
+        Serial.println("\n────────────────────────────────────────────────────────────");
+        Serial.printf("[%lu] >>> [EVENT] Person entered stall! (Distance: %.1f cm < %d cm)\n",
+                      millis(), distance, DETECTION_THRESHOLD_CM);
+        Serial.println("────────────────────────────────────────────────────────────");
         currentState = PERSON_DETECTED;
         stallOccupiedSince = millis();
         occupancyAlertSent = false;
-        Serial.printf("[%lu] [STATE] STANDBY -> PERSON_DETECTED\n", millis());
       }
       break;
 
     case PERSON_DETECTED:
+      Serial.printf("[%lu] [STATE] PERSON_DETECTED -> Opening lid for user\n", millis());
       openLid();
       lidOpenedAt     = millis();
       currentState    = LID_OPEN;
       personGoneTimer = 0;
-      Serial.printf("[%lu] [STATE] PERSON_DETECTED -> LID_OPEN\n", millis());
+      lastGracePrint  = 0;
+      Serial.printf("[%lu] [STATE] LID_OPEN: Starting %d ms sensor grace period...\n", millis(), SENSOR_GRACE_MS);
       break;
 
     case LID_OPEN:
-      if (millis() - lidOpenedAt < SENSOR_GRACE_MS) {
-        break;
+      {
+        unsigned long elapsedGrace = millis() - lidOpenedAt;
+        if (elapsedGrace < SENSOR_GRACE_MS) {
+          if (millis() - lastGracePrint >= 1000) {
+            lastGracePrint = millis();
+            Serial.printf("[%lu] [LID_OPEN] Grace period remaining: %.1fs\n",
+                          millis(), (SENSOR_GRACE_MS - elapsedGrace) / 1000.0);
+          }
+          break;
+        }
+        Serial.printf("[%lu] [STATE] Grace period ended. Now actively tracking departure...\n", millis());
+        currentState    = WAITING_FOR_DEPARTURE;
+        personGoneTimer = 0;
+        lastDeparturePrint = 0;
       }
-      currentState    = WAITING_FOR_DEPARTURE;
-      personGoneTimer = 0;
-      Serial.printf("[%lu] [STATE] LID_OPEN -> WAITING_FOR_DEPARTURE\n", millis());
       break;
 
     case WAITING_FOR_DEPARTURE:
@@ -356,13 +456,30 @@ void updateStateMachine(float distance) {
         if (!personPresent) {
           if (personGoneTimer == 0) {
             personGoneTimer = millis();
-          } else if (millis() - personGoneTimer >= (unsigned long)PERSON_GONE_CONFIRM_MS) {
-            personGoneTimer = 0;
-            currentState    = LID_CLOSING;
-            Serial.printf("[%lu] [STATE] WAITING_FOR_DEPARTURE -> LID_CLOSING\n", millis());
+            Serial.printf("[%lu] [DEPARTURE] User no longer detected (Dist: %.1f cm). Starting %d ms confirmation timer...\n",
+                          millis(), distance, PERSON_GONE_CONFIRM_MS);
+          } else {
+            unsigned long absentDuration = millis() - personGoneTimer;
+            if (millis() - lastDeparturePrint >= 1000) {
+              lastDeparturePrint = millis();
+              Serial.printf("[%lu] [DEPARTURE TIMER] Confirming user left... %.1fs / %.1fs (Dist: %.1f cm)\n",
+                            millis(), absentDuration / 1000.0, PERSON_GONE_CONFIRM_MS / 1000.0, distance);
+            }
+
+            if (absentDuration >= (unsigned long)PERSON_GONE_CONFIRM_MS) {
+              personGoneTimer = 0;
+              unsigned long totalOccupiedSec = (millis() - stallOccupiedSince) / 1000;
+              Serial.println("\n────────────────────────────────────────────────────────────");
+              Serial.printf("[%lu] >>> [DEPARTURE CONFIRMED] User departed after %lu seconds. Closing lid & flushing!\n",
+                            millis(), totalOccupiedSec);
+              Serial.println("────────────────────────────────────────────────────────────");
+              currentState = LID_CLOSING;
+            }
           }
         } else {
+          // Person is still detected in cubicle
           if (personGoneTimer != 0) {
+            Serial.printf("[%lu] [DEPARTURE ABORTED] Person re-detected at %.1f cm. Resetting timer.\n", millis(), distance);
             personGoneTimer = 0;
           }
         }
@@ -371,13 +488,19 @@ void updateStateMachine(float distance) {
 
     case LID_CLOSING:
       closeLid();
-      delay(500);
+      delay(300);
 
+      noInterrupts();
       pulseCount     = 0;
+      interrupts();
+
       totalVolume    = 0;
       flushStartTime = millis();
       pumpStartTime  = millis();
-      digitalWrite(PUMP_PIN, LOW);
+      lastFlushPrint = 0;
+
+      digitalWrite(PUMP_PIN, LOW); // Turn PUMP ON
+      Serial.printf("[%lu] [PUMP] PUMP RELAY ON (Active LOW) — Flushing for %d ms...\n", millis(), PUMP_DURATION_MS);
 
       {
         StaticJsonDocument<128> doc;
@@ -390,95 +513,157 @@ void updateStateMachine(float distance) {
       }
 
       currentState = FLUSHING;
-      Serial.printf("[%lu] [STATE] LID_CLOSING -> FLUSHING (PUMP ON)\n", millis());
       break;
 
     case FLUSHING:
-      if (millis() - pumpStartTime >= (unsigned long)PUMP_DURATION_MS) {
-        digitalWrite(PUMP_PIN, HIGH);
-        flushDuration = (millis() - flushStartTime) / 1000.0;
+      {
+        unsigned long elapsedPump = millis() - pumpStartTime;
 
-        noInterrupts();
-        int pulses = pulseCount;
-        pulseCount = 0;
-        interrupts();
-
-        float flowRate = (pulses / 7.5);
-        totalVolume   += (flowRate / 60.0);
-
-        if (totalVolume < MIN_EXPECTED_VOLUME_L) {
-          publishHardwareAlert(
-            "pump",
-            "No water flow detected during 3s flush cycle. Water supply cutoff or pump failure.",
-            "critical"
-          );
-        } else if (totalVolume < LOW_PRESSURE_VOLUME_L) {
-          publishHardwareAlert(
-            "waterflow",
-            "Low flush volume recorded. Check for weak water pressure or pipe blockage.",
-            "warning"
-          );
+        // Print live flow pulses during flush every 500ms
+        if (millis() - lastFlushPrint >= 500) {
+          lastFlushPrint = millis();
+          noInterrupts();
+          int currentPulses = pulseCount;
+          interrupts();
+          float estVol = currentPulses / 450.0;
+          Serial.printf("[%lu] [FLOW LIVE] Elapsed: %.1fs/%.1fs | Pulses: %d | Volume: %.2f L\n",
+                        millis(), elapsedPump / 1000.0, PUMP_DURATION_MS / 1000.0, currentPulses, estVol);
         }
 
-        {
-          StaticJsonDocument<128> doc;
-          doc["deviceId"]  = DEVICE_ID;
-          doc["volume"]    = totalVolume;
-          doc["duration"]  = flushDuration;
-          doc["unit"]      = "L";
-          char buffer[128];
-          serializeJson(doc, buffer);
-          client.publish("toilet/sensors/waterflow", buffer);
+        if (elapsedPump >= (unsigned long)PUMP_DURATION_MS) {
+          digitalWrite(PUMP_PIN, HIGH); // Turn PUMP OFF
+          flushDuration = (millis() - flushStartTime) / 1000.0;
+
+          noInterrupts();
+          int pulses = pulseCount;
+          pulseCount = 0;
+          interrupts();
+
+          totalVolume = pulses / 450.0; // 450 pulses/L for standard 1/2" flow sensor
+
+          Serial.println("────────────────────────────────────────────────────────────");
+          Serial.printf("[%lu] [PUMP] PUMP OFF — Cycle finished. Total: %.2f L (%d pulses) in %.1f s\n",
+                        millis(), totalVolume, pulses, flushDuration);
+          Serial.println("────────────────────────────────────────────────────────────");
+
+          if (totalVolume < MIN_EXPECTED_VOLUME_L) {
+            publishHardwareAlert(
+              "pump",
+              "No water flow detected during 3s flush cycle. Water supply cutoff or pump failure.",
+              "critical"
+            );
+          } else if (totalVolume < LOW_PRESSURE_VOLUME_L) {
+            publishHardwareAlert(
+              "waterflow",
+              "Low flush volume recorded. Check for weak water pressure or pipe blockage.",
+              "warning"
+            );
+          } else {
+            Serial.printf("[%lu] [FLOW EVAL] Water volume is NORMAL (%.2f L >= %.2f L)\n",
+                          millis(), totalVolume, LOW_PRESSURE_VOLUME_L);
+          }
+
+          {
+            StaticJsonDocument<128> doc;
+            doc["deviceId"]  = DEVICE_ID;
+            doc["volume"]    = totalVolume;
+            doc["duration"]  = flushDuration;
+            doc["unit"]      = "L";
+            char buffer[128];
+            serializeJson(doc, buffer);
+            client.publish("toilet/sensors/waterflow", buffer);
+          }
+
+          {
+            StaticJsonDocument<128> doc;
+            doc["deviceId"]  = DEVICE_ID;
+            doc["status"]    = "inactive";
+            doc["timestamp"] = millis();
+            char buffer[128];
+            serializeJson(doc, buffer);
+            client.publish("toilet/events/pump", buffer);
+          }
+
+          digitalWrite(UV_PIN, LOW); // Turn UV ON
+          uvStartTime  = millis();
+          lastUvPrint  = 0;
+          currentState = UV_ACTIVE;
+          Serial.printf("[%lu] [UV] UV RELAY ON (Active LOW) — Sterilizing for %d ms...\n", millis(), UV_DURATION_MS);
         }
-
-        {
-          StaticJsonDocument<128> doc;
-          doc["deviceId"]  = DEVICE_ID;
-          doc["status"]    = "inactive";
-          doc["timestamp"] = millis();
-          char buffer[128];
-          serializeJson(doc, buffer);
-          client.publish("toilet/events/pump", buffer);
-        }
-
-        Serial.printf("[%lu] [PUMP] OFF — %.2f L in %.1f s\n", millis(), totalVolume, flushDuration);
-
-        digitalWrite(UV_PIN, LOW);
-        uvStartTime  = millis();
-        currentState = UV_ACTIVE;
-        Serial.printf("[%lu] [STATE] FLUSHING -> UV_ACTIVE (UV ON)\n", millis());
       }
       break;
 
     case UV_ACTIVE:
-      if (millis() - uvStartTime >= (unsigned long)UV_DURATION_MS) {
-        digitalWrite(UV_PIN, HIGH);
+      {
+        unsigned long elapsedUv = millis() - uvStartTime;
 
-        {
-          StaticJsonDocument<128> doc;
-          doc["deviceId"]  = DEVICE_ID;
-          doc["duration"]  = UV_DURATION_MS / 1000;
-          doc["completed"] = true;
-          doc["timestamp"] = millis();
-          char buffer[128];
-          serializeJson(doc, buffer);
-          client.publish("toilet/events/uv", buffer);
+        if (millis() - lastUvPrint >= 1000) {
+          lastUvPrint = millis();
+          Serial.printf("[%lu] [UV LIVE] Sterilizing... %.1fs / %.1fs\n",
+                        millis(), elapsedUv / 1000.0, UV_DURATION_MS / 1000.0);
         }
 
-        Serial.printf("[%lu] [UV] OFF — cycle complete\n", millis());
+        if (elapsedUv >= (unsigned long)UV_DURATION_MS) {
+          digitalWrite(UV_PIN, HIGH); // Turn UV OFF
+          Serial.printf("[%lu] [UV] UV OFF — Sterilization cycle complete.\n", millis());
 
-        clearDistanceBuffer();
-        standbyEnteredAt = millis();
-        currentState = STANDBY;
-        Serial.printf("[%lu] [STATE] UV_ACTIVE -> STANDBY (Ready)\n", millis());
+          {
+            StaticJsonDocument<128> doc;
+            doc["deviceId"]  = DEVICE_ID;
+            doc["duration"]  = UV_DURATION_MS / 1000;
+            doc["completed"] = true;
+            doc["timestamp"] = millis();
+            char buffer[128];
+            serializeJson(doc, buffer);
+            client.publish("toilet/events/uv", buffer);
+          }
+
+          clearDistanceBuffer();
+          standbyEnteredAt = millis();
+          currentState = STANDBY;
+          Serial.println("────────────────────────────────────────────────────────────");
+          Serial.printf("[%lu] [STATE] Complete cycle finished -> Returned to STANDBY (Ready)\n", millis());
+          Serial.println("────────────────────────────────────────────────────────────\n");
+        }
       }
       break;
   }
 }
 
-// ── 14. Setup ─────────────────────────────────────────────────────────────────
+// ── 14. Periodic Serial Telemetry ─────────────────────────────────────────────
+void printSerialTelemetry(float distance) {
+  if (millis() - lastSerialTelemetry >= 800) {
+    lastSerialTelemetry = millis();
+
+    // Print live status line for testing and calibrating the sensor
+    if (currentState == STANDBY || currentState == WAITING_FOR_DEPARTURE) {
+      bool inRange = (distance > 0 && distance < DETECTION_THRESHOLD_CM);
+      Serial.printf("[%lu] [%s] Dist: %.1f cm (raw: %.1f cm) | Threshold: %d cm | Detected: %s\n",
+                    millis(),
+                    getStateName(currentState),
+                    distance,
+                    lastRawDistance,
+                    DETECTION_THRESHOLD_CM,
+                    inRange ? "YES (IN RANGE)" : "NO (VACANT)");
+    }
+  }
+}
+
+// ── 15. Setup ─────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
+  delay(500); // Allow UART connection to settle
+
+  Serial.println("\n");
+  Serial.println("╔══════════════════════════════════════════════════════════════╗");
+  Serial.println("║   SMART FLUSH ESP32 FIRMWARE — LIVE SERIAL TELEMETRY         ║");
+  Serial.printf ("║   Device: %-15s Location: %-23s ║\n", DEVICE_ID, "Stall 1");
+  Serial.println("╚══════════════════════════════════════════════════════════════╝");
+
+  // Prevent relay chattering at power-on
+  digitalWrite(PUMP_PIN, HIGH);
+  digitalWrite(UV_PIN,   HIGH);
+  digitalWrite(LED_PIN,  LOW);
 
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
@@ -486,25 +671,26 @@ void setup() {
   pinMode(UV_PIN,   OUTPUT);
   pinMode(LED_PIN,  OUTPUT);
 
-  digitalWrite(PUMP_PIN, HIGH);
-  digitalWrite(UV_PIN,   HIGH);
-  digitalWrite(LED_PIN,  LOW);
-
   servo1.detach();
+  Serial.printf("[%lu] [INIT] Actuator pins initialized (Relays: OFF, Servo: Detached)\n", millis());
 
   pinMode(FLOW_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(FLOW_PIN), pulseCounter, RISING);
+  Serial.printf("[%lu] [INIT] Flow sensor interrupt attached on GPIO %d\n", millis(), FLOW_PIN);
 
   espClient.setInsecure();
-  connectWiFi();
   client.setServer(MQTT_BROKER, MQTT_PORT);
   client.setCallback(mqttCallback);
+  client.setBufferSize(512); // Support 256+ byte JSON alerts
+
+  connectWiFi();
   connectMQTT();
 
-  Serial.printf("[%lu] [SYSTEM] Smart Flush ready on STANDBY\n", millis());
+  standbyEnteredAt = millis();
+  Serial.printf("[%lu] [SYSTEM] Smart Flush ready on STANDBY. Serial Monitor active at 115200 baud.\n\n", millis());
 }
 
-// ── 15. Main Loop ─────────────────────────────────────────────────────────────
+// ── 16. Main Loop ─────────────────────────────────────────────────────────────
 void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     connectWiFi();
@@ -525,6 +711,9 @@ void loop() {
   if (client.connected()) {
     publishDistance(distance);
   }
+
+  // Live Serial Monitor Diagnostics
+  printSerialTelemetry(distance);
 
   updateStateMachine(distance);
   checkLeakageInStandby();

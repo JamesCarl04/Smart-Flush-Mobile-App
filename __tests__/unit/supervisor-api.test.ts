@@ -313,5 +313,61 @@ describe('supervisor-api utility', () => {
       expect(status).toBe('available');
       expect(activeTask).toBeNull();
     });
+
+    it('should return available when lastSeen is fresh within PRESENCE_TIMEOUT_MS', () => {
+      const freshPerson = { ...samplePerson, lastSeen: new Date(Date.now() - 30 * 1000) };
+      const { status, activeTask } = getPersonOperationalStatus(freshPerson, []);
+      expect(status).toBe('available');
+      expect(activeTask).toBeNull();
+    });
+
+    it('should return offline when lastSeen is older than PRESENCE_TIMEOUT_MS', () => {
+      const stalePerson = { ...samplePerson, lastSeen: new Date(Date.now() - 3 * 60 * 1000) };
+      const { status, activeTask } = getPersonOperationalStatus(stalePerson, []);
+      expect(status).toBe('offline');
+      expect(activeTask).toBeNull();
+    });
+
+    it('should match active task case-insensitively across assignedTo, assignedToIds, acknowledgedBy, and recheckedBy', () => {
+      const upperEmailAssigned: any = {
+        id: 'task-upper-1',
+        status: 'assigned',
+        assignedTo: 'JUSTINE@EXAMPLE.COM',
+      };
+      expect(getPersonOperationalStatus(samplePerson, [upperEmailAssigned]).status).toBe('on_task');
+
+      const upperEmailIds: any = {
+        id: 'task-upper-2',
+        status: 'assigned',
+        assignedToIds: ['JUSTINE@EXAMPLE.COM'],
+      };
+      expect(getPersonOperationalStatus(samplePerson, [upperEmailIds]).status).toBe('on_task');
+
+      const upperEmailAck: any = {
+        id: 'task-upper-3',
+        status: 'acknowledged',
+        acknowledgedBy: { 'JUSTINE@EXAMPLE.COM': new Date() },
+      };
+      expect(getPersonOperationalStatus(samplePerson, [upperEmailAck]).status).toBe('on_task');
+
+      const upperEmailRecheck: any = {
+        id: 'task-upper-4',
+        status: 'rechecking',
+        recheckedBy: 'JUSTINE@EXAMPLE.COM',
+      };
+      expect(getPersonOperationalStatus(samplePerson, [upperEmailRecheck]).status).toBe('on_task');
+    });
+
+    it('should treat task with completedAt set as completed and return available', () => {
+      const taskWithCompletedAt: any = {
+        id: 'task-done-at',
+        status: 'assigned',
+        assignedTo: 'tech-1',
+        completedAt: new Date(),
+      };
+      const { status, activeTask } = getPersonOperationalStatus(samplePerson, [taskWithCompletedAt]);
+      expect(status).toBe('available');
+      expect(activeTask).toBeNull();
+    });
   });
 });

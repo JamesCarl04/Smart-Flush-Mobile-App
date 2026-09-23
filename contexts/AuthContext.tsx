@@ -8,6 +8,10 @@ import { getRequiredConfigValue, runtimeConfig } from '../lib/config';
 import { auth, db } from '../lib/firebase';
 import { unregisterPushNotificationsAsync } from '../lib/notifications';
 import { logAuthAudit } from '../lib/audit-logger';
+import {
+  getSanitizedAuthErrorMessage,
+  isNetworkError,
+} from '../lib/auth-errors';
 import type { AuthContextValue, AuthUser, UserRole } from '../types';
 
 export const USER_PROFILE_CACHE_KEY = '@klir:cached_user_profile';
@@ -200,23 +204,14 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
           // ignore cache read error
         }
 
-        const isNetworkError =
-          error instanceof TypeError ||
-          (error instanceof Error &&
-            (error.message.includes('Network') ||
-              error.message.includes('network') ||
-              error.message.includes('Failed to fetch') ||
-              error.message.includes('timeout')));
+        const isOfflineOrNetwork = isNetworkError(error);
 
-        if (hasValidCachedUser && isNetworkError) {
+        if (hasValidCachedUser && isOfflineOrNetwork) {
           console.warn('[AuthContext] Network offline/unavailable during revalidation; preserving cached profile.');
           return;
         }
 
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Unable to verify your maintenance account.';
+        const message = getSanitizedAuthErrorMessage(error);
 
         if (isMounted) {
           setUser(null);
@@ -224,7 +219,7 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
           setLoading(false);
         }
         void AsyncStorage.removeItem(USER_PROFILE_CACHE_KEY).catch(() => {});
-        Alert.alert('Authentication error', message);
+        Alert.alert('Unable to Sign In', message);
         await safeSignOut();
       }
     });

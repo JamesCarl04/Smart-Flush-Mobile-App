@@ -54,8 +54,13 @@ export async function fetchMaintenancePersonnel(): Promise<MaintenancePerson[]> 
             return null;
           }
           const lastSeenMillis = extractTimestampMillis(data.lastSeen);
-          const isFresh = lastSeenMillis !== null && Date.now() - lastSeenMillis <= PRESENCE_TIMEOUT_MS;
-          const isOnline = data.status !== 'offline' && data.isOnline !== false && isFresh;
+          const isExpired = lastSeenMillis !== null && Date.now() - lastSeenMillis > PRESENCE_TIMEOUT_MS;
+          const isExplicitlyOffline =
+            data.status === 'offline' ||
+            data.status === 'inactive' ||
+            data.isOnline === false ||
+            data.isActive === false;
+          const isOnline = !isExplicitlyOffline && !isExpired;
           return {
             id: doc.id,
             displayName:
@@ -177,26 +182,94 @@ export function isPersonMatchingBuilding(
   );
 }
 
+export function isTaskActive(candidate: Task): boolean {
+  if (candidate.status === 'completed') {
+    return false;
+  }
+  if (candidate.completedAt != null) {
+    return false;
+  }
+  return true;
+}
+
 export function getPersonOperationalStatus(
   person: MaintenancePerson,
   tasks: Task[],
 ): { status: 'available' | 'on_task' | 'offline'; activeTask: Task | null } {
-  const activeTask =
-    tasks.find(
-      (candidate) =>
-        candidate.status !== 'completed' &&
-        (candidate.id === person.currentTaskId ||
-          candidate.assignedTo === person.id ||
-          candidate.assignedTo === person.email ||
-          (candidate.assignedToIds &&
-            (candidate.assignedToIds.includes(person.id) ||
-              (person.email && candidate.assignedToIds.includes(person.email)))) ||
-          (candidate.acknowledgedBy &&
-            (person.id in candidate.acknowledgedBy ||
-              (person.email && person.email in candidate.acknowledgedBy))) ||
-          candidate.recheckedBy === person.id ||
-          candidate.recheckedBy === person.email),
-    ) ?? null;
+  const personId = person.id ? person.id.trim() : '';
+  const personEmail = person.email && person.email.trim() ? person.email.trim().toLowerCase() : null;
+  const currentTaskId = person.currentTaskId && person.currentTaskId.trim() ? person.currentTaskId.trim() : null;
+
+  let activeTask: Task | null = null;
+
+  // 1. Check currentTaskId if assigned
+  if (currentTaskId) {
+    activeTask =
+      tasks.find((candidate) => isTaskActive(candidate) && candidate.id === currentTaskId) ?? null;
+  }
+
+  // 2. If not matched or currentTaskId was completed/stale, search active tasks
+  if (!activeTask) {
+    activeTask =
+      tasks.find((candidate) => {
+        if (!isTaskActive(candidate)) {
+          return false;
+        }
+
+        // Direct assignedTo (UID or case-insensitive email)
+        if (typeof candidate.assignedTo === 'string' && candidate.assignedTo.trim()) {
+          const assigned = candidate.assignedTo.trim();
+          if (
+            (personId && assigned === personId) ||
+            (personEmail && assigned.toLowerCase() === personEmail)
+          ) {
+            return true;
+          }
+        }
+
+        // Multi-assignee assignedToIds (UID or case-insensitive email)
+        if (Array.isArray(candidate.assignedToIds)) {
+          const matched = candidate.assignedToIds.some((item) => {
+            if (typeof item !== 'string') return false;
+            const trimmed = item.trim();
+            return (
+              (personId && trimmed === personId) ||
+              (personEmail && trimmed.toLowerCase() === personEmail)
+            );
+          });
+          if (matched) {
+            return true;
+          }
+        }
+
+        // Acknowledged by keys (UID or case-insensitive email)
+        if (candidate.acknowledgedBy && typeof candidate.acknowledgedBy === 'object') {
+          const matched = Object.keys(candidate.acknowledgedBy).some((key) => {
+            const trimmed = key.trim();
+            return (
+              (personId && trimmed === personId) ||
+              (personEmail && trimmed.toLowerCase() === personEmail)
+            );
+          });
+          if (matched) {
+            return true;
+          }
+        }
+
+        // Rechecked by (UID or case-insensitive email)
+        if (typeof candidate.recheckedBy === 'string' && candidate.recheckedBy.trim()) {
+          const recheck = candidate.recheckedBy.trim();
+          if (
+            (personId && recheck === personId) ||
+            (personEmail && recheck.toLowerCase() === personEmail)
+          ) {
+            return true;
+          }
+        }
+
+        return false;
+      }) ?? null;
+  }
 
   if (activeTask !== null) {
     return { status: 'on_task', activeTask };
@@ -212,13 +285,13 @@ export function getPersonOperationalStatus(
     return { status: 'offline', activeTask: null };
   }
 
-  // Check lastSeen freshness
+  // Check lastSeen freshness only when lastSeen timestamp is present
   const lastSeenMillis = extractTimestampMillis(person.lastSeen);
-  if (lastSeenMillis === null || Date.now() - lastSeenMillis > PRESENCE_TIMEOUT_MS) {
+  if (lastSeenMillis !== null && Date.now() - lastSeenMillis > PRESENCE_TIMEOUT_MS) {
     return { status: 'offline', activeTask: null };
   }
 
-  // Any active technician on duty with fresh heartbeat and no current work order is Available
+  // Any active technician on duty with fresh heartbeat (or active status when lastSeen omitted) is Available
   return { status: 'available', activeTask: null };
 }
 

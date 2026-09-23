@@ -194,6 +194,30 @@ describe('LoginScreen Integration', () => {
     });
   });
 
+  it('displays user-friendly sanitized error message for disabled account without exposing code', async () => {
+    const disabledError = new FirebaseError(
+      'auth/user-disabled',
+      '[auth/user-disabled] The user account has been disabled by an administrator.',
+    );
+    (FirebaseAuth.signInWithEmailAndPassword as jest.Mock).mockRejectedValue(
+      disabledError,
+    );
+
+    renderScreen();
+
+    fireEvent.changeText(getEmailInput(), 'disabled.tech@smartflush.com');
+    fireEvent.changeText(getPasswordInput(), 'anyPassword');
+    fireEvent.press(screen.getByRole('button', { name: /login/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          'Your account has been deactivated or disabled. Please contact your supervisor or facility administrator.',
+        ),
+      ).toBeTruthy();
+    });
+  });
+
   it('navigates to ForgotPassword screen when forgot password button is pressed', () => {
     renderScreen();
 

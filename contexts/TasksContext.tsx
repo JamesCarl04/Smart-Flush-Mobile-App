@@ -11,6 +11,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import { db } from '../lib/firebase';
 import { fetchTasks } from '../lib/task-api';
+import { isTransientAuthError } from '../lib/auth-errors';
 import {
   isBroadcastTask,
   parseAreaPhotos,
@@ -119,6 +120,10 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
       saveCache(deduped);
       setErrorMessage(null);
     } catch (error) {
+      if (isTransientAuthError(error)) {
+        console.warn('[TasksContext] Transient auth error during refreshTasks, suppressing banner:', error);
+        return;
+      }
       const message =
         error instanceof Error
           ? `Unable to refresh maintenance tasks: ${error.message}`

@@ -238,10 +238,13 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
       );
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Task completed and synced.')).toBeTruthy();
-      expect(mockRefreshTasks).toHaveBeenCalled();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText('Task completed and synced.')).toBeTruthy();
+        expect(mockRefreshTasks).toHaveBeenCalled();
+      },
+      { timeout: 4000 },
+    );
   });
 
   it('queues completion offline when device is offline', async () => {

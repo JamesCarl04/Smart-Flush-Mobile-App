@@ -1,3 +1,4 @@
+import { onAuthStateChanged } from '@react-native-firebase/auth';
 import { auth } from './firebase';
 import { getRequiredConfigValue, runtimeConfig } from './config';
 
@@ -28,14 +29,110 @@ function getResponseError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
+let pendingAuthResolution: Promise<NonNullable<typeof auth.currentUser>> | null = null;
+
+export async function resolveAuthenticatedUser(
+  timeoutMs = 2000,
+): Promise<NonNullable<typeof auth.currentUser>> {
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
+  if (timeoutMs === 2000 && pendingAuthResolution) {
+    return pendingAuthResolution;
+  }
+
+  const promise = new Promise<NonNullable<typeof auth.currentUser>>(
+    (resolve, reject) => {
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | null = null;
+      let unsubscribe: (() => void) | null = null;
+
+      const cleanup = () => {
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        if (unsubscribe) {
+          try {
+            unsubscribe();
+          } catch {
+            // ignore unsubscribe failure
+          }
+          unsubscribe = null;
+        }
+      };
+
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (auth.currentUser) {
+          resolve(auth.currentUser);
+        } else {
+          reject(new Error('You must be signed in to perform this action.'));
+        }
+      }, timeoutMs);
+
+      try {
+        const listener = (user: any) => {
+          if (settled) return;
+          if (user) {
+            settled = true;
+            cleanup();
+            resolve(user);
+          } else {
+            settled = true;
+            cleanup();
+            reject(new Error('You must be signed in to perform this action.'));
+          }
+        };
+
+        if (typeof (auth as any)?.onAuthStateChanged === 'function') {
+          unsubscribe = (auth as any).onAuthStateChanged(listener);
+        } else {
+          unsubscribe = onAuthStateChanged(auth, listener);
+        }
+      } catch {
+        if (!settled) {
+          settled = true;
+          cleanup();
+          if (auth.currentUser) {
+            resolve(auth.currentUser);
+          } else {
+            reject(new Error('You must be signed in to perform this action.'));
+          }
+        }
+      }
+    },
+  );
+
+  if (timeoutMs === 2000) {
+    pendingAuthResolution = promise;
+  }
+
+  promise
+    .catch(() => {})
+    .finally(() => {
+      if (pendingAuthResolution === promise) {
+        pendingAuthResolution = null;
+      }
+    });
+
+  return promise;
+}
+
+export function _resetPendingAuthResolutionForTesting(): void {
+  pendingAuthResolution = null;
+}
+
+export const waitForAuthUser = resolveAuthenticatedUser;
+
 export async function apiFetch<TData>(
   path: string,
   options: RequestInit = {},
 ): Promise<ApiResponseEnvelope<TData>> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    throw new Error('You must be signed in to perform this action.');
-  }
+  const currentUser = await resolveAuthenticatedUser();
 
   const request = async (forceRefresh = false) => {
     const idToken = await currentUser.getIdToken(forceRefresh);

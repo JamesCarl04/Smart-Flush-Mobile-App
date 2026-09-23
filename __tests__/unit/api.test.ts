@@ -1,4 +1,9 @@
-import { apiFetch } from '../../lib/api';
+import {
+  apiFetch,
+  resolveAuthenticatedUser,
+  waitForAuthUser,
+  _resetPendingAuthResolutionForTesting,
+} from '../../lib/api';
 import { auth } from '../../lib/firebase';
 
 describe('apiFetch utility', () => {
@@ -10,6 +15,7 @@ describe('apiFetch utility', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    _resetPendingAuthResolutionForTesting();
     (auth as any).currentUser = mockUser;
     mockGetIdToken.mockResolvedValue('mock-token-123');
   });
@@ -21,6 +27,44 @@ describe('apiFetch utility', () => {
       'You must be signed in to perform this action.',
     );
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('should wait for onAuthStateChanged to resolve when currentUser is initially null', async () => {
+    (auth as any).currentUser = null;
+    let authListener: ((user: any) => void) | null = null;
+    (auth as any).onAuthStateChanged = jest.fn((cb: any) => {
+      authListener = cb;
+      return jest.fn();
+    });
+
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValueOnce({ success: true, data: { delayed: true } }),
+    });
+
+    const promise = apiFetch('/api/delayed-auth');
+
+    expect(authListener).toBeTruthy();
+    authListener!(mockUser);
+
+    const result = await promise;
+    expect(result).toEqual({ success: true, data: { delayed: true } });
+  });
+
+  it('should timeout and reject if onAuthStateChanged does not fire before timeout', async () => {
+    (auth as any).currentUser = null;
+    (auth as any).onAuthStateChanged = jest.fn(() => jest.fn());
+
+    await expect(resolveAuthenticatedUser(50)).rejects.toThrow(
+      'You must be signed in to perform this action.',
+    );
+  });
+
+  it('should export waitForAuthUser identical to resolveAuthenticatedUser', async () => {
+    expect(waitForAuthUser).toBe(resolveAuthenticatedUser);
+    const user = await waitForAuthUser();
+    expect(user).toBe(mockUser);
   });
 
   it('should normalize url path and inject Bearer token and headers', async () => {

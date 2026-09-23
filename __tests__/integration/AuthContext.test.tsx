@@ -174,7 +174,7 @@ describe('AuthContext Integration', () => {
     expect(screen.getByTestId('user-uid').props.children).toBe('NO_USER');
     expect(screen.getByTestId('user-role').props.children).toBe('NO_ROLE');
     expect(alertSpy).toHaveBeenCalledWith(
-      'Authentication error',
+      'Unable to Sign In',
       'Access denied. This app is for maintenance and supervisor accounts only.',
     );
     expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
@@ -216,8 +216,47 @@ describe('AuthContext Integration', () => {
 
     expect(screen.getByTestId('user-uid').props.children).toBe('NO_USER');
     expect(alertSpy).toHaveBeenCalledWith(
-      'Authentication error',
-      'Backend authentication service unavailable.',
+      'Unable to Sign In',
+      'Unable to verify your account right now. Please try again later or contact your supervisor.',
+    );
+    expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
+  });
+
+  it('sanitizes auth/user-disabled error into user-friendly message without exposing error code', async () => {
+    const mockDisabledUser = {
+      uid: 'disabled-user',
+      email: 'disabled@smartflush.com',
+      displayName: 'Disabled User',
+      getIdToken: jest.fn().mockRejectedValue(
+        new Error(
+          '[auth/user-disabled] The user account has been disabled by an administrator.',
+        ),
+      ),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation(
+      (_auth, callback) => {
+        callback(mockDisabledUser);
+        return jest.fn();
+      },
+    );
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    expect(screen.getByTestId('user-uid').props.children).toBe('NO_USER');
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Unable to Sign In',
+      'Your account has been deactivated or disabled. Please contact your supervisor or facility administrator.',
     );
     expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
   });

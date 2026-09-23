@@ -23,6 +23,10 @@ import {
 } from '../components/MaintenanceUI';
 import { useAuth } from '../hooks/useAuth';
 import { auth } from '../lib/firebase';
+import {
+  AUTH_ERROR_MESSAGES,
+  getSanitizedAuthErrorMessage,
+} from '../lib/auth-errors';
 import type { AuthStackParamList } from '../types';
 
 const BIOMETRIC_VAULT_KEY = '@klir:biometric_vault';
@@ -30,36 +34,10 @@ const BIOMETRIC_VAULT_KEY = '@klir:biometric_vault';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 function getLoginErrorMessage(error: unknown): string {
-  const code =
-    typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code)
-      : null;
-
-  if (code === 'auth/wrong-password') {
-    return 'Incorrect password. Please try again.';
-  }
-
-  if (code === 'auth/user-not-found') {
-    return 'No account was found for that email address.';
-  }
-
-  if (code === 'auth/too-many-requests') {
-    return 'Too many login attempts. Please try again later.';
-  }
-
-  if (code === 'auth/invalid-credential') {
-    return 'The email or password you entered is invalid.';
-  }
-
-  if (code === 'auth/invalid-email') {
-    return 'Please enter a valid email address.';
-  }
-
-  if (code === 'auth/network-request-failed') {
-    return 'Network connection failed. Please check your internet connection and try again.';
-  }
-
-  return 'Unable to log in right now. Please try again.';
+  return getSanitizedAuthErrorMessage(
+    error,
+    AUTH_ERROR_MESSAGES.DEFAULT_LOGIN_ERROR,
+  );
 }
 
 export function LoginScreen({ navigation }: Props): React.JSX.Element {
@@ -72,7 +50,6 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   const [awaitingRoleValidation, setAwaitingRoleValidation] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
-  const [biometricType, setBiometricType] = useState<string>('Biometrics');
   const [biometricIcon, setBiometricIcon] =
     useState<keyof typeof MaterialCommunityIcons.glyphMap>('fingerprint');
 
@@ -107,15 +84,12 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
           if (hasFace && hasFingerprint) {
             setBiometricsAvailable(true);
-            setBiometricType('Face or Fingerprint');
             setBiometricIcon('shield-account');
           } else if (hasFace) {
             setBiometricsAvailable(true);
-            setBiometricType(Platform.OS === 'ios' ? 'Face ID' : 'Face Unlock');
             setBiometricIcon('face-recognition');
           } else if (hasFingerprint) {
             setBiometricsAvailable(true);
-            setBiometricType('Fingerprint');
             setBiometricIcon('fingerprint');
           } else {
             setBiometricsAvailable(false);
@@ -160,7 +134,13 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
     return () => clearTimeout(timer);
   }, [awaitingRoleValidation, role, user]);
 
+  const isBusy = submitting || awaitingRoleValidation;
+
   const handleLogin = async (): Promise<void> => {
+    if (isBusy) {
+      return;
+    }
+
     if (!email.trim() || !password) {
       setErrorMessage('Enter both your email address and password.');
       return;
@@ -187,6 +167,10 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
   };
 
   const handleBiometricQuickResume = async (): Promise<void> => {
+    if (isBusy) {
+      return;
+    }
+
     try {
       setErrorMessage(null);
 
@@ -221,15 +205,22 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         setSubmitting(true);
         await signInWithEmailAndPassword(auth, parsed.email, parsed.password);
         setAwaitingRoleValidation(true);
+      } else if (result.error === 'lockout') {
+        setErrorMessage(
+          'Too many failed biometric attempts. Please log in with your password.',
+        );
       }
-    } catch {
+    } catch (error) {
       setSubmitting(false);
       setAwaitingRoleValidation(false);
-      setErrorMessage('Biometric verification failed. Please log in manually.');
+      setErrorMessage(
+        getSanitizedAuthErrorMessage(
+          error,
+          'Biometric verification failed. Please log in manually.',
+        ),
+      );
     }
   };
-
-  const isBusy = submitting || awaitingRoleValidation;
 
   return (
     <KeyboardAvoidingView
@@ -320,7 +311,8 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
 
               {biometricsAvailable ? (
                 <KlirButton
-                  title={hasSavedCredentials ? `Unlock with ${biometricType}` : `Login with ${biometricType}`}
+                  title="Unlock with biometrics"
+                  accessibilityLabel="Unlock with biometrics"
                   variant="secondary"
                   icon={biometricIcon}
                   disabled={isBusy}

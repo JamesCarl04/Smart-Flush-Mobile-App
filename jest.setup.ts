@@ -46,8 +46,10 @@ export const mockAuthModule = {
   signInWithEmailAndPassword: jest.fn().mockResolvedValue({ user: mockCurrentUser }),
   signOut: jest.fn().mockResolvedValue(undefined),
   sendPasswordResetEmail: jest.fn().mockResolvedValue(undefined),
-  onAuthStateChanged: jest.fn((callback) => {
-    callback(mockCurrentUser);
+  onAuthStateChanged: jest.fn((callback: any) => {
+    if (typeof callback === 'function') {
+      callback(mockAuthModule.currentUser);
+    }
     return jest.fn(); // unsubscribe
   }),
 };
@@ -63,9 +65,10 @@ jest.mock('@react-native-firebase/auth', () => ({
   sendPasswordResetEmail: jest.fn((_auth, email) =>
     mockAuthModule.sendPasswordResetEmail(email),
   ),
-  onAuthStateChanged: jest.fn((_auth, callback) =>
-    mockAuthModule.onAuthStateChanged(callback),
-  ),
+  onAuthStateChanged: jest.fn((authOrCb, maybeCb) => {
+    const callback = typeof authOrCb === 'function' ? authOrCb : maybeCb;
+    return mockAuthModule.onAuthStateChanged(callback);
+  }),
 }));
 
 // 4. Mock React Native Firebase Messaging

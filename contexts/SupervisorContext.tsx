@@ -17,6 +17,7 @@ import {
   PRESENCE_TIMEOUT_MS,
   type MaintenancePerson,
 } from '../lib/supervisor-api';
+import { isTransientAuthError } from '../lib/auth-errors';
 import {
   parseSubmissions,
   parseTaskDocument,
@@ -141,6 +142,10 @@ export function SupervisorProvider({
       saveCache(nextTasks, nextPeople);
       setError(null);
     } catch (caught) {
+      if (isTransientAuthError(caught)) {
+        console.warn('[SupervisorContext] Transient auth error during refresh, suppressing banner:', caught);
+        return;
+      }
       setError(
         caught instanceof Error
           ? caught.message
