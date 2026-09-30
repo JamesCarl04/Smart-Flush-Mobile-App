@@ -192,6 +192,10 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     setHistoryBadgeCount(0);
   }, []);
 
+  const incrementHistoryBadge = useCallback(() => {
+    setHistoryBadgeCount((prev) => prev + 1);
+  }, []);
+
   // 1. Instant 0ms cache hydration on initial mount
   useEffect(() => {
     let isMounted = true;
@@ -248,12 +252,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   }, [role, user]);
 
   const updateLocalTask = useCallback((updatedTask: Task) => {
-    const existing = tasksRef.current.find((t) => t.id === updatedTask.id);
-    const isNewlyCompleted =
-      updatedTask.status === 'completed' && existing?.status !== 'completed';
-    if (isNewlyCompleted) {
-      setHistoryBadgeCount((prev) => prev + 1);
-    }
+    setHistoryBadgeCount((prev) => Math.max(1, prev + 1));
     setTasks((prevTasks) => {
       const exists = prevTasks.some((t) => t.id === updatedTask.id);
       const nextTasks = exists
@@ -556,6 +555,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         errorMessage,
         refreshTasks,
         updateLocalTask,
+        incrementHistoryBadge,
         clearHistoryBadge,
         clearError: () => setErrorMessage(null),
       }}

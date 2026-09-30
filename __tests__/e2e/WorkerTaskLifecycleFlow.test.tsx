@@ -266,15 +266,9 @@ describe('Worker Task Lifecycle Flow E2E', () => {
       remarks: 'All fixtures disinfected, soap replenished, and floors dried.',
     };
 
-    // Trigger the Alert.alert 'View History' action to navigate to History tab
-    const alertCalls = (Alert.alert as jest.Mock).mock.calls;
-    if (alertCalls.length > 0) {
-      const buttons = alertCalls[alertCalls.length - 1][2];
-      const viewHistoryBtn = buttons?.find((b: any) => b.text === 'View History');
-      if (viewHistoryBtn?.onPress) {
-        viewHistoryBtn.onPress();
-      }
-    }
+    // Wait for auto-dismiss / navigation back to main tab bar, then navigate to History
+    const historyTab = await screen.findByLabelText(/History, tab/i, {}, { timeout: 15000 });
+    fireEvent.press(historyTab);
 
     expect(await screen.findByText('Completed Work', {}, { timeout: 15000 })).toBeTruthy();
     expect(await screen.findByText('GB3 2nd Floor Male Restroom', {}, { timeout: 15000 })).toBeTruthy();

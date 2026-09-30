@@ -60,7 +60,7 @@ function EmptyTaskPanel(): React.JSX.Element {
 
 export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, activeTasks, loading, refreshTasks, updateLocalTask = () => {} } = useTasks();
+  const { tasks, activeTasks, loading, refreshTasks, updateLocalTask = () => {}, incrementHistoryBadge = () => {} } = useTasks();
   const routeTaskId = route.params?.taskId;
   const [selectedTaskIdState, setSelectedTaskIdState] = useState<string | null>(routeTaskId ?? null);
   const [prevRouteTaskId, setPrevRouteTaskId] = useState<string | undefined>(routeTaskId);
@@ -299,6 +299,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
           onTaskCompleted={(completedTask: Task) => {
             void playCompletionSound();
             updateLocalTask(completedTask);
+            incrementHistoryBadge();
             if (selectedTaskIdState === completedTask.id || routeTaskId === completedTask.id) {
               setSelectedTaskIdState(null);
               if (navigation.setParams) {
@@ -306,7 +307,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
               }
             }
             setExecutionModalVisible(false);
-            setSnackbarMessage('✓ Task Completed');
+            setSnackbarMessage('Task Completed');
           }}
         />
       ) : null}

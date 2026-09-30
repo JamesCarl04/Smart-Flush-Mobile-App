@@ -265,7 +265,7 @@ export function TaskDetailScreen({
   route,
 }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, historyTasks, refreshTasks, updateLocalTask = () => {} } = useTasks();
+  const { tasks, historyTasks, refreshTasks, updateLocalTask = () => {}, incrementHistoryBadge = () => {} } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDetailRefreshing, setIsDetailRefreshing] = useState(false);
@@ -689,7 +689,7 @@ export function TaskDetailScreen({
         isFullyCompleted = outcome?.isFullyCompleted ?? true;
         setSnackbarMessage(
           isFullyCompleted
-            ? '✓ Task Completed'
+            ? 'Task Completed'
             : 'Checklist submitted. Work order remains active for teammate(s).',
         );
       } else {
@@ -720,7 +720,7 @@ export function TaskDetailScreen({
         } else {
           isFullyCompleted = true;
         }
-        setSnackbarMessage(isFullyCompleted ? '✓ Task Completed' : '✓ Checklist Submitted');
+        setSnackbarMessage(isFullyCompleted ? 'Task Completed' : 'Checklist Submitted');
       }
 
       const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === 'done' || v === 'na').length}/10`;
@@ -781,6 +781,7 @@ export function TaskDetailScreen({
       };
 
       updateLocalTask(updatedTask);
+      incrementHistoryBadge();
       setTask(updatedTask);
       setStep('details');
       void playCompletionSound();
@@ -789,7 +790,7 @@ export function TaskDetailScreen({
         void refreshTasks().catch(() => {});
       }
 
-      setSnackbarMessage(isFullyCompleted ? '✓ Task Completed' : '✓ Checklist Submitted');
+      setSnackbarMessage(isFullyCompleted ? 'Task Completed' : 'Checklist Submitted');
 
       if (navigation && 'goBack' in navigation) {
         setTimeout(() => {

@@ -287,7 +287,7 @@ describe('ActiveTaskScreen Integration', () => {
     );
     expect(screen.queryByTestId('mock-execution-modal')).toBeNull();
     expect(screen.getByTestId('mock-snackbar')).toBeTruthy();
-    expect(screen.getByText('✓ Task Completed')).toBeTruthy();
+    expect(screen.getByText('Task Completed')).toBeTruthy();
   });
 
   it('calls updateLocalTask and displays pill toast when task is completed online', () => {
@@ -321,7 +321,7 @@ describe('ActiveTaskScreen Integration', () => {
     );
     expect(screen.queryByTestId('mock-execution-modal')).toBeNull();
     expect(screen.getByTestId('mock-snackbar')).toBeTruthy();
-    expect(screen.getByText('✓ Task Completed')).toBeTruthy();
+    expect(screen.getByText('Task Completed')).toBeTruthy();
   });
 
   it('clears navigation route params when completing task passed via route params', () => {

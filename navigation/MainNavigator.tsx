@@ -247,8 +247,8 @@ export function MainNavigator(): React.JSX.Element {
           title: 'History',
           tabBarBadge: historyBadgeCount > 0 ? historyBadgeCount : undefined,
           tabBarBadgeStyle: {
-            backgroundColor: '#B5121B',
-            color: '#FFFFFF',
+            backgroundColor: theme.colors.error,
+            color: theme.colors.onError,
             fontSize: 11,
             fontWeight: '800',
           },

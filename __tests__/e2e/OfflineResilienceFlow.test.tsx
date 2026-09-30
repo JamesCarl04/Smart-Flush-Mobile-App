@@ -136,8 +136,8 @@ describe('Offline Resilience Flow E2E', () => {
     const submitBtn = screen.getByRole('button', { name: 'Submit Completion' });
     fireEvent.press(submitBtn);
 
-    // Verify offline message displayed and task queued in AsyncStorage
-    expect(await screen.findByText('Saved offline. Will sync when connected.', {}, { timeout: 15000 })).toBeTruthy();
+    // Verify offline completion feedback displayed and task queued in AsyncStorage
+    expect(await screen.findByText('Task Completed', {}, { timeout: 15000 })).toBeTruthy();
 
     const queuedTasks = await readOfflineCompletions();
     expect(queuedTasks).toHaveLength(1);

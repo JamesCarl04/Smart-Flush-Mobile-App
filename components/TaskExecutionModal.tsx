@@ -170,6 +170,7 @@ export function TaskExecutionModal({
   const tasksContext = useContext(TasksContext);
   const refreshTasks = tasksContext?.refreshTasks ?? (async () => {});
   const updateLocalTask = tasksContext?.updateLocalTask ?? (() => {});
+  const incrementHistoryBadge = tasksContext?.incrementHistoryBadge ?? (() => {});
 
   const [step, setStep] = useState<ModalStep>('before_photo');
   const [beforePhotoUri, setBeforePhotoUri] = useState<string | null>(null);
@@ -621,6 +622,7 @@ export function TaskExecutionModal({
       };
 
       updateLocalTask(updatedTask);
+      incrementHistoryBadge();
       void playCompletionSound();
 
       if (onTaskCompleted) {

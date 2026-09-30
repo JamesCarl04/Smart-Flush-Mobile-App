@@ -240,7 +240,7 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('✓ Task Completed')).toBeTruthy();
+        expect(screen.getByText('Task Completed')).toBeTruthy();
         expect(mockRefreshTasks).toHaveBeenCalled();
       },
       { timeout: 4000 },
@@ -294,7 +294,7 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
             offlineSynced: false,
           }),
         );
-        expect(screen.getByText('✓ Task Completed')).toBeTruthy();
+        expect(screen.getByText('Task Completed')).toBeTruthy();
       },
       { timeout: 4000 },
     );

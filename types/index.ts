@@ -170,6 +170,7 @@ export interface TasksContextValue {
   errorMessage: string | null;
   refreshTasks: () => Promise<void>;
   updateLocalTask: (task: Task) => void;
+  incrementHistoryBadge: () => void;
   clearHistoryBadge: () => void;
   clearError: () => void;
 }
