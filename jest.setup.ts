@@ -408,4 +408,35 @@ jest.mock('expo-file-system/legacy', () => mockFileSystem);
 // Global fetch mock helper
 global.fetch = jest.fn();
 
+// 13. Mock Expo AV
+export const mockExpoAvSound = {
+  playAsync: jest.fn().mockResolvedValue(undefined),
+  stopAsync: jest.fn().mockResolvedValue(undefined),
+  unloadAsync: jest.fn().mockResolvedValue(undefined),
+  setOnPlaybackStatusUpdate: jest.fn(),
+  getStatusAsync: jest.fn().mockResolvedValue({ isLoaded: true, isPlaying: false }),
+};
+
+jest.mock('expo-av', () => ({
+  Audio: {
+    Sound: {
+      createAsync: jest.fn().mockResolvedValue({
+        sound: mockExpoAvSound,
+        status: { isLoaded: true, didJustFinish: true },
+      }),
+    },
+    setAudioModeAsync: jest.fn().mockResolvedValue(undefined),
+  },
+}));
+
+// 14. Mock Sound Effects Utility
+export const mockPlayCompletionSound = jest.fn().mockResolvedValue(undefined);
+export const mockResetSoundCooldown = jest.fn();
+jest.mock('./lib/sound-effects', () => ({
+  playCompletionSound: mockPlayCompletionSound,
+  _resetSoundCooldownForTests: mockResetSoundCooldown,
+}));
+
+
+
 

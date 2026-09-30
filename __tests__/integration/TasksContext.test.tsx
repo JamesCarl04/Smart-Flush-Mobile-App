@@ -4,11 +4,13 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react-
 import { PaperProvider } from 'react-native-paper';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Network from 'expo-network';
 
 import { TasksProvider } from '../../contexts/TasksContext';
 import { useTasks } from '../../hooks/useTasks';
 import * as taskApi from '../../lib/task-api';
 import * as useAuthHook from '../../hooks/useAuth';
+import { queueOfflineCompletion } from '../../lib/task-completion';
 import { db } from '../../lib/firebase';
 import type { Task } from '../../types';
 
@@ -23,9 +25,12 @@ function TestTasksConsumer(): React.JSX.Element {
     activeTasksCount,
     historyTasks,
     pendingCount,
+    historyBadgeCount,
     loading,
     errorMessage,
     refreshTasks,
+    updateLocalTask,
+    clearHistoryBadge,
     clearError,
   } = useTasks();
 
@@ -38,6 +43,7 @@ function TestTasksConsumer(): React.JSX.Element {
       <Text testID="active-count">{activeTasksCount}</Text>
       <Text testID="history-count">{historyTasks.length}</Text>
       <Text testID="pending-count">{pendingCount}</Text>
+      <Text testID="history-badge-count">{historyBadgeCount}</Text>
       <View testID="inbox-task-ids">
         {inboxTasks.map((t) => (
           <Text key={t.id} testID={`inbox-${t.id}`}>
@@ -52,8 +58,33 @@ function TestTasksConsumer(): React.JSX.Element {
           </Text>
         ))}
       </View>
+      <View testID="all-task-ids">
+        {tasks.map((t) => (
+          <Text key={t.id} testID={`task-row-${t.id}`}>
+            {t.id}:{t.status}:{t.completedBy}:{t.additionalPhotos?.length ?? 0}:{Object.keys(t.submissions ?? {}).join(',')}
+          </Text>
+        ))}
+      </View>
       <Button testID="refresh-btn" title="Refresh" onPress={() => void refreshTasks()} />
       <Button testID="clear-error-btn" title="Clear Error" onPress={clearError} />
+      <Button testID="clear-history-badge-btn" title="Clear History Badge" onPress={clearHistoryBadge} />
+      <Button
+        testID="complete-task-4-btn"
+        title="Complete Task 4"
+        onPress={() => {
+          const t4 = tasks.find((t) => t.id === 'task-4');
+          if (t4) {
+            updateLocalTask({
+              ...t4,
+              status: 'completed',
+              inspectionStatus: 'pending_review',
+              completedAt: new Date('2026-08-15T06:00:00Z'),
+              completedBy: 'user-tech-1',
+              offlineSynced: false,
+            });
+          }
+        }}
+      />
     </View>
   );
 }
@@ -722,6 +753,240 @@ describe('TasksContext Integration', () => {
     expect(screen.getByTestId('active-count').props.children).toBe(1);
     // NOT in history
     expect(screen.getByTestId('history-count').props.children).toBe(0);
+  });
+
+  it('optimistically updates task locally via updateLocalTask, removing from active/inbox and adding to history and cache', async () => {
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue(mockTasksData);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // task-4 is in activeTasks and inboxTasks
+    expect(screen.getByTestId('active-count').props.children).toBe(1);
+    expect(screen.getByTestId('inbox-task-4')).toBeTruthy();
+    expect(screen.getByTestId('history-count').props.children).toBe(1);
+    expect(screen.getByTestId('history-badge-count').props.children).toBe(0);
+
+    // Trigger local optimistic update
+    fireEvent.press(screen.getByTestId('complete-task-4-btn'));
+
+    // task-4 immediately removed from active and inbox, and added to history
+    await waitFor(() => {
+      expect(screen.getByTestId('active-count').props.children).toBe(0);
+      expect(screen.queryByTestId('inbox-task-4')).toBeNull();
+      expect(screen.getByTestId('history-count').props.children).toBe(2);
+      expect(screen.getByTestId('history-task-4')).toBeTruthy();
+      expect(screen.getByTestId('history-badge-count').props.children).toBe(1);
+    });
+
+    // Clear history badge
+    fireEvent.press(screen.getByTestId('clear-history-badge-btn'));
+    expect(screen.getByTestId('history-badge-count').props.children).toBe(0);
+
+    // Verify written to AsyncStorage cache
+    const cached = await AsyncStorage.getItem('@klir:tasks:maintenance:user-tech-1');
+    expect(cached).toBeTruthy();
+    const parsedCached = JSON.parse(cached!);
+    const cachedTask4 = parsedCached.find((t: any) => t.id === 'task-4');
+    expect(cachedTask4.status).toBe('completed');
+  });
+
+  it('reconciles with offline completion queue on cold-boot cache hydration', async () => {
+    // Seed AsyncStorage cache with acknowledged task-4
+    const initialTasks = [mockTasksData[3]]; // task-4 acknowledged
+    await AsyncStorage.setItem(
+      '@klir:tasks:maintenance:user-tech-1',
+      JSON.stringify(initialTasks),
+    );
+
+    // Queue offline completion bundle in AsyncStorage
+    await queueOfflineCompletion({
+      taskId: 'task-4',
+      completedAt: new Date('2026-08-15T06:00:00Z').toISOString(),
+      acknowledgedAt: new Date('2026-08-15T04:00:00Z').toISOString(),
+      checklist: {} as any,
+      remarks: 'Sanitized offline',
+      beforePhotoLocalUri: 'file:///before.jpg',
+      afterPhotoLocalUri: 'file:///after.jpg',
+      biometricVerified: true,
+      completedBy: 'user-tech-1',
+      offlineSynced: false,
+    });
+
+    // Mock fetchTasks to return nothing (simulating offline startup where API fails)
+    (taskApi.fetchTasks as jest.Mock).mockRejectedValue(new Error('Network request failed'));
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    // Task-4 is reconciled immediately on cold boot from cache + offline_tasks
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // It should NOT be active or in inbox, but should be in history
+    expect(screen.getByTestId('active-count').props.children).toBe(0);
+    expect(screen.queryByTestId('inbox-task-4')).toBeNull();
+    expect(screen.getByTestId('history-count').props.children).toBe(1);
+    expect(screen.getByTestId('history-task-4')).toBeTruthy();
+  });
+
+  it('suppresses refreshTasks error banner when device is offline', async () => {
+    (taskApi.fetchTasks as jest.Mock).mockResolvedValue(mockTasksData);
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // Simulate device going offline
+    (Network as any).__setNetworkState(false, false);
+    (taskApi.fetchTasks as jest.Mock).mockRejectedValue(new Error('Network unreachable'));
+
+    fireEvent.press(screen.getByTestId('refresh-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // Error banner is cleanly suppressed
+    expect(screen.getByTestId('error-message').props.children).toBe('NO_ERROR');
+
+    // Restore online
+    (Network as any).__setNetworkState(true, true);
+  });
+
+  it('reconciles offline completion with additionalPhotos preserving photos on cold boot', async () => {
+    const initialTasks = [mockTasksData[3]]; // task-4
+    await AsyncStorage.setItem(
+      '@klir:tasks:maintenance:user-tech-1',
+      JSON.stringify(initialTasks),
+    );
+
+    await queueOfflineCompletion({
+      taskId: 'task-4',
+      completedAt: new Date('2026-08-15T06:00:00Z').toISOString(),
+      acknowledgedAt: new Date('2026-08-15T04:00:00Z').toISOString(),
+      checklist: {} as any,
+      remarks: 'Sanitized offline with extra photos',
+      beforePhotoLocalUri: 'file:///before.jpg',
+      afterPhotoLocalUri: 'file:///after.jpg',
+      additionalPhotos: [
+        {
+          id: 'area-1',
+          areaTag: 'Stall 1',
+          localUri: 'file:///stall1.jpg',
+          capturedAt: new Date('2026-08-15T05:30:00Z').toISOString(),
+        },
+      ],
+      biometricVerified: true,
+      completedBy: 'user-tech-1',
+      offlineSynced: false,
+    });
+
+    (taskApi.fetchTasks as jest.Mock).mockRejectedValue(new Error('Network request failed'));
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    expect(screen.getByTestId('active-count').props.children).toBe(0);
+    expect(screen.getByTestId('history-count').props.children).toBe(1);
+
+    // Verify additionalPhotos are preserved in task
+    const taskRow = screen.getByTestId('task-row-task-4');
+    expect(taskRow.props.children.join('')).toContain(':1:');
+  });
+
+  it('reconciles multiple offline completion bundles for team task on cold boot', async () => {
+    const teamTask: Task = {
+      ...mockTasksData[3],
+      id: 'task-team-1',
+      assignedToIds: ['user-tech-1', 'user-tech-2'],
+      submissions: {},
+      status: 'acknowledged',
+    };
+    await AsyncStorage.setItem(
+      '@klir:tasks:maintenance:user-tech-1',
+      JSON.stringify([teamTask]),
+    );
+
+    // Queue 2 offline completion bundles: one for tech-2, one for tech-1
+    await queueOfflineCompletion({
+      taskId: 'task-team-1',
+      completedAt: new Date('2026-08-15T05:00:00Z').toISOString(),
+      acknowledgedAt: new Date('2026-08-15T04:00:00Z').toISOString(),
+      checklist: {} as any,
+      remarks: 'Tech 2 done',
+      beforePhotoLocalUri: 'file:///before2.jpg',
+      afterPhotoLocalUri: 'file:///after2.jpg',
+      biometricVerified: true,
+      completedBy: 'user-tech-2',
+      offlineSynced: false,
+    });
+    await queueOfflineCompletion({
+      taskId: 'task-team-1',
+      completedAt: new Date('2026-08-15T06:00:00Z').toISOString(),
+      acknowledgedAt: new Date('2026-08-15T04:00:00Z').toISOString(),
+      checklist: {} as any,
+      remarks: 'Tech 1 done',
+      beforePhotoLocalUri: 'file:///before1.jpg',
+      afterPhotoLocalUri: 'file:///after1.jpg',
+      biometricVerified: true,
+      completedBy: 'user-tech-1',
+      offlineSynced: false,
+    });
+
+    (taskApi.fetchTasks as jest.Mock).mockRejectedValue(new Error('Network request failed'));
+
+    render(
+      <PaperProvider>
+        <TasksProvider>
+          <TestTasksConsumer />
+        </TasksProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading').props.children).toBe('IDLE');
+    });
+
+    // Both assignees submitted -> fully completed!
+    expect(screen.getByTestId('active-count').props.children).toBe(0);
+    expect(screen.getByTestId('history-count').props.children).toBe(1);
+
+    const taskRow = screen.getByTestId('task-row-task-team-1');
+    expect(taskRow.props.children.join('')).toContain('completed');
+    expect(taskRow.props.children.join('')).toContain('user-tech-2,user-tech-1');
   });
 });
 

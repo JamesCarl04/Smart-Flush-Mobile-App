@@ -23,6 +23,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
 import { acknowledgeTask } from '../lib/task-api';
 import { getRestroomLabel } from '../lib/restrooms';
+import { playCompletionSound } from '../lib/sound-effects';
 import type { Task, TaskStackParamList } from '../types';
 
 type Props = NativeStackScreenProps<TaskStackParamList, 'ActiveTask'>;
@@ -59,7 +60,7 @@ function EmptyTaskPanel(): React.JSX.Element {
 
 export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, activeTasks, loading, refreshTasks } = useTasks();
+  const { tasks, activeTasks, loading, refreshTasks, updateLocalTask = () => {} } = useTasks();
   const routeTaskId = route.params?.taskId;
   const [selectedTaskIdState, setSelectedTaskIdState] = useState<string | null>(routeTaskId ?? null);
   const [prevRouteTaskId, setPrevRouteTaskId] = useState<string | undefined>(routeTaskId);
@@ -294,17 +295,25 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
         visible={executionModalVisible}
         task={activeTask}
         onDismiss={() => setExecutionModalVisible(false)}
-        onTaskCompleted={() => {
-          setSnackbarMessage('Task completed successfully.');
+        onTaskCompleted={(completedTask: Task) => {
+          void playCompletionSound();
+          updateLocalTask(completedTask);
+          if (selectedTaskIdState === completedTask.id || routeTaskId === completedTask.id) {
+            setSelectedTaskIdState(null);
+            if (navigation.setParams) {
+              navigation.setParams({ taskId: undefined });
+            }
+          }
           setExecutionModalVisible(false);
-          void refreshTasks();
+          setSnackbarMessage('✓ Task Completed');
         }}
       />
 
       <Snackbar
         visible={snackbarMessage !== null}
         onDismiss={() => setSnackbarMessage(null)}
-        duration={3000}
+        duration={2500}
+        style={styles.pillToast}
       >
         {snackbarMessage ?? ''}
       </Snackbar>
@@ -474,6 +483,18 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#64748B',
     textAlign: 'center',
+  },
+  pillToast: {
+    backgroundColor: '#0F172A',
+    borderRadius: 999,
+    marginHorizontal: 32,
+    marginBottom: 24,
+    alignSelf: 'center',
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
 });
 

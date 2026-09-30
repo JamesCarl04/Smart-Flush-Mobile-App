@@ -20,6 +20,29 @@ jest.mock('react-native-paper', () => {
       visible ? <View testID="mock-snackbar"><Text>{children}</Text></View> : null,
   };
 });
+jest.mock('../../../components/TaskExecutionModal', () => {
+  const React = require('react');
+  const { View, Button } = require('react-native');
+  return {
+    TaskExecutionModal: ({ visible, onTaskCompleted, task }: any) => {
+      if (!visible) return null;
+      return (
+        <View testID="mock-execution-modal">
+          <Button
+            testID="mock-complete-offline"
+            title="Complete Offline"
+            onPress={() => onTaskCompleted({ ...task, status: 'completed', offlineSynced: false })}
+          />
+          <Button
+            testID="mock-complete-online"
+            title="Complete Online"
+            onPress={() => onTaskCompleted({ ...task, status: 'completed', offlineSynced: true })}
+          />
+        </View>
+      );
+    },
+  };
+});
 
 const mockTask1: Task = {
   id: 'task-1',
@@ -67,6 +90,7 @@ describe('ActiveTaskScreen Integration', () => {
     goBack: jest.fn(),
     getParent: jest.fn().mockReturnValue({ navigate: jest.fn() }),
     addListener: jest.fn().mockReturnValue(jest.fn()),
+    setParams: jest.fn(),
   };
 
   const defaultUser = {
@@ -227,5 +251,103 @@ describe('ActiveTaskScreen Integration', () => {
     );
 
     expect(screen.getByText('No active task in progress')).toBeTruthy();
+  });
+
+  it('calls updateLocalTask and displays pill toast when task is completed offline', () => {
+    const mockUpdateLocalTask = jest.fn();
+    (useTasksHook.useTasks as jest.Mock).mockReturnValue({
+      tasks: [mockTask1],
+      activeTasks: [mockTask1],
+      loading: false,
+      refreshTasks: jest.fn(),
+      updateLocalTask: mockUpdateLocalTask,
+    });
+
+    render(
+      <PaperProvider>
+        <ActiveTaskScreen navigation={mockNavigation} route={{ key: 'ActiveTask', name: 'ActiveTask', params: undefined }} />
+      </PaperProvider>
+    );
+
+    // Open execution modal via Resume Task button
+    const resumeBtn = screen.getByText('Resume Task & Open Camera');
+    fireEvent.press(resumeBtn);
+
+    expect(screen.getByTestId('mock-execution-modal')).toBeTruthy();
+
+    // Complete task offline
+    fireEvent.press(screen.getByTestId('mock-complete-offline'));
+
+    expect(mockUpdateLocalTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'task-1',
+        status: 'completed',
+        offlineSynced: false,
+      }),
+    );
+    expect(screen.queryByTestId('mock-execution-modal')).toBeNull();
+    expect(screen.getByTestId('mock-snackbar')).toBeTruthy();
+    expect(screen.getByText('✓ Task Completed')).toBeTruthy();
+  });
+
+  it('calls updateLocalTask and displays pill toast when task is completed online', () => {
+    const mockUpdateLocalTask = jest.fn();
+    (useTasksHook.useTasks as jest.Mock).mockReturnValue({
+      tasks: [mockTask1],
+      activeTasks: [mockTask1],
+      loading: false,
+      refreshTasks: jest.fn(),
+      updateLocalTask: mockUpdateLocalTask,
+    });
+
+    render(
+      <PaperProvider>
+        <ActiveTaskScreen navigation={mockNavigation} route={{ key: 'ActiveTask', name: 'ActiveTask', params: undefined }} />
+      </PaperProvider>
+    );
+
+    const resumeBtn = screen.getByText('Resume Task & Open Camera');
+    fireEvent.press(resumeBtn);
+
+    // Complete task online
+    fireEvent.press(screen.getByTestId('mock-complete-online'));
+
+    expect(mockUpdateLocalTask).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'task-1',
+        status: 'completed',
+        offlineSynced: true,
+      }),
+    );
+    expect(screen.queryByTestId('mock-execution-modal')).toBeNull();
+    expect(screen.getByTestId('mock-snackbar')).toBeTruthy();
+    expect(screen.getByText('✓ Task Completed')).toBeTruthy();
+  });
+
+  it('clears navigation route params when completing task passed via route params', () => {
+    const mockUpdateLocalTask = jest.fn();
+    (useTasksHook.useTasks as jest.Mock).mockReturnValue({
+      tasks: [mockTask1],
+      activeTasks: [mockTask1],
+      loading: false,
+      refreshTasks: jest.fn(),
+      updateLocalTask: mockUpdateLocalTask,
+    });
+
+    render(
+      <PaperProvider>
+        <ActiveTaskScreen
+          navigation={mockNavigation}
+          route={{ key: 'ActiveTask', name: 'ActiveTask', params: { taskId: 'task-1' } }}
+        />
+      </PaperProvider>
+    );
+
+    const resumeBtn = screen.getByText('Resume Task & Open Camera');
+    fireEvent.press(resumeBtn);
+
+    fireEvent.press(screen.getByTestId('mock-complete-offline'));
+
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ taskId: undefined });
   });
 });

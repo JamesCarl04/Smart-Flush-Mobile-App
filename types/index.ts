@@ -165,9 +165,12 @@ export interface TasksContextValue {
   activeTasksCount: number;
   historyTasks: Task[];
   pendingCount: number;
+  historyBadgeCount: number;
   loading: boolean;
   errorMessage: string | null;
   refreshTasks: () => Promise<void>;
+  updateLocalTask: (task: Task) => void;
+  clearHistoryBadge: () => void;
   clearError: () => void;
 }
 

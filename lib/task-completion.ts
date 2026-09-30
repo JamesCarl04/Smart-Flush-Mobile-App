@@ -347,7 +347,9 @@ export async function queueOfflineCompletion(
 ): Promise<void> {
   const existing = await readOfflineCompletions();
   await writeOfflineCompletions([
-    ...existing.filter((current) => current.taskId !== item.taskId),
+    ...existing.filter(
+      (current) => !(current.taskId === item.taskId && current.completedBy === item.completedBy),
+    ),
     item,
   ]);
 }

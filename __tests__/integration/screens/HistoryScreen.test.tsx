@@ -104,18 +104,27 @@ describe('HistoryScreen Integration', () => {
   };
 
   const mockClearError = jest.fn();
+  const mockClearHistoryBadge = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNavigation.addListener = jest.fn((event: string, callback: () => void) => {
+      if (event === 'focus') {
+        callback();
+      }
+      return jest.fn();
+    });
     (useTasksHook.useTasks as jest.Mock).mockReturnValue({
       tasks: mockHistoryTasks,
       inboxTasks: [],
       historyTasks: mockHistoryTasks,
       pendingCount: 0,
+      historyBadgeCount: 1,
       loading: false,
       errorMessage: null,
       refreshTasks: jest.fn(),
       clearError: mockClearError,
+      clearHistoryBadge: mockClearHistoryBadge,
     });
   });
 
@@ -257,5 +266,10 @@ describe('HistoryScreen Integration', () => {
     // Verify both items rendered stably
     expect(screen.getByText('Restroom Zeta')).toBeTruthy();
     expect(screen.getByText('Restroom Alpha')).toBeTruthy();
+  });
+
+  it('calls clearHistoryBadge when HistoryScreen is focused', () => {
+    renderScreen();
+    expect(mockClearHistoryBadge).toHaveBeenCalled();
   });
 });

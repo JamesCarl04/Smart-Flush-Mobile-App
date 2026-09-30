@@ -240,7 +240,7 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
 
     await waitFor(
       () => {
-        expect(screen.getByText('Task completed and synced.')).toBeTruthy();
+        expect(screen.getByText('✓ Task Completed')).toBeTruthy();
         expect(mockRefreshTasks).toHaveBeenCalled();
       },
       { timeout: 4000 },
@@ -284,20 +284,20 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
     // Submit completion while offline
     fireEvent.press(screen.getByText('Submit Completion'));
 
-    await waitFor(() => {
-      expect(taskCompletion.queueOfflineCompletion).toHaveBeenCalledWith(
-        expect.objectContaining({
-          taskId: 'task-flow-123',
-          biometricVerified: true,
-          completedBy: 'user-tech-1',
-          offlineSynced: false,
-        }),
-      );
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Saved offline. Will sync when connected.')).toBeTruthy();
-    });
+    await waitFor(
+      () => {
+        expect(taskCompletion.queueOfflineCompletion).toHaveBeenCalledWith(
+          expect.objectContaining({
+            taskId: 'task-flow-123',
+            biometricVerified: true,
+            completedBy: 'user-tech-1',
+            offlineSynced: false,
+          }),
+        );
+        expect(screen.getByText('Saved offline. Will sync when connected.')).toBeTruthy();
+      },
+      { timeout: 4000 },
+    );
   });
 
   it('renders clean loading state in History view and suppresses action buttons', async () => {

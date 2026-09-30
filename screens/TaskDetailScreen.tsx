@@ -52,6 +52,7 @@ import { logTaskAudit } from '../lib/audit-logger';
 import { getRestroomLabel } from '../lib/restrooms';
 import { useAuth } from '../hooks/useAuth';
 import { useTasks } from '../hooks/useTasks';
+import { playCompletionSound } from '../lib/sound-effects';
 import type {
   AreaPhoto,
   ChecklistValue,
@@ -264,7 +265,7 @@ export function TaskDetailScreen({
   route,
 }: Props): React.JSX.Element {
   const { user } = useAuth();
-  const { tasks, historyTasks, refreshTasks } = useTasks();
+  const { tasks, historyTasks, refreshTasks, updateLocalTask = () => {} } = useTasks();
   const [task, setTask] = useState<Task | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDetailRefreshing, setIsDetailRefreshing] = useState(false);
@@ -688,7 +689,7 @@ export function TaskDetailScreen({
         isFullyCompleted = outcome?.isFullyCompleted ?? true;
         setSnackbarMessage(
           isFullyCompleted
-            ? 'Task completed and synced.'
+            ? '✓ Task Completed'
             : 'Checklist submitted. Work order remains active for teammate(s).',
         );
       } else {
@@ -704,12 +705,27 @@ export function TaskDetailScreen({
           completedBy: uid,
           offlineSynced: false,
         });
-        isFullyCompleted = !(task.assignedToIds && task.assignedToIds.length > 1);
+        const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
+        if (isTeam) {
+          const existingSubmissions = task.submissions ?? {};
+          const completedByMap = task.completedByMap ?? {};
+          const completedCount = task.assignedToIds!.filter(
+            (id) =>
+              id === uid ||
+              Boolean(existingSubmissions[id]) ||
+              Boolean(completedByMap[id]) ||
+              (typeof task.completedBy === 'object' && Boolean((task.completedBy as unknown as Record<string, any>)?.[id])),
+          ).length;
+          isFullyCompleted = completedCount >= task.assignedToIds!.length;
+        } else {
+          isFullyCompleted = true;
+        }
         setSnackbarMessage('Saved offline. Will sync when connected.');
       }
 
       const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === 'done' || v === 'na').length}/10`;
       const elapsedWorkDuration = task.workDuration ?? (task.acknowledgedAt ? Math.max(0, Math.round((completedAt.getTime() - task.acknowledgedAt.getTime()) / 1000)) : 0);
+      const totalTime = task.createdAt ? Math.max(0, Math.round((completedAt.getTime() - task.createdAt.getTime()) / 1000)) : null;
 
       void logTaskAudit(
         'TASK_COMPLETED',
@@ -730,11 +746,16 @@ export function TaskDetailScreen({
         },
       );
 
-      await refreshTasks();
-      setTask({
+      const nextRecheckCount = task.status === 'rechecking'
+        ? (task.recheckCount ?? 0) + 1
+        : (task.recheckCount ?? 0);
+
+      const updatedTask: Task = {
         ...task,
         status: isFullyCompleted ? 'completed' : 'acknowledged',
-        ...(isFullyCompleted ? { completedAt, completedBy: uid } : {}),
+        inspectionStatus: 'pending_review',
+        completedAt: isFullyCompleted ? completedAt : task.completedAt,
+        completedBy: isFullyCompleted ? uid : task.completedBy,
         submissions: {
           ...(task.submissions ?? {}),
           [uid]: {
@@ -744,14 +765,29 @@ export function TaskDetailScreen({
             beforePhotoUrl: beforePhotoUri,
             afterPhotoUrl: afterPhotoUri,
             remarks,
+            workDuration: elapsedWorkDuration,
             completedAt,
             biometricVerified,
           },
         },
         beforePhotoUrl: beforePhotoUri,
         afterPhotoUrl: afterPhotoUri,
-      });
+        workDuration: isFullyCompleted ? elapsedWorkDuration : task.workDuration,
+        totalTime: isFullyCompleted ? totalTime : task.totalTime,
+        offlineSynced: !online ? false : true,
+        recheckCount: nextRecheckCount,
+        recheckedBy: task.status === 'rechecking' ? uid : task.recheckedBy,
+        recheckedAt: task.status === 'rechecking' ? completedAt : task.recheckedAt,
+      };
+
+      updateLocalTask(updatedTask);
+      setTask(updatedTask);
       setStep('details');
+      void playCompletionSound();
+
+      if (online) {
+        void refreshTasks().catch(() => {});
+      }
 
       Alert.alert(
         isFullyCompleted ? 'Task Completed' : 'Checklist Submitted',
@@ -1824,6 +1860,8 @@ export function TaskDetailScreen({
       <Snackbar
         visible={snackbarMessage !== null}
         onDismiss={() => setSnackbarMessage(null)}
+        duration={2500}
+        style={styles.pillToast}
       >
         {snackbarMessage ?? ''}
       </Snackbar>
@@ -2530,5 +2568,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748B',
     fontWeight: '500',
+  },
+  pillToast: {
+    backgroundColor: '#0F172A',
+    borderRadius: 999,
+    marginHorizontal: 32,
+    marginBottom: 24,
+    alignSelf: 'center',
+    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
 });

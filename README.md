@@ -242,6 +242,7 @@ Klir Mobile provides strict role-based isolation. When a user logs in, their pro
 | **James Alvarez** | `james@gmail.com` | **`maintenance`** | **1st Floor** (Canteen & Faculty Restrooms) | **Technician Inbox** |
 | **Justine Lopez (Tech)** | `justine@gmail.com` | **`maintenance`** | **2nd Floor** (Left/Right Wings & PWD) | **Technician Inbox** |
 | **Maria Lindog** | `maria@gmail.com` | **`maintenance`** | **3rd Floor** (Left/Right Wings & PWD) | **Technician Inbox** |
+| **Evaluator** | `evaluator1@sdca.edu.ph` | **`technician` / `maintenance`** | **All Floors** (Campus-wide Evaluation) | **Technician Inbox** |
 
 > [!NOTE]
 > **Role Bridging & Alias Support (`technician` $\leftrightarrow$ `maintenance`):**  

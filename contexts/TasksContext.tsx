@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
@@ -21,10 +22,121 @@ import {
   parseTimestampMap,
   toDate,
 } from '../lib/tasks';
-import type { Task, TasksContextValue } from '../types';
+import type { Task, TaskSubmission, TasksContextValue } from '../types';
+import {
+  isOnlineAsync,
+  readOfflineCompletions,
+  type CompletionBundle,
+} from '../lib/task-completion';
 
 const TasksContext = createContext<TasksContextValue | undefined>(undefined);
 const TASKS_CACHE_KEY_PREFIX = '@klir:tasks';
+
+function applyOfflineBundleToTask(
+  task: Task,
+  bundle: CompletionBundle,
+  currentUid?: string,
+): Task {
+  const uid = bundle.completedBy || currentUid || '';
+  const completedAt = toDate(bundle.completedAt) ?? new Date();
+  const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
+
+  const currentSubmissions = task.submissions ?? {};
+  const additionalPhotos = bundle.additionalPhotos?.map((p) => ({
+    id: p.id,
+    areaTag: p.areaTag,
+    photoUrl: p.localUri,
+    capturedAt: toDate(p.capturedAt) ?? new Date(),
+  }));
+
+  const existingSubmission = currentSubmissions[uid];
+  const submissionPhotos =
+    existingSubmission?.additionalPhotos && existingSubmission.additionalPhotos.length > 0
+      ? existingSubmission.additionalPhotos
+      : additionalPhotos;
+
+  const submission: TaskSubmission = {
+    technicianUid: uid,
+    technicianName: existingSubmission?.technicianName ?? 'You',
+    checklist: bundle.checklist ?? existingSubmission?.checklist,
+    beforePhotoUrl: bundle.beforePhotoLocalUri ?? existingSubmission?.beforePhotoUrl,
+    afterPhotoUrl: bundle.afterPhotoLocalUri ?? existingSubmission?.afterPhotoUrl,
+    additionalPhotos: submissionPhotos,
+    remarks: bundle.remarks ?? existingSubmission?.remarks,
+    workDuration: existingSubmission?.workDuration ?? null,
+    completedAt,
+    biometricVerified: bundle.biometricVerified ?? existingSubmission?.biometricVerified,
+  };
+
+  const nextSubmissions = {
+    ...currentSubmissions,
+    ...(uid ? { [uid]: submission } : {}),
+  };
+
+  let isFullyCompleted = true;
+  if (isTeam) {
+    const completedByMap = task.completedByMap ?? {};
+    const completedCount = task.assignedToIds!.filter(
+      (id) =>
+        id === uid ||
+        Boolean(nextSubmissions[id]) ||
+        Boolean(completedByMap[id]) ||
+        (typeof task.completedBy === 'object' && Boolean((task.completedBy as unknown as Record<string, any>)?.[id])),
+    ).length;
+    isFullyCompleted = completedCount >= task.assignedToIds!.length;
+  }
+
+  const taskPhotos =
+    task.additionalPhotos && task.additionalPhotos.length > 0
+      ? task.additionalPhotos
+      : additionalPhotos;
+
+  return {
+    ...task,
+    status: isFullyCompleted ? 'completed' : 'acknowledged',
+    inspectionStatus: 'pending_review',
+    completedAt: isFullyCompleted ? completedAt : task.completedAt,
+    completedBy: isFullyCompleted ? (task.completedBy ?? uid) : task.completedBy,
+    submissions: nextSubmissions,
+    beforePhotoUrl: task.beforePhotoUrl ?? bundle.beforePhotoLocalUri,
+    afterPhotoUrl: task.afterPhotoUrl ?? bundle.afterPhotoLocalUri,
+    additionalPhotos: taskPhotos,
+    checklist: task.checklist ?? bundle.checklist,
+    remarks: task.remarks || bundle.remarks,
+    biometricVerified: task.biometricVerified || bundle.biometricVerified,
+    offlineSynced: false,
+  };
+}
+
+async function reconcileTasksWithOffline(
+  taskList: Task[],
+  currentUid?: string,
+): Promise<Task[]> {
+  try {
+    const offlineBundles = await readOfflineCompletions();
+    if (!offlineBundles || offlineBundles.length === 0) {
+      return taskList;
+    }
+    const bundleMap = new Map<string, CompletionBundle[]>();
+    for (const bundle of offlineBundles) {
+      const list = bundleMap.get(bundle.taskId) ?? [];
+      list.push(bundle);
+      bundleMap.set(bundle.taskId, list);
+    }
+    return taskList.map((task) => {
+      const bundles = bundleMap.get(task.id);
+      if (!bundles || bundles.length === 0) {
+        return task;
+      }
+      return bundles.reduce(
+        (accTask, bundle) => applyOfflineBundleToTask(accTask, bundle, currentUid),
+        task,
+      );
+    });
+  } catch {
+    return taskList;
+  }
+}
 
 function deduplicateTasks(taskList: Task[]): Task[] {
   const map = new Map<string, Task>();
@@ -67,8 +179,18 @@ function hydrateCachedTask(raw: any): Task {
 export function TasksProvider({ children }: PropsWithChildren): React.JSX.Element {
   const { user, role } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const tasksRef = useRef<Task[]>(tasks);
+  const [historyBadgeCount, setHistoryBadgeCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+
+  const clearHistoryBadge = useCallback(() => {
+    setHistoryBadgeCount(0);
+  }, []);
 
   // 1. Instant 0ms cache hydration on initial mount
   useEffect(() => {
@@ -77,11 +199,31 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     const cacheKey = `${TASKS_CACHE_KEY_PREFIX}:${role ?? 'unknown'}:${user.uid}`;
     void (async () => {
       try {
-        const cached = await AsyncStorage.getItem(cacheKey);
+        const [cached, offlineBundles] = await Promise.all([
+          AsyncStorage.getItem(cacheKey),
+          readOfflineCompletions().catch(() => []),
+        ]);
         if (cached && isMounted) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setTasks(deduplicateTasks(parsed.map(hydrateCachedTask)));
+          if (Array.isArray(parsed)) {
+            let hydrated = parsed.map(hydrateCachedTask);
+            if (offlineBundles && offlineBundles.length > 0) {
+              const bundleMap = new Map<string, CompletionBundle[]>();
+              for (const bundle of offlineBundles) {
+                const list = bundleMap.get(bundle.taskId) ?? [];
+                list.push(bundle);
+                bundleMap.set(bundle.taskId, list);
+              }
+              hydrated = hydrated.map((t) => {
+                const bundles = bundleMap.get(t.id);
+                if (!bundles || bundles.length === 0) return t;
+                return bundles.reduce(
+                  (accTask, b) => applyOfflineBundleToTask(accTask, b, user.uid),
+                  t,
+                );
+              });
+            }
+            setTasks(deduplicateTasks(hydrated));
             setLoading(false);
           }
         }
@@ -105,6 +247,25 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     }
   }, [role, user]);
 
+  const updateLocalTask = useCallback((updatedTask: Task) => {
+    const existing = tasksRef.current.find((t) => t.id === updatedTask.id);
+    const isNewlyCompleted =
+      updatedTask.status === 'completed' && existing?.status !== 'completed';
+    if (isNewlyCompleted) {
+      setHistoryBadgeCount((prev) => prev + 1);
+    }
+    setTasks((prevTasks) => {
+      const exists = prevTasks.some((t) => t.id === updatedTask.id);
+      const nextTasks = exists
+        ? prevTasks.map((t) => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t))
+        : [updatedTask, ...prevTasks];
+      const deduped = deduplicateTasks(nextTasks);
+      tasksRef.current = deduped;
+      saveCache(deduped);
+      return deduped;
+    });
+  }, [saveCache]);
+
   const refreshTasks = useCallback(async (): Promise<void> => {
     if (!user) {
       setTasks([]);
@@ -116,12 +277,18 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     try {
       const apiTasks = await fetchTasks();
       const deduped = deduplicateTasks(apiTasks);
-      setTasks(deduped);
-      saveCache(deduped);
+      const reconciled = await reconcileTasksWithOffline(deduped, user.uid);
+      setTasks(reconciled);
+      saveCache(reconciled);
       setErrorMessage(null);
     } catch (error) {
       if (isTransientAuthError(error)) {
         console.warn('[TasksContext] Transient auth error during refreshTasks, suppressing banner:', error);
+        return;
+      }
+      const online = await isOnlineAsync().catch(() => true);
+      if (!online) {
+        console.warn('[TasksContext] Network offline during refreshTasks, suppressing error banner.');
         return;
       }
       const message =
@@ -135,6 +302,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   }, [saveCache, user]);
 
   useEffect(() => {
+    let isMounted = true;
     if (!user) {
       setTasks([]);
       setLoading(false);
@@ -176,12 +344,14 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         }
 
         const queryResults = new Map<string, Task[]>();
-        const publishMergedResults = () => {
+        const publishMergedResults = async () => {
           const merged = deduplicateTasks(Array.from(queryResults.values()).flat());
-          setTasks(merged);
-          saveCache(merged);
+          const reconciled = await reconcileTasksWithOffline(merged, user.uid);
+          if (!isMounted) return;
+          setTasks(reconciled);
+          saveCache(reconciled);
           setLoading(false);
-          if (merged.length > 0) {
+          if (reconciled.length > 0) {
             setErrorMessage(null);
           }
         };
@@ -195,7 +365,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
                   .map((doc) => parseTaskDocument(doc.id, doc.data() as any))
                   .filter((task): task is Task => task !== null);
                 queryResults.set(key, parsed);
-                publishMergedResults();
+                void publishMergedResults();
               }
             },
             (error: Error) => {
@@ -214,6 +384,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     }, 10000);
 
     return () => {
+      isMounted = false;
       unsubscribers.forEach((unsubscribe) => unsubscribe());
       clearInterval(intervalId);
     };
@@ -380,9 +551,12 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
         activeTasksCount,
         historyTasks,
         pendingCount,
+        historyBadgeCount,
         loading,
         errorMessage,
         refreshTasks,
+        updateLocalTask,
+        clearHistoryBadge,
         clearError: () => setErrorMessage(null),
       }}
     >

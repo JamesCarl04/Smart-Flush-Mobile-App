@@ -1,4 +1,4 @@
-import { onAuthStateChanged } from '@react-native-firebase/auth';
+import { onAuthStateChanged, type FirebaseAuthTypes } from '@react-native-firebase/auth';
 import { auth } from './firebase';
 import { getRequiredConfigValue, runtimeConfig } from './config';
 
@@ -29,11 +29,11 @@ function getResponseError(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-let pendingAuthResolution: Promise<NonNullable<typeof auth.currentUser>> | null = null;
+let pendingAuthResolution: Promise<FirebaseAuthTypes.User> | null = null;
 
 export async function resolveAuthenticatedUser(
   timeoutMs = 2000,
-): Promise<NonNullable<typeof auth.currentUser>> {
+): Promise<FirebaseAuthTypes.User> {
   if (auth.currentUser) {
     return auth.currentUser;
   }
@@ -42,7 +42,7 @@ export async function resolveAuthenticatedUser(
     return pendingAuthResolution;
   }
 
-  const promise = new Promise<NonNullable<typeof auth.currentUser>>(
+  const promise = new Promise<FirebaseAuthTypes.User>(
     (resolve, reject) => {
       let settled = false;
       let timer: ReturnType<typeof setTimeout> | null = null;

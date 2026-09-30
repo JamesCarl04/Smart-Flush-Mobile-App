@@ -103,6 +103,8 @@ uint8_t distanceIndex         = 0;
 float lastRawDistance         = 999.0;
 bool ledState                 = false;
 bool occupancyAlertSent       = false;
+bool manualLidOverride        = false; // Set true when opened from dashboard; prevents auto-flush
+bool manualFlushOnly          = false; // Set true when flushed from dashboard; prevents auto-UV
 
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
@@ -142,12 +144,15 @@ void publishHardwareAlert(const char* component, const char* message, const char
 // ── 9. Servo Functions ────────────────────────────────────────────────────────
 void openLid() {
   Serial.printf("[%lu] [LID] Opening — moving servo to %d°...\n", millis(), LID_OPEN_POS);
-  servo1.attach(SERVO1_PIN);
-  delay(15);
+  if (!servo1.attached()) {
+    servo1.attach(SERVO1_PIN);
+    delay(15);
+  }
   servo1.write(LID_OPEN_POS);
   delay(OPEN_TIME);
-  servo1.detach(); // Detach to save power, stop motor hum, and prevent brownouts
-  Serial.printf("[%lu] [LID] Open position reached. Servo detached.\n", millis());
+  // CRITICAL: DO NOT detach here! With yarn/cable, the servo must maintain
+  // active holding torque at LID_OPEN_POS to keep the lid lifted against gravity.
+  Serial.printf("[%lu] [LID] Open position reached. Holding yarn tension at %d°.\n", millis(), LID_OPEN_POS);
 
   StaticJsonDocument<128> doc;
   doc["deviceId"]  = DEVICE_ID;
@@ -160,11 +165,13 @@ void openLid() {
 
 void closeLid() {
   Serial.printf("[%lu] [LID] Closing — moving servo to %d°...\n", millis(), LID_CLOSE_POS);
-  servo1.attach(SERVO1_PIN);
-  delay(15);
+  if (!servo1.attached()) {
+    servo1.attach(SERVO1_PIN);
+    delay(15);
+  }
   servo1.write(LID_CLOSE_POS);
   delay(CLOSE_TIME);
-  servo1.detach();
+  servo1.detach(); // Detach once lid is down and resting on bowl
   Serial.printf("[%lu] [LID] Closed position reached. Servo detached.\n", millis());
 
   StaticJsonDocument<128> doc;
@@ -187,8 +194,14 @@ float getDistance(bool shouldUpdate = true) {
     digitalWrite(TRIG_PIN, LOW);
 
     long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout (~5 meters max)
-    float dist = (duration == 0) ? 999.0 : (duration / 58.0);
-    if (dist <= 0 || dist > 400) dist = 999.0;
+    
+    float dist = 999.0;
+    if (duration == 0) {
+      dist = 999.0; // Echo timeout (No pulse received on ECHO pin)
+    } else {
+      dist = duration / 58.0;
+      if (dist <= 0 || dist > 400) dist = 999.0;
+    }
 
     lastRawDistance = dist;
     distanceBuffer[distanceIndex % 5] = dist;
@@ -235,6 +248,8 @@ void checkLeakageInStandby() {
       interrupts();
 
       if (idlePulses > LEAK_PULSE_THRESHOLD) {
+        Serial.printf("\n>>> [LEAK TRIGGERED] Registered %d pulses in 5s! (Threshold is %d)\n",
+                      idlePulses, LEAK_PULSE_THRESHOLD);
         publishHardwareAlert(
           "water_leak",
           "Continuous water flow detected while toilet is idle (Stuck flapper valve or pipe leakage).",
@@ -249,6 +264,21 @@ void checkLeakageInStandby() {
 }
 
 // ── 12. WiFi & MQTT ───────────────────────────────────────────────────────────
+void publishSystemState(const char* stateStr, bool occupied, const char* lidStr) {
+  StaticJsonDocument<192> doc;
+  doc["deviceId"]  = DEVICE_ID;
+  doc["state"]     = stateStr;
+  doc["occupied"]  = occupied;
+  doc["lid"]       = lidStr;
+  doc["timestamp"] = millis();
+
+  char buffer[192];
+  serializeJson(doc, buffer);
+  client.publish("toilet/status/state", buffer, true);
+  Serial.printf("[%lu] [STATE BROADCAST] State: %s | Occupied: %s | Lid: %s\n",
+                millis(), stateStr, occupied ? "YES" : "NO", lidStr);
+}
+
 void connectWiFi() {
   Serial.printf("\n[%lu] [WIFI] Connecting to '%s'...\n", millis(), WIFI_SSID);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -268,57 +298,116 @@ void connectWiFi() {
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String message = "";
   for (int i = 0; i < length; i++) message += (char)payload[i];
+  String strTopic = String(topic);
   Serial.printf("[%lu] [MQTT RECEIVED] [%s]: %s\n", millis(), topic, message.c_str());
 
-  if (String(topic) == "toilet/commands/pump") {
-    digitalWrite(PUMP_PIN, message == "ON" ? LOW : HIGH);
-    Serial.printf("[%lu] [COMMAND] Pump set to: %s\n", millis(), message.c_str());
-  }
-  if (String(topic) == "toilet/commands/uv") {
-    if (message == "OFF" && currentState == UV_ACTIVE) {
-      digitalWrite(UV_PIN, HIGH);
-      float elapsed = (millis() - uvStartTime) / 1000.0;
-      StaticJsonDocument<128> doc;
-      doc["deviceId"]  = DEVICE_ID;
-      doc["duration"]  = elapsed;
-      doc["completed"] = false;
-      doc["reason"]    = "manual_stop";
-      doc["timestamp"] = millis();
-      char buffer[128];
-      serializeJson(doc, buffer);
-      client.publish("toilet/events/uv", buffer);
-      currentState = STANDBY;
-      standbyEnteredAt = millis();
-      clearDistanceBuffer();
-      Serial.printf("[%lu] [UV] Manual OFF abort during active cycle (%.1fs)\n", millis(), elapsed);
-    } else {
-      digitalWrite(UV_PIN, message == "ON" ? LOW : HIGH);
-      Serial.printf("[%lu] [COMMAND] UV set to: %s\n", millis(), message.c_str());
+  // ═════════════════════════════════════════════════════════════════════════════
+  // SAFETY INTERLOCK: Actuator commands ONLY permitted when IDLE (STANDBY) & VACANT!
+  // ═════════════════════════════════════════════════════════════════════════════
+  bool isActuatorCmd = (strTopic == "toilet/commands/pump" ||
+                        strTopic == "toilet/commands/uv"   ||
+                        strTopic == "toilet/commands/lid");
+
+  if (isActuatorCmd) {
+    // Explicitly allow closing the lid if it was opened manually from the dashboard
+    bool isClosingManualLid = (strTopic == "toilet/commands/lid" && message == "CLOSE" && currentState == LID_OPEN && manualLidOverride);
+    
+    // Always allow emergency stop / OFF commands
+    bool isEmergencyStop = (message == "OFF");
+
+    if (!isClosingManualLid && !isEmergencyStop) {
+      // 1. Block if toilet is in an active cycle or occupied
+      if (currentState != STANDBY) {
+        Serial.println("══════════════════════════════════════════════════════════════");
+        Serial.printf(">>> [SAFETY INTERLOCK BLOCKED] Remote command '%s' REJECTED!\n", message.c_str());
+        Serial.printf("    Reason: Toilet is busy in state '%s'. Controls are locked to protect user.\n",
+                      getStateName(currentState));
+        Serial.println("══════════════════════════════════════════════════════════════");
+        publishHardwareAlert("manual_control", "Remote command blocked: Stall is currently OCCUPIED or active.", "warning");
+        return;
+      }
+
+      // 2. Block even in STANDBY if a person is standing in front of the sensor
+      if (lastRawDistance > 0 && lastRawDistance < DETECTION_THRESHOLD_CM) {
+        Serial.println("══════════════════════════════════════════════════════════════");
+        Serial.printf(">>> [SAFETY INTERLOCK BLOCKED] Remote command '%s' REJECTED!\n", message.c_str());
+        Serial.printf("    Reason: Person detected entering stall (Dist: %.1f cm < %d cm).\n",
+                      lastRawDistance, DETECTION_THRESHOLD_CM);
+        Serial.println("══════════════════════════════════════════════════════════════");
+        publishHardwareAlert("manual_control", "Remote command blocked: Person detected in stall.", "warning");
+        return;
+      }
     }
   }
-  if (String(topic) == "toilet/commands/lid") {
-    if (message == "OPEN") {
-      if (currentState == UV_ACTIVE) {
-        digitalWrite(UV_PIN, HIGH);
-        float elapsed = (millis() - uvStartTime) / 1000.0;
-        StaticJsonDocument<128> doc;
-        doc["deviceId"]  = DEVICE_ID;
-        doc["duration"]  = elapsed;
-        doc["completed"] = false;
-        doc["reason"]    = "lid_opened";
-        doc["timestamp"] = millis();
-        char buffer[128];
-        serializeJson(doc, buffer);
-        client.publish("toilet/events/uv", buffer);
-        Serial.printf("[%lu] [UV] Aborted: Lid opened during UV (%.1fs)\n", millis(), elapsed);
+
+  // ── Authorized Idle Commands ────────────────────────────────────────────────
+  if (strTopic == "toilet/commands/pump") {
+    if (message == "ON") {
+      // Safe Manual Flush: Triggers normal timed cycle without auto-UV
+      Serial.printf("[%lu] [MANUAL FLUSH] Initiated from Web App (Timed for %d ms)\n", millis(), PUMP_DURATION_MS);
+      manualFlushOnly = true; // Prevents auto-UV after manual flush test
+      closeLid(); // Ensure lid is down before flushing
+      noInterrupts();
+      pulseCount = 0;
+      interrupts();
+      totalVolume    = 0;
+      flushStartTime = millis();
+      pumpStartTime  = millis();
+      digitalWrite(PUMP_PIN, LOW);
+      currentState = FLUSHING;
+      publishSystemState("FLUSHING", false, "closed");
+    } else {
+      digitalWrite(PUMP_PIN, HIGH);
+      manualFlushOnly = false;
+      if (currentState == FLUSHING) {
+        currentState = STANDBY;
+        standbyEnteredAt = millis();
+        publishSystemState("STANDBY", false, "closed");
       }
+      Serial.printf("[%lu] [COMMAND] Pump forced OFF\n", millis());
+    }
+  }
+
+  if (strTopic == "toilet/commands/uv") {
+    if (message == "ON") {
+      // Safe Manual UV: Closes lid first for eye/skin safety, then runs timed cycle
+      Serial.printf("[%lu] [MANUAL UV] Initiated from Web App (Timed for %d ms)\n", millis(), UV_DURATION_MS);
+      closeLid();
+      digitalWrite(UV_PIN, LOW);
+      uvStartTime = millis();
+      currentState = UV_ACTIVE;
+      publishSystemState("UV_ACTIVE", false, "closed");
+    } else {
+      digitalWrite(UV_PIN, HIGH);
+      Serial.printf("[%lu] [COMMAND] UV forced OFF\n", millis());
+      if (currentState == UV_ACTIVE) {
+        currentState = STANDBY;
+        standbyEnteredAt = millis();
+        publishSystemState("STANDBY", false, "closed");
+      }
+    }
+  }
+
+  if (strTopic == "toilet/commands/lid") {
+    if (message == "OPEN") {
       openLid();
       currentState = LID_OPEN;
       lidOpenedAt = millis();
+      manualLidOverride = true; // Suspends autonomous departure/flush!
+      publishSystemState("LID_OPEN", false, "open");
+      Serial.printf("[%lu] [MANUAL LID] Lid opened via dashboard. Autonomous auto-flush suspended.\n", millis());
     }
-    if (message == "CLOSE") closeLid();
+    if (message == "CLOSE") {
+      closeLid();
+      manualLidOverride = false;
+      currentState = STANDBY;
+      standbyEnteredAt = millis();
+      publishSystemState("STANDBY", false, "closed");
+      Serial.printf("[%lu] [MANUAL LID] Lid closed via dashboard. System returned to STANDBY.\n", millis());
+    }
   }
-  if (String(topic) == "toilet/commands/config") {
+
+  if (strTopic == "toilet/commands/config") {
     StaticJsonDocument<200> doc;
     deserializeJson(doc, message);
     if (doc.containsKey("pumpDuration")) {
@@ -407,6 +496,7 @@ void updateStateMachine(float distance) {
         currentState = PERSON_DETECTED;
         stallOccupiedSince = millis();
         occupancyAlertSent = false;
+        publishSystemState("PERSON_DETECTED", true, "opening");
       }
       break;
 
@@ -417,11 +507,27 @@ void updateStateMachine(float distance) {
       currentState    = LID_OPEN;
       personGoneTimer = 0;
       lastGracePrint  = 0;
+      publishSystemState("LID_OPEN", true, "open");
       Serial.printf("[%lu] [STATE] LID_OPEN: Starting %d ms sensor grace period...\n", millis(), SENSOR_GRACE_MS);
       break;
 
     case LID_OPEN:
       {
+        if (manualLidOverride) {
+          // Lid was opened manually via dashboard/web app!
+          // Hold lid open. Do NOT transition to departure tracking, do NOT close, do NOT flush!
+          // Safety timeout: Auto-close back to STANDBY (without flushing) if left forgotten for 15 minutes
+          if (millis() - lidOpenedAt >= 900000) {
+            Serial.printf("[%lu] [MANUAL LID TIMEOUT] 15 mins elapsed. Auto-closing lid back to STANDBY (No Flush).\n", millis());
+            closeLid();
+            manualLidOverride = false;
+            standbyEnteredAt = millis();
+            currentState = STANDBY;
+            publishSystemState("STANDBY", false, "closed");
+          }
+          break;
+        }
+
         unsigned long elapsedGrace = millis() - lidOpenedAt;
         if (elapsedGrace < SENSOR_GRACE_MS) {
           if (millis() - lastGracePrint >= 1000) {
@@ -435,6 +541,7 @@ void updateStateMachine(float distance) {
         currentState    = WAITING_FOR_DEPARTURE;
         personGoneTimer = 0;
         lastDeparturePrint = 0;
+        publishSystemState("OCCUPIED", true, "open");
       }
       break;
 
@@ -474,6 +581,7 @@ void updateStateMachine(float distance) {
                             millis(), totalOccupiedSec);
               Serial.println("────────────────────────────────────────────────────────────");
               currentState = LID_CLOSING;
+              publishSystemState("LID_CLOSING", false, "closing");
             }
           }
         } else {
@@ -513,6 +621,7 @@ void updateStateMachine(float distance) {
       }
 
       currentState = FLUSHING;
+      publishSystemState("FLUSHING", false, "closed");
       break;
 
     case FLUSHING:
@@ -584,10 +693,22 @@ void updateStateMachine(float distance) {
             client.publish("toilet/events/pump", buffer);
           }
 
-          digitalWrite(UV_PIN, LOW); // Turn UV ON
+          // If this was a manual test flush from the dashboard, return directly to STANDBY (No UV)
+          if (manualFlushOnly) {
+            manualFlushOnly = false;
+            clearDistanceBuffer();
+            standbyEnteredAt = millis();
+            currentState = STANDBY;
+            publishSystemState("STANDBY", false, "closed");
+            Serial.printf("[%lu] [MANUAL FLUSH COMPLETE] Flush test finished. Returned directly to STANDBY (No UV).\n", millis());
+            break;
+          }
+
+          digitalWrite(UV_PIN, LOW); // Turn UV ON (Autonomous flow only)
           uvStartTime  = millis();
           lastUvPrint  = 0;
           currentState = UV_ACTIVE;
+          publishSystemState("UV_ACTIVE", false, "closed");
           Serial.printf("[%lu] [UV] UV RELAY ON (Active LOW) — Sterilizing for %d ms...\n", millis(), UV_DURATION_MS);
         }
       }
@@ -621,6 +742,7 @@ void updateStateMachine(float distance) {
           clearDistanceBuffer();
           standbyEnteredAt = millis();
           currentState = STANDBY;
+          publishSystemState("STANDBY", false, "closed");
           Serial.println("────────────────────────────────────────────────────────────");
           Serial.printf("[%lu] [STATE] Complete cycle finished -> Returned to STANDBY (Ready)\n", millis());
           Serial.println("────────────────────────────────────────────────────────────\n");
@@ -651,28 +773,30 @@ void printSerialTelemetry(float distance) {
 
 // ── 15. Setup ─────────────────────────────────────────────────────────────────
 void setup() {
+  // ── Step 0: CRITICAL HARDWARE SAFETY CLAMP (First CPU instructions) ─────────
+  // Clamps active-low relays to HIGH (OFF) in microseconds before any delays run
+  digitalWrite(PUMP_PIN, HIGH);
+  digitalWrite(UV_PIN,   HIGH);
+  digitalWrite(LED_PIN,  LOW);
+  digitalWrite(TRIG_PIN, LOW);
+
+  pinMode(PUMP_PIN, OUTPUT);
+  pinMode(UV_PIN,   OUTPUT);
+  pinMode(LED_PIN,  OUTPUT);
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+
+  servo1.detach(); // Ensure servo motor is completely unpowered at boot
+
   Serial.begin(115200);
-  delay(500); // Allow UART connection to settle
+  delay(300); // Allow UART connection to settle
 
   Serial.println("\n");
   Serial.println("╔══════════════════════════════════════════════════════════════╗");
   Serial.println("║   SMART FLUSH ESP32 FIRMWARE — LIVE SERIAL TELEMETRY         ║");
   Serial.printf ("║   Device: %-15s Location: %-23s ║\n", DEVICE_ID, "Stall 1");
   Serial.println("╚══════════════════════════════════════════════════════════════╝");
-
-  // Prevent relay chattering at power-on
-  digitalWrite(PUMP_PIN, HIGH);
-  digitalWrite(UV_PIN,   HIGH);
-  digitalWrite(LED_PIN,  LOW);
-
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
-  pinMode(PUMP_PIN, OUTPUT);
-  pinMode(UV_PIN,   OUTPUT);
-  pinMode(LED_PIN,  OUTPUT);
-
-  servo1.detach();
-  Serial.printf("[%lu] [INIT] Actuator pins initialized (Relays: OFF, Servo: Detached)\n", millis());
+  Serial.printf("[%lu] [INIT] Hardware safety clamp engaged: Relays OFF, Servo detached\n", millis());
 
   pinMode(FLOW_PIN, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(FLOW_PIN), pulseCounter, RISING);
@@ -685,8 +809,12 @@ void setup() {
 
   connectWiFi();
   connectMQTT();
+  noInterrupts();
+  pulseCount = 0; // Clear any power-on contact bounce pulses
+  interrupts();
 
   standbyEnteredAt = millis();
+  publishSystemState("STANDBY", false, "closed");
   Serial.printf("[%lu] [SYSTEM] Smart Flush ready on STANDBY. Serial Monitor active at 115200 baud.\n\n", millis());
 }
 

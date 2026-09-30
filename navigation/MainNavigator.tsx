@@ -155,9 +155,9 @@ function SupervisorStackNavigator(): React.JSX.Element {
 export function MainNavigator(): React.JSX.Element {
   const theme = useTheme();
   const { role } = useAuth();
-  const { pendingCount, activeTasksCount } = useTasks();
+  const { pendingCount, activeTasksCount, historyBadgeCount, clearHistoryBadge } = useTasks();
 
-  if (role !== 'maintenance') {
+  if (role === 'supervisor') {
     return <SupervisorStackNavigator />;
   }
 
@@ -243,7 +243,21 @@ export function MainNavigator(): React.JSX.Element {
       <Tab.Screen
         name="HistoryTab"
         component={HistoryStackNavigator}
-        options={{ title: 'History' }}
+        options={{
+          title: 'History',
+          tabBarBadge: historyBadgeCount > 0 ? historyBadgeCount : undefined,
+          tabBarBadgeStyle: {
+            backgroundColor: '#B5121B',
+            color: '#FFFFFF',
+            fontSize: 11,
+            fontWeight: '800',
+          },
+        }}
+        listeners={{
+          tabPress: () => {
+            clearHistoryBadge();
+          },
+        }}
       />
     </Tab.Navigator>
   );

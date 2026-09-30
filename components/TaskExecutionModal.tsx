@@ -41,12 +41,14 @@ import {
   currentUserId,
   isOnlineAsync,
   queueOfflineCompletion,
+  secondsBetween,
 } from '../lib/task-completion';
 import {
   CHECKLIST_LABELS,
   EMPTY_CHECKLIST,
 } from '../lib/tasks';
 import { getRestroomLabel } from '../lib/restrooms';
+import { playCompletionSound } from '../lib/sound-effects';
 import type {
   ChecklistValue,
   Task,
@@ -167,6 +169,7 @@ export function TaskExecutionModal({
   const user = authContext?.user ?? null;
   const tasksContext = useContext(TasksContext);
   const refreshTasks = tasksContext?.refreshTasks ?? (async () => {});
+  const updateLocalTask = tasksContext?.updateLocalTask ?? (() => {});
 
   const [step, setStep] = useState<ModalStep>('before_photo');
   const [beforePhotoUri, setBeforePhotoUri] = useState<string | null>(null);
@@ -504,9 +507,11 @@ export function TaskExecutionModal({
         checklist,
       ) as unknown as TaskChecklist;
       const online = await isOnlineAsync();
+      const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
 
+      let isFullyCompleted = true;
       if (online) {
-        await completeTaskOnline({
+        const result = await completeTaskOnline({
           taskId: task.id,
           acknowledgedAt: task.acknowledgedAt ?? null,
           createdAt: task.createdAt,
@@ -523,6 +528,7 @@ export function TaskExecutionModal({
           isRecheck: isRecheckMode,
           recheckCount: task.recheckCount ?? 0,
         });
+        isFullyCompleted = result?.isFullyCompleted ?? true;
       } else {
         await queueOfflineCompletion({
           taskId: task.id,
@@ -542,32 +548,89 @@ export function TaskExecutionModal({
           completedBy: uid,
           offlineSynced: false,
         });
+        if (isTeam) {
+          const existingSubmissions = task.submissions ?? {};
+          const completedByMap = task.completedByMap ?? {};
+          const completedCount = task.assignedToIds!.filter(
+            (id) =>
+              id === uid ||
+              Boolean(existingSubmissions[id]) ||
+              Boolean(completedByMap[id]) ||
+              (typeof task.completedBy === 'object' && Boolean((task.completedBy as unknown as Record<string, any>)?.[id])),
+          ).length;
+          isFullyCompleted = completedCount >= task.assignedToIds!.length;
+        } else {
+          isFullyCompleted = true;
+        }
       }
 
-      await refreshTasks();
+      const nextRecheckCount = isRecheckMode
+        ? (task.recheckCount ?? 0) + 1
+        : (task.recheckCount ?? 0);
+
+      const workDuration = task.workDuration ?? (task.acknowledgedAt ? secondsBetween(task.acknowledgedAt, completedAt) : null);
+      const totalTime = task.totalTime ?? (task.createdAt ? secondsBetween(task.createdAt, completedAt) : null);
+
       const updatedTask: Task = {
         ...task,
-        status: 'completed',
+        status: isFullyCompleted ? 'completed' : 'acknowledged',
         inspectionStatus: 'pending_review',
-        completedAt,
-        completedBy: uid,
+        completedAt: isFullyCompleted ? completedAt : task.completedAt,
+        completedBy: isFullyCompleted ? uid : task.completedBy,
+        submissions: {
+          ...(task.submissions ?? {}),
+          [uid]: {
+            technicianUid: uid,
+            technicianName: user?.name ?? 'You',
+            checklist,
+            beforePhotoUrl: beforePhotoUri,
+            beforePhotoCapturedAt: beforeCapturedAt,
+            afterPhotoUrl: afterPhotoUri,
+            afterPhotoCapturedAt: afterCapturedAt,
+            additionalPhotos: additionalAreaPhotos.map((p) => ({
+              id: p.id,
+              areaTag: p.areaTag,
+              photoUrl: p.localUri,
+              capturedAt: p.capturedAt,
+            })),
+            remarks,
+            workDuration,
+            completedAt,
+            biometricVerified,
+          },
+        },
         beforePhotoUrl: beforePhotoUri,
         beforePhotoCapturedAt: beforeCapturedAt,
         afterPhotoUrl: afterPhotoUri,
         afterPhotoCapturedAt: afterCapturedAt,
+        additionalPhotos: additionalAreaPhotos.map((p) => ({
+          id: p.id,
+          areaTag: p.areaTag,
+          photoUrl: p.localUri,
+          capturedAt: p.capturedAt,
+        })),
         checklist,
         remarks,
+        workDuration: isFullyCompleted ? workDuration : task.workDuration,
+        totalTime: isFullyCompleted ? totalTime : task.totalTime,
         biometricVerified,
-        recheckCount: isRecheckMode
-          ? (task.recheckCount ?? 0) + 1
-          : (task.recheckCount ?? 0),
+        offlineSynced: !online ? false : true,
+        recheckCount: nextRecheckCount,
         recheckedBy: isRecheckMode ? uid : task.recheckedBy,
         recheckedAt: isRecheckMode ? completedAt : task.recheckedAt,
       };
 
+      updateLocalTask(updatedTask);
+      void playCompletionSound();
+
       if (onTaskCompleted) {
         onTaskCompleted(updatedTask);
       }
+
+      if (online) {
+        void refreshTasks().catch(() => {});
+      }
+
       if (isRecheckMode) {
         Alert.alert(
           'Re-inspection Submitted',

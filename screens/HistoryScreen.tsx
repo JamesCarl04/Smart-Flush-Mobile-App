@@ -1,7 +1,7 @@
 import { FlatList, Image, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useEffect, useMemo, useState } from 'react';
 import { Card, Snackbar, Text, TextInput } from 'react-native-paper';
 
 import {
@@ -83,9 +83,17 @@ function EmptyState(): React.JSX.Element {
 export function HistoryScreen({ navigation }: Props): React.JSX.Element {
   const auth = useContext(AuthContext);
   const user = auth?.user ?? null;
-  const { historyTasks, loading, errorMessage, clearError } = useTasks();
+  const { historyTasks, loading, errorMessage, clearError, clearHistoryBadge } = useTasks();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRange, setSelectedRange] = useState<HistoryRange>('week');
+
+  useEffect(() => {
+    clearHistoryBadge?.();
+    const unsubscribe = navigation?.addListener?.('focus', () => {
+      clearHistoryBadge?.();
+    });
+    return unsubscribe;
+  }, [navigation, clearHistoryBadge]);
 
   const visibleHistory = useMemo(() => {
     const now = new Date();
