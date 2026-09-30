@@ -145,13 +145,12 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
     return <TaskDetailSkeleton />;
   }
 
-  if (!activeTask) {
-    return <EmptyTaskPanel />;
-  }
-
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
+      {!activeTask ? (
+        <EmptyTaskPanel />
+      ) : (
+        <ScrollView contentContainerStyle={styles.contentContainer} showsVerticalScrollIndicator={false}>
         {/* Multi-Active Task Switcher Bar */}
         {activeTasks.length > 1 ? (
           <View style={styles.multiTaskSelectorContainer}>
@@ -289,25 +288,28 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
           </Card.Content>
         </Card>
       </ScrollView>
+      )}
 
       {/* Slide-Up Task Execution Modal */}
-      <TaskExecutionModal
-        visible={executionModalVisible}
-        task={activeTask}
-        onDismiss={() => setExecutionModalVisible(false)}
-        onTaskCompleted={(completedTask: Task) => {
-          void playCompletionSound();
-          updateLocalTask(completedTask);
-          if (selectedTaskIdState === completedTask.id || routeTaskId === completedTask.id) {
-            setSelectedTaskIdState(null);
-            if (navigation.setParams) {
-              navigation.setParams({ taskId: undefined });
+      {activeTask ? (
+        <TaskExecutionModal
+          visible={executionModalVisible}
+          task={activeTask}
+          onDismiss={() => setExecutionModalVisible(false)}
+          onTaskCompleted={(completedTask: Task) => {
+            void playCompletionSound();
+            updateLocalTask(completedTask);
+            if (selectedTaskIdState === completedTask.id || routeTaskId === completedTask.id) {
+              setSelectedTaskIdState(null);
+              if (navigation.setParams) {
+                navigation.setParams({ taskId: undefined });
+              }
             }
-          }
-          setExecutionModalVisible(false);
-          setSnackbarMessage('✓ Task Completed');
-        }}
-      />
+            setExecutionModalVisible(false);
+            setSnackbarMessage('✓ Task Completed');
+          }}
+        />
+      ) : null}
 
       <Snackbar
         visible={snackbarMessage !== null}

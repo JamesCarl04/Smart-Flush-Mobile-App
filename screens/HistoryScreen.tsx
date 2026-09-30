@@ -88,7 +88,6 @@ export function HistoryScreen({ navigation }: Props): React.JSX.Element {
   const [selectedRange, setSelectedRange] = useState<HistoryRange>('week');
 
   useEffect(() => {
-    clearHistoryBadge?.();
     const unsubscribe = navigation?.addListener?.('focus', () => {
       clearHistoryBadge?.();
     });

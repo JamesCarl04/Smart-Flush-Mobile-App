@@ -294,7 +294,7 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
             offlineSynced: false,
           }),
         );
-        expect(screen.getByText('Saved offline. Will sync when connected.')).toBeTruthy();
+        expect(screen.getByText('✓ Task Completed')).toBeTruthy();
       },
       { timeout: 4000 },
     );

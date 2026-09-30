@@ -20,6 +20,11 @@ export async function playCompletionSound(): Promise<void> {
   lastPlayTimestamp = now;
 
   try {
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+    }).catch(() => {});
     const { sound } = await Audio.Sound.createAsync(
       require('../assets/sounds/task-complete.wav'),
       { shouldPlay: true },

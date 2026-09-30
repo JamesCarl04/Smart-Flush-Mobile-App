@@ -720,7 +720,7 @@ export function TaskDetailScreen({
         } else {
           isFullyCompleted = true;
         }
-        setSnackbarMessage('Saved offline. Will sync when connected.');
+        setSnackbarMessage(isFullyCompleted ? '✓ Task Completed' : '✓ Checklist Submitted');
       }
 
       const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === 'done' || v === 'na').length}/10`;
@@ -789,30 +789,15 @@ export function TaskDetailScreen({
         void refreshTasks().catch(() => {});
       }
 
-      Alert.alert(
-        isFullyCompleted ? 'Task Completed' : 'Checklist Submitted',
-        isFullyCompleted
-          ? 'Work order has been closed and verified. View your completed work in History.'
-          : 'Your checklist has been submitted! You are now free for other tasks. This work order remains active for your teammate.',
-        [
-          {
-            text: 'View History',
-            onPress: () => {
-              if (navigation && 'navigate' in navigation) {
-                (navigation as any).navigate('HistoryTab');
-              }
-            },
-          },
-          {
-            text: 'OK',
-            onPress: () => {
-              if (navigation && 'goBack' in navigation) {
-                navigation.goBack();
-              }
-            },
-          },
-        ],
-      );
+      setSnackbarMessage(isFullyCompleted ? '✓ Task Completed' : '✓ Checklist Submitted');
+
+      if (navigation && 'goBack' in navigation) {
+        setTimeout(() => {
+          if (navigation.canGoBack?.()) {
+            navigation.goBack();
+          }
+        }, 1500);
+      }
     } catch (error) {
       setSnackbarMessage(
         error instanceof Error
