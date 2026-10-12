@@ -511,26 +511,38 @@ export function TaskExecutionModal({
       const isTeam = Array.isArray(task.assignedToIds) && task.assignedToIds.length > 1;
 
       let isFullyCompleted = true;
+      let usedOfflineFallback = false;
+
       if (online) {
-        const result = await completeTaskOnline({
-          taskId: task.id,
-          acknowledgedAt: task.acknowledgedAt ?? null,
-          createdAt: task.createdAt,
-          checklist: firestoreChecklist,
-          remarks,
-          beforePhotoLocalUri: beforePhotoUri,
-          beforePhotoCapturedAt: beforeCapturedAt,
-          afterPhotoLocalUri: afterPhotoUri,
-          afterPhotoCapturedAt: afterCapturedAt,
-          additionalPhotos: additionalAreaPhotos,
-          biometricVerified,
-          completedAt,
-          completedBy: uid,
-          isRecheck: isRecheckMode,
-          recheckCount: task.recheckCount ?? 0,
-        });
-        isFullyCompleted = result?.isFullyCompleted ?? true;
-      } else {
+        try {
+          const result = await completeTaskOnline({
+            taskId: task.id,
+            acknowledgedAt: task.acknowledgedAt ?? null,
+            createdAt: task.createdAt,
+            checklist: firestoreChecklist,
+            remarks,
+            beforePhotoLocalUri: beforePhotoUri,
+            beforePhotoCapturedAt: beforeCapturedAt,
+            afterPhotoLocalUri: afterPhotoUri,
+            afterPhotoCapturedAt: afterCapturedAt,
+            additionalPhotos: additionalAreaPhotos,
+            biometricVerified,
+            completedAt,
+            completedBy: uid,
+            isRecheck: isRecheckMode,
+            recheckCount: task.recheckCount ?? 0,
+          });
+          isFullyCompleted = result?.isFullyCompleted ?? true;
+        } catch (onlineError) {
+          console.warn(
+            '[TaskExecutionModal] Online completion upload failed; automatically saving locally for later sync:',
+            onlineError,
+          );
+          usedOfflineFallback = true;
+        }
+      }
+
+      if (!online || usedOfflineFallback) {
         await queueOfflineCompletion({
           taskId: task.id,
           completedAt: completedAt.toISOString(),
@@ -615,7 +627,7 @@ export function TaskExecutionModal({
         workDuration: isFullyCompleted ? workDuration : task.workDuration,
         totalTime: isFullyCompleted ? totalTime : task.totalTime,
         biometricVerified,
-        offlineSynced: !online ? false : true,
+        offlineSynced: (!online || usedOfflineFallback) ? false : true,
         recheckCount: nextRecheckCount,
         recheckedBy: isRecheckMode ? uid : task.recheckedBy,
         recheckedAt: isRecheckMode ? completedAt : task.recheckedAt,
@@ -629,11 +641,16 @@ export function TaskExecutionModal({
         onTaskCompleted(updatedTask);
       }
 
-      if (online) {
+      if (online && !usedOfflineFallback) {
         void refreshTasks().catch(() => {});
       }
 
-      if (isRecheckMode) {
+      if (usedOfflineFallback) {
+        Alert.alert(
+          'Saved to Device',
+          'Photo upload failed. Your work is saved offline and will sync automatically.',
+        );
+      } else if (isRecheckMode) {
         Alert.alert(
           'Re-inspection Submitted',
           'The rectified task has been resubmitted for supervisor review.',

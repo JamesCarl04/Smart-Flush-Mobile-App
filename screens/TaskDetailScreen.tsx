@@ -668,31 +668,42 @@ export function TaskDetailScreen({
       ) as unknown as TaskChecklist;
       const online = await isOnlineAsync();
       let isFullyCompleted = true;
+      let usedOfflineFallback = false;
 
       if (online) {
-        const outcome = await completeTaskOnline({
-          taskId: task.id,
-          acknowledgedAt: task.acknowledgedAt ?? null,
-          createdAt: task.createdAt,
-          checklist: firestoreChecklist,
-          remarks,
-          beforePhotoLocalUri: beforePhotoUri,
-          beforePhotoCapturedAt: beforeCapturedAt,
-          afterPhotoLocalUri: afterPhotoUri,
-          afterPhotoCapturedAt: afterCapturedAt,
-          biometricVerified,
-          completedAt,
-          completedBy: uid,
-          isRecheck: task.status === 'rechecking',
-          recheckCount: (task.recheckCount ?? 0) + (task.status === 'rechecking' ? 1 : 0),
-        });
-        isFullyCompleted = outcome?.isFullyCompleted ?? true;
-        setSnackbarMessage(
-          isFullyCompleted
-            ? 'Task Completed'
-            : 'Checklist submitted. Work order remains active for teammate(s).',
-        );
-      } else {
+        try {
+          const outcome = await completeTaskOnline({
+            taskId: task.id,
+            acknowledgedAt: task.acknowledgedAt ?? null,
+            createdAt: task.createdAt,
+            checklist: firestoreChecklist,
+            remarks,
+            beforePhotoLocalUri: beforePhotoUri,
+            beforePhotoCapturedAt: beforeCapturedAt,
+            afterPhotoLocalUri: afterPhotoUri,
+            afterPhotoCapturedAt: afterCapturedAt,
+            biometricVerified,
+            completedAt,
+            completedBy: uid,
+            isRecheck: task.status === 'rechecking',
+            recheckCount: (task.recheckCount ?? 0) + (task.status === 'rechecking' ? 1 : 0),
+          });
+          isFullyCompleted = outcome?.isFullyCompleted ?? true;
+          setSnackbarMessage(
+            isFullyCompleted
+              ? 'Task Completed'
+              : 'Checklist submitted. Work order remains active for teammate(s).',
+          );
+        } catch (onlineError) {
+          console.warn(
+            '[TaskDetailScreen] Online completion failed; automatically saving locally for later sync:',
+            onlineError,
+          );
+          usedOfflineFallback = true;
+        }
+      }
+
+      if (!online || usedOfflineFallback) {
         await queueOfflineCompletion({
           taskId: task.id,
           completedAt: completedAt.toISOString(),
@@ -720,7 +731,13 @@ export function TaskDetailScreen({
         } else {
           isFullyCompleted = true;
         }
-        setSnackbarMessage(isFullyCompleted ? 'Task Completed' : 'Checklist Submitted');
+        setSnackbarMessage(
+          usedOfflineFallback
+            ? 'Saved offline. Will sync automatically.'
+            : isFullyCompleted
+              ? 'Task Completed'
+              : 'Checklist Submitted',
+        );
       }
 
       const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === 'done' || v === 'na').length}/10`;
@@ -741,7 +758,7 @@ export function TaskDetailScreen({
           checklistScore: completedScore,
           isFullyCompleted,
           isRecheck: task.status === 'rechecking',
-          offlineSynced: !online,
+          offlineSynced: (!online || usedOfflineFallback),
           remarks,
         },
       );
@@ -774,7 +791,7 @@ export function TaskDetailScreen({
         afterPhotoUrl: afterPhotoUri,
         workDuration: isFullyCompleted ? elapsedWorkDuration : task.workDuration,
         totalTime: isFullyCompleted ? totalTime : task.totalTime,
-        offlineSynced: !online ? false : true,
+        offlineSynced: (!online || usedOfflineFallback) ? false : true,
         recheckCount: nextRecheckCount,
         recheckedBy: task.status === 'rechecking' ? uid : task.recheckedBy,
         recheckedAt: task.status === 'rechecking' ? completedAt : task.recheckedAt,
@@ -786,11 +803,9 @@ export function TaskDetailScreen({
       setStep('details');
       void playCompletionSound();
 
-      if (online) {
+      if (online && !usedOfflineFallback) {
         void refreshTasks().catch(() => {});
       }
-
-      setSnackbarMessage(isFullyCompleted ? 'Task Completed' : 'Checklist Submitted');
 
       if (navigation && 'goBack' in navigation) {
         setTimeout(() => {
