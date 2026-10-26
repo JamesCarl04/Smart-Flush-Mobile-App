@@ -50,7 +50,7 @@ export async function fetchMaintenancePersonnel(): Promise<MaintenancePerson[]> 
         .map((doc) => {
           const data = doc.data();
           const role = typeof data.role === 'string' ? data.role.toLowerCase() : '';
-          if (role !== 'maintenance' && role !== 'technician' && role !== 'worker') {
+          if (role !== 'maintenance' && role !== 'technician') {
             return null;
           }
           const lastSeenMillis = extractTimestampMillis(data.lastSeen);

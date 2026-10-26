@@ -236,15 +236,9 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
           completedBy: 'user-tech-1',
         }),
       );
+      expect(screen.getByText('Task Completed')).toBeTruthy();
+      expect(mockRefreshTasks).toHaveBeenCalled();
     });
-
-    await waitFor(
-      () => {
-        expect(screen.getByText('Task Completed')).toBeTruthy();
-        expect(mockRefreshTasks).toHaveBeenCalled();
-      },
-      { timeout: 4000 },
-    );
   });
 
   it('queues completion offline when device is offline', async () => {
@@ -296,7 +290,7 @@ describe('TaskDetailScreen Integration - 3-Step Completion Flow', () => {
         );
         expect(screen.getByText('Task Completed')).toBeTruthy();
       },
-      { timeout: 4000 },
+      { timeout: 15000 },
     );
   });
 

@@ -180,6 +180,100 @@ describe('AuthContext Integration', () => {
     expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
   });
 
+  it('strictly denies "admin" role from signing into mobile app and invokes signOut', async () => {
+    const mockFirebaseUser = {
+      uid: 'admin-attempt-uid',
+      email: 'admin@smartflush.com',
+      displayName: 'Campus Admin',
+      getIdToken: jest.fn().mockResolvedValue('token-admin'),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation((_auth, callback) => {
+      callback(mockFirebaseUser);
+      return jest.fn();
+    });
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: {
+          id: 'admin-attempt-uid',
+          email: 'admin@smartflush.com',
+          role: 'admin',
+        },
+      }),
+    });
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    expect(screen.getByTestId('user-uid').props.children).toBe('NO_USER');
+    expect(screen.getByTestId('user-role').props.children).toBe('NO_ROLE');
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Unable to Sign In',
+      'Access denied. This app is for maintenance and supervisor accounts only.',
+    );
+    expect(FirebaseAuth.signOut).toHaveBeenCalledWith(auth);
+  });
+
+  it('resolves authenticated state when user has "technician" role', async () => {
+    const mockFirebaseUser = {
+      uid: 'tech-user-3',
+      email: 'technician@smartflush.com',
+      displayName: 'Tech Specialist',
+      getIdToken: jest.fn().mockResolvedValue('token-tech'),
+    };
+
+    (FirebaseAuth.onAuthStateChanged as jest.Mock).mockImplementation((_auth, callback) => {
+      callback(mockFirebaseUser);
+      return jest.fn();
+    });
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        success: true,
+        data: {
+          id: 'tech-user-3',
+          email: 'technician@smartflush.com',
+          name: 'Tech Specialist',
+          role: 'technician',
+          building: 'Science Hall',
+        },
+      }),
+    });
+
+    render(
+      <PaperProvider>
+        <AuthProvider>
+          <TestAuthConsumer />
+        </AuthProvider>
+      </PaperProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading-state').props.children).toBe('READY');
+    });
+
+    expect(screen.getByTestId('user-uid').props.children).toBe('tech-user-3');
+    expect(screen.getByTestId('user-email').props.children).toBe('technician@smartflush.com');
+    expect(screen.getByTestId('user-role').props.children).toBe('technician');
+    expect(screen.getByTestId('user-name').props.children).toBe('Tech Specialist');
+    expect(screen.getByTestId('user-building').props.children).toBe('Science Hall');
+  });
+
   it('handles API verification failure by alerting error, nullifying user, and invoking signOut', async () => {
     const mockFirebaseUser = {
       uid: 'failing-user',

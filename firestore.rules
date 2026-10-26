@@ -25,7 +25,7 @@ service cloud.firestore {
     }
 
     function isMaintenance() {
-      return currentUserRole() == 'maintenance' || currentUserRole() == 'technician' || currentUserRole() == 'worker';
+      return currentUserRole() == 'maintenance' || currentUserRole() == 'technician';
     }
 
     function isStaff() {
@@ -62,7 +62,7 @@ service cloud.firestore {
     // ── Maintenance Notes & Shift Logs ───────────────────────────
     match /maintenanceNotes/{noteId} {
       allow read: if isStaff();
-      allow create: if isAuthenticated() && currentUserRole() != 'viewer';
+      allow create: if isStaff();
       allow update, delete: if isAdmin();
     }
 

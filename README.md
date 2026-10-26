@@ -8,7 +8,7 @@
 [![Expo](https://img.shields.io/badge/Expo%20SDK-54.0-black.svg?logo=expo)](https://expo.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg?logo=typescript)](https://www.typescriptlang.org/)
 [![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Storage%20%7C%20FCM-orange.svg?logo=firebase)](https://firebase.google.com/)
-[![Jest Tests](https://img.shields.io/badge/Tests-25%20Suites%20%7C%20285%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
+[![Jest Tests](https://img.shields.io/badge/Tests-29%20Suites%20%7C%20340%20Passed-brightgreen.svg?logo=jest)](#-11-quality-assurance--testing-matrix)
 [![UI Library](https://img.shields.io/badge/UI-React%20Native%20Paper%20MD3-purple.svg)](https://callstack.github.io/react-native-paper/)
 [![Target OS](https://img.shields.io/badge/Platform-Android%2014%2B%20(Dev%20Client)-green.svg?logo=android)](https://www.android.com/)
 [![License](https://img.shields.io/badge/License-Proprietary-red.svg)](#)
@@ -145,7 +145,7 @@ graph TD
 | **Reporting & Export**| **expo-print** & **expo-sharing** | `~15.0.8` | Dynamic HTML-to-PDF rendering and native Android OS file sharing |
 | **Local Persistence**| **AsyncStorage** | `2.2.0` | Stale-While-Revalidate (SWR) cache and offline transaction queue |
 | **Release Automation**| **Node.js SemVer Engine** | `scripts/release.js` | Automated version bumping (`package.json`, `app.json`, `build.gradle`), `CHANGELOG.md` generation, and Git tagging |
-| **Automated Testing**| **Jest** & **RNTL** | `29.7.0` | Comprehensive unit, integration, and E2E regression suite (25 suites, 285 tests) |
+| **Automated Testing**| **Jest** & **RNTL** | `29.7.0` | Comprehensive unit, integration, and E2E regression suite (29 suites, 340 tests) |
 
 ---
 
@@ -195,7 +195,11 @@ The SDCA Annex building contains **22 registered restroom units** and **96 total
 
 ## 👥 4. Dual-Role System & Access Matrix
 
-Klir Mobile provides strict role-based isolation. When a user logs in, their profile document in Firestore is verified, establishing access boundaries:
+Klir Mobile provides strict role-based isolation and platform-enforced access boundaries:
+* **Campus Administrators (`admin`)**: **Strictly Blocked from Mobile.** When an administrator attempts to authenticate, `AuthContext.tsx` aborts login and signs out with the security notice: *"Access denied. This app is for maintenance and supervisor accounts only."* Administrators manage the ecosystem exclusively via the Web Console.
+* **Field Supervisors (`supervisor`)**: Authenticate exclusively into the **Supervisor Command Hub** (`SupervisorStackNavigator`). Barred from the Web Console and cannot access technician execution tabs.
+* **Custodial Technicians (`maintenance` / `technician`)**: Authenticate exclusively into the **Technician Execution Hub** (`Tab.Navigator`: Inbox, Active Task, History). Barred from the Web Console and cannot access supervisor screens or QA review gates.
+* **Zero Legacy Roles**: There are **no visitor, viewer, user, operator, or worker roles**. Any account without an explicit operational role assignment is denied entry.
 
 ```
                                   ┌─────────────────────────────┐
@@ -220,19 +224,21 @@ Klir Mobile provides strict role-based isolation. When a user logs in, their pro
 
 ### Feature Comparison Matrix
 
-| Capability / Module | Custodial Technician (`maintenance`) | Field Supervisor (`supervisor`) |
-| :--- | :---: | :---: |
-| **Receive Real-time IoT Push Alerts** | ✅ (Assigned zone) | ✅ (Campus-wide) |
-| **Acknowledge & Accept Work Orders** | ✅ | ❌ (View / Reassign only) |
-| **Execute 10-Point Cleaning Checklist** | ✅ | ❌ (Audit only) |
-| **Capture Watermarked Proof Photos** | ✅ | ❌ (Inspect in high-res) |
-| **View Personal Work Order History** | ✅ (Personal stats) | ✅ (All personnel records) |
-| **View Team Availability & Capacity Roster** | ❌ | ✅ (Live status & active tasks) |
-| **Reassign Tasks Between Staff Members** | ❌ | ✅ (With conflict locking) |
-| **Flag Tasks with Corrective Remarks** | ❌ | ✅ (Triggers worker recheck) |
-| **Approve Completed Work Orders** | ❌ | ✅ (Biometrically gated) |
-| **Export Official PDF Compliance Reports** | ❌ | ✅ (Branded SDCA template) |
-| **Export RFC 4180 CSV Spreadsheets** | ❌ | ✅ (17 audit columns) |
+| Capability / Module | Custodial Technician (`maintenance` / `technician`) | Field Supervisor (`supervisor`) | Campus Administrator (`admin`) |
+| :--- | :---: | :---: | :---: |
+| **Mobile App Access** | ✅ Full (Technician Workspace) | ✅ Full (Supervisor Hub) | ❌ Blocked (`403 Access Denied`) |
+| **Web Console Access (`/dashboard`)** | ❌ Blocked (Mobile Only) | ❌ Blocked (Mobile Only) | ✅ Exclusive Full Access |
+| **Receive Real-time IoT Push Alerts** | ✅ (Assigned zone) | ✅ (Campus-wide) | ❌ (Web Feed Only) |
+| **Acknowledge & Accept Work Orders** | ✅ | ❌ (View / Reassign only) | ❌ (Dispatch only) |
+| **Execute 10-Point Cleaning Checklist** | ✅ | ❌ (Audit only) | ❌ No |
+| **Capture Watermarked Proof Photos** | ✅ | ❌ (Inspect in high-res) | ❌ No |
+| **View Personal Work Order History** | ✅ (Personal stats) | ✅ (All personnel records) | ✅ (System Audit Log) |
+| **View Team Availability & Capacity Roster** | ❌ | ✅ (Live status & active tasks) | ✅ (Staff Roster View) |
+| **Reassign Tasks Between Staff Members** | ❌ | ✅ (With conflict locking) | ✅ Full |
+| **Flag Tasks with Corrective Remarks** | ❌ | ✅ (Triggers worker recheck) | ✅ Full |
+| **Approve Completed Work Orders** | ❌ | ✅ (Biometrically gated) | ✅ Full |
+| **Export Official PDF Compliance Reports** | ❌ | ✅ (Branded SDCA template) | ✅ Full |
+| **Export RFC 4180 CSV Spreadsheets** | ❌ | ✅ (17 audit columns) | ✅ Full |
 
 ### Live User Directory & Test Accounts
 
@@ -807,19 +813,19 @@ npm run release
 
 ## 🧪 11. Quality Assurance & Testing Matrix
 
-Klir Mobile maintains a comprehensive test suite of **25 test suites** and **285 automated tests** (100% passing) covering unit logic, integration contexts, and end-to-end user journeys:
+Klir Mobile maintains a comprehensive test suite of **29 test suites** and **340 automated tests** (100% passing) covering unit logic, integration contexts, navigation isolation, and end-to-end user journeys:
 
 ```powershell
-# Run the complete test suite (25 suites, 285 tests passing)
+# Run the complete test suite (29 suites, 340 tests passing)
 npm test
 
 # Run TypeScript strict typecheck (zero errors enforced)
 npm run typecheck
 
-# Run unit tests only (12 suites, 199 tests)
+# Run unit tests only (14 suites, 254 tests)
 npm run test:unit
 
-# Run integration tests only (10 suites, 81 tests)
+# Run integration tests only (11 suites, 81 tests)
 npm run test:integration
 
 # Run end-to-end flow tests only (3 suites, 5 tests)
@@ -855,6 +861,8 @@ __tests__/
 │       └── TaskDetailScreen.test.tsx       # 3-step full-screen flow & area photo tags
 │
 └── unit/
+    ├── navigation/
+    │   └── MainNavigator.test.tsx          # Strict supervisor vs technician role partitioning
     ├── LoginBiometrics.test.tsx            # Dual-biometric adaptive icon and label detection
     ├── MaintenanceUI.test.ts               # Design tokens, color contrast & badge logic
     ├── ProfileSheetModal.test.tsx          # Dynamic SemVer app versioning & role badge display
@@ -873,9 +881,9 @@ __tests__/
 
 ## 🛠️ 12. Troubleshooting & Frequently Asked Questions (FAQ)
 
-#### Q1: Why does the app display an empty screen or say "Unauthorized Role"?
-* **Cause:** The authenticated user document in Cloud Firestore (`users/{uid}`) is missing the `"role"` attribute.
-* **Resolution:** In the Firestore Console, verify that the user document contains `"role": "supervisor"` or `"role": "maintenance"`.
+#### Q1: Why does the app display an empty screen or say "Access denied"?
+* **Cause:** The authenticated user document in Cloud Firestore (`users/{uid}`) is missing the `"role"` attribute, or contains an unauthorized role.
+* **Resolution:** In the Firestore Console or Web Staff Management Portal (`/staff`), ensure the user record has `"role": "supervisor"` or `"role": "maintenance"` (or `"technician"`). If the user is an Administrator (`admin`), refer to **Q6**.
 
 #### Q2: Why does Biometric Authentication fail or not appear?
 * **Cause:** The device or emulator does not have a fingerprint or PIN enrolled in Android System Settings.
@@ -895,6 +903,10 @@ __tests__/
   ```powershell
   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
   ```
+
+#### Q6: Why do Administrators receive "Access denied. This app is for maintenance and supervisor accounts only"?
+* **Cause:** Administrators (`admin`) are barred from logging into the mobile application by design.
+* **Resolution:** Campus Administrators must manage facility intelligence, actuator overrides, and staff provisioning exclusively through the **Klir Web Console** (`/portal-admin/login`). Field execution and supervisor review are strictly reserved for mobile users.
 
 ---
 

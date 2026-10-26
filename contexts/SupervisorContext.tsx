@@ -210,8 +210,7 @@ export function SupervisorProvider({
                         : '';
                     if (
                       userRole !== 'maintenance' &&
-                      userRole !== 'technician' &&
-                      userRole !== 'worker'
+                      userRole !== 'technician'
                     ) {
                       return null;
                     }
