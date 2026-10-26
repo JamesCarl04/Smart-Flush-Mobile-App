@@ -297,9 +297,7 @@ export function ActiveTaskScreen({ navigation, route }: Props): React.JSX.Elemen
           task={activeTask}
           onDismiss={() => setExecutionModalVisible(false)}
           onTaskCompleted={(completedTask: Task) => {
-            void playCompletionSound();
             updateLocalTask(completedTask);
-            incrementHistoryBadge();
             if (selectedTaskIdState === completedTask.id || routeTaskId === completedTask.id) {
               setSelectedTaskIdState(null);
               if (navigation.setParams) {

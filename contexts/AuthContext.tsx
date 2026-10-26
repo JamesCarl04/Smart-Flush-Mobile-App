@@ -46,7 +46,7 @@ async function verifyUserProfile(
 ): Promise<AuthUser> {
   const request = async (forceRefresh = false) => {
     const token = await firebaseUser.getIdToken(forceRefresh);
-    return fetch(buildApiUrl('/api/auth/me'), {
+    return fetch(buildApiUrl('/api/auth/me?platform=mobile'), {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -291,10 +291,25 @@ export function AuthProvider({ children }: PropsWithChildren): React.JSX.Element
     setRole(null);
     setLoading(false);
 
-    // 2. Invalidate cached profile
-    void AsyncStorage.removeItem(USER_PROFILE_CACHE_KEY).catch((err) => {
-      console.warn('[AuthContext] Error clearing user profile cache on logout:', err);
-    });
+    // 2. Invalidate cached profile and sensitive local caches
+    void (async () => {
+      try {
+        const allKeys = await AsyncStorage.getAllKeys().catch(() => [] as string[]);
+        const taskCacheKeys = allKeys.filter((k) => k.startsWith('@klir:tasks_cache'));
+        await AsyncStorage.multiRemove([
+          USER_PROFILE_CACHE_KEY,
+          '@klir:tasks_cache',
+          '@klir:offline_completions',
+          '@klir:biometric_vault',
+          '@klir:supervisor_tasks',
+          '@klir:supervisor_people',
+          '@klir:audit_logs_cache',
+          ...taskCacheKeys,
+        ]);
+      } catch (err) {
+        console.warn('[AuthContext] Error clearing user profile cache on logout:', err);
+      }
+    })();
 
     // 3. Log auth logout audit trail
     if (prevUser) {

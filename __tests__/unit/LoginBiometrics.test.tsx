@@ -191,10 +191,11 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
     });
   });
 
-  it('authenticates and logs in with vault credentials upon clicking biometric button', async () => {
+  it('authenticates with biometrics, scrubs legacy plaintext password from vault, and logs in when password is entered', async () => {
     jest.spyOn(AsyncStorage, 'getItem').mockResolvedValue(
       JSON.stringify({ email: 'lead.tech@sdca.edu.ph', password: 'vaultPassword123' }),
     );
+    const setItemSpy = jest.spyOn(AsyncStorage, 'setItem').mockResolvedValue(undefined);
 
     (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
     (LocalAuthentication.isEnrolledAsync as jest.Mock).mockResolvedValue(true);
@@ -213,8 +214,13 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
+      expect(setItemSpy).toHaveBeenCalledWith(
+        '@klir:biometric_vault',
+        JSON.stringify({ email: 'lead.tech@sdca.edu.ph' }),
+      );
     });
 
+    fireEvent.changeText(screen.getByPlaceholderText('Enter password'), 'vaultPassword123');
     fireEvent.press(screen.getByText('Unlock with biometrics'));
 
     await waitFor(() => {
@@ -260,7 +266,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
 
   it('displays user-friendly sanitized error when account is disabled during biometric login', async () => {
     jest.spyOn(AsyncStorage, 'getItem').mockResolvedValue(
-      JSON.stringify({ email: 'disabled.tech@sdca.edu.ph', password: 'vaultPassword123' }),
+      JSON.stringify({ email: 'disabled.tech@sdca.edu.ph' }),
     );
 
     (LocalAuthentication.hasHardwareAsync as jest.Mock).mockResolvedValue(true);
@@ -281,6 +287,7 @@ describe('LoginScreen Dual-Biometric Adaptive Detection', () => {
       expect(screen.getByText('Unlock with biometrics')).toBeTruthy();
     });
 
+    fireEvent.changeText(screen.getByPlaceholderText('Enter password'), 'vaultPassword123');
     fireEvent.press(screen.getByText('Unlock with biometrics'));
 
     await waitFor(() => {

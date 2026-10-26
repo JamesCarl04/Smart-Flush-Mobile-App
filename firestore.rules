@@ -1,124 +1,197 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ── Helper Functions ──────────────────────────────────────────
+
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isSelf(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function currentUserRole() {
-      return isAuthenticated()
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-        : null;
+    function isUserActive() {
+      return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) || (
+        getUserData().get('active', true) != false &&
+        getUserData().get('isActive', true) != false
+      );
+    }
+
+    function isRole(role) {
+      return isAuthenticated() && isUserActive() && (
+        request.auth.token.role == role ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == role)
+      );
     }
 
     function isAdmin() {
-      return currentUserRole() == 'admin';
+      return isRole('admin');
     }
 
     function isSupervisor() {
-      return currentUserRole() == 'supervisor';
+      return isRole('supervisor') || isAdmin();
     }
 
     function isMaintenance() {
-      return currentUserRole() == 'maintenance' || currentUserRole() == 'technician';
+      return isRole('maintenance') || isRole('technician') || isSupervisor();
     }
 
-    function isStaff() {
-      return isAdmin() || isSupervisor() || isMaintenance();
+    function isTaskOwner(task) {
+      return isAuthenticated() && isUserActive() && (
+        task.get('assignedTo', null) == request.auth.uid ||
+        task.get('recheckedBy', null) == request.auth.uid ||
+        request.auth.uid in task.get('assignedToIds', []) ||
+        (
+          request.auth.token.get('email', null) != null &&
+          task.get('assignedTo', null) == request.auth.token.get('email', null)
+        )
+      );
     }
 
-    // ── Users & FCM Push Tokens ──────────────────────────────────
-    match /users/{userId} {
-      // Supervisors need to read team availability for work order assignments
-      allow read: if isSelf(userId) || isSupervisor() || isAdmin();
-      allow create: if isSelf(userId) || isAdmin();
-      allow update: if isAdmin()
-        || (
-          isSelf(userId)
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])
-        );
-      allow delete: if isAdmin();
-
-      match /fcmToken/{tokenId} {
-        allow read, write: if isSelf(userId) || isAdmin();
-      }
+    function isTaskBroadcast(task) {
+      return task.get('isBroadcast', false) == true;
     }
 
-    // ── Work Orders & Maintenance Tasks ──────────────────────────
+    function canMaintenanceReadTask(task) {
+      return isMaintenance() && (
+        isTaskOwner(task) ||
+        isTaskBroadcast(task)
+      );
+    }
+
+    function canMaintenanceUpdateTask() {
+      return canMaintenanceReadTask(resource.data) &&
+        isTaskOwner(request.resource.data) &&
+        request.resource.data.get('isBroadcast', false) == false &&
+        request.resource.data.get('inspectionStatus', null) != 'approved' &&
+        request.resource.data.get('inspectionStatus', null) != 'flagged' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status',
+          'assignedTo',
+          'assignedToIds',
+          'isBroadcast',
+          'assignmentType',
+          'assignedAt',
+          'acknowledgedAt',
+          'acknowledgedBy',
+          'completedAt',
+          'completedBy',
+          'submissions',
+          'checklist',
+          'remarks',
+          'beforePhotoUrl',
+          'beforePhotoCapturedAt',
+          'afterPhotoUrl',
+          'afterPhotoCapturedAt',
+          'additionalPhotos',
+          'biometricVerified',
+          'offlineSynced',
+          'inspectionStatus',
+          'workDuration',
+          'totalTime',
+          'recheckCount',
+          'recheckedBy',
+          'recheckedAt',
+          'updatedAt'
+        ]);
+    }
+
     match /tasks/{taskId} {
-      allow read: if isAuthenticated();
-      // Admins and supervisors can create tasks; maintenance can log on-site work orders
-      allow create: if isStaff();
-      // Maintenance can acknowledge/complete; supervisors can reassign/flag; admins manage all
-      allow update: if isStaff();
+      allow read: if isSupervisor() || canMaintenanceReadTask(resource.data);
+      allow create: if isSupervisor();
+      allow update: if isSupervisor() || canMaintenanceUpdateTask();
       allow delete: if isAdmin();
     }
 
-    // ── Maintenance Notes & Shift Logs ───────────────────────────
-    match /maintenanceNotes/{noteId} {
-      allow read: if isStaff();
-      allow create: if isStaff();
-      allow update, delete: if isAdmin();
+    match /users/{userId} {
+      allow read: if isAuthenticated() && isUserActive();
+      allow create: if isSupervisor();
+      allow update: if isSupervisor() || (
+        isAuthenticated() &&
+        isUserActive() &&
+        request.auth.uid == userId &&
+        request.resource.data.get('role', null) == resource.data.get('role', null) &&
+        request.resource.data.get('active', true) == resource.data.get('active', true) &&
+        request.resource.data.get('isActive', true) == resource.data.get('isActive', true)
+      );
+      allow delete: if isAdmin();
     }
 
-    // ── Audit Logs (NIST SP 800-92, ISO 27001, 21 CFR Part 11 Append-Only Immutability) ──
-    match /auditLogs/{logId} {
-      // Supervisors and admins can read audit logs for reporting, verification, and academic analysis
-      allow read: if isSupervisor() || isAdmin();
-      // Authenticated staff can append new audit records
-      allow create: if isStaff();
-      // Immutability: Audit log records cannot be modified or deleted by anyone
-      allow update, delete: if false;
-    }
-
-    // ── IoT Devices & Hardware Telemetry ─────────────────────────
     match /devices/{deviceId} {
-      allow read: if isAuthenticated();
-      allow write: if isStaff();
-
-      match /maintenanceCounters/{counterId} {
-        allow read, write: if isStaff();
-      }
+      allow read: if isAuthenticated() && isUserActive();
+      allow write: if isSupervisor();
     }
 
-    match /sensorReadings/{date}/readings/{readingId} {
-      allow read: if isAuthenticated();
-      allow write: if false; // Ingested via backend service account
+    match /sensors/{sensorId} {
+      allow read: if isAuthenticated() && isUserActive();
+      allow write: if isSupervisor();
     }
 
+    // Top-level collections
     match /alerts/{alertId} {
-      allow read: if isAuthenticated();
-      allow write: if isStaff();
-    }
-
-    match /automationRules/{ruleId} {
-      allow read: if isAuthenticated();
-      allow write: if isAdmin() || isSupervisor();
+      allow read: if isAuthenticated() && isUserActive();
+      allow write: if isSupervisor();
     }
 
     match /reports/{reportId} {
-      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isSupervisor() || isAdmin());
-      allow write: if false;
+      allow read: if isAuthenticated() && isUserActive();
+      allow write: if isSupervisor();
     }
 
-    match /flushEvents/{id} {
-      allow read: if isAuthenticated();
-      allow write: if false;
+    match /maintenanceNotes/{noteId} {
+      allow read: if isAuthenticated() && isUserActive();
+      allow write: if isMaintenance();
     }
 
-    match /lidEvents/{id} {
-      allow read: if isAuthenticated();
-      allow write: if false;
+    match /automationRules/{ruleId} {
+      allow read: if isAuthenticated() && isUserActive();
+      allow write: if isSupervisor();
     }
 
-    match /uvCycles/{id} {
-      allow read: if isAuthenticated();
+    match /auditLogs/{logId} {
+      allow read: if isSupervisor();
+      allow create: if isMaintenance() && request.resource.data.get('userUid', null) == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    match /sensorReadings/{readingId} {
+      allow read: if isAuthenticated() && isUserActive();
       allow write: if false;
+
+      match /readings/{subReadingId} {
+        allow read: if isAuthenticated() && isUserActive();
+        allow write: if false;
+      }
+    }
+
+    // Anonymous issue-report intake is server-only. Administrator moderation
+    // also goes through authenticated Admin SDK endpoints, never direct clients.
+    match /issueReports/{reportId} {
+      allow read, write: if false;
+
+      match /submissions/{submissionId} {
+        allow read, write: if false;
+      }
+    }
+
+    match /publicIssueReportRateLimits/{fingerprintId} {
+      allow read, write: if false;
+    }
+
+    match /publicIssueReportCooldowns/{cooldownId} {
+      allow read, write: if false;
+    }
+
+    match /publicIssueReportOpenKeys/{openKeyId} {
+      allow read, write: if false;
+    }
+
+    match /publicIssueReportEvidenceJobs/{jobId} {
+      allow read, write: if false;
+    }
+
+    match /publicIssueReportNotificationOutbox/{jobId} {
+      allow read, write: if false;
     }
   }
 }

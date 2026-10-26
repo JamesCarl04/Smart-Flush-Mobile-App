@@ -62,10 +62,17 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         const saved = await AsyncStorage.getItem(BIOMETRIC_VAULT_KEY);
         if (saved) {
           try {
-            const parsed = JSON.parse(saved) as { email?: string; password?: string };
-            if (parsed.email && parsed.password) {
+            const parsed = JSON.parse(saved) as { email?: string };
+            if (parsed.email) {
               setHasSavedCredentials(true);
               setEmail(parsed.email);
+              // Ensure any legacy stored plaintext password is scrubbed
+              if ('password' in parsed) {
+                await AsyncStorage.setItem(
+                  BIOMETRIC_VAULT_KEY,
+                  JSON.stringify({ email: parsed.email }),
+                );
+              }
             }
           } catch {
             // ignore parsing error
@@ -151,10 +158,10 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       setSubmitting(true);
       await signInWithEmailAndPassword(auth, email.trim(), password);
 
-      // Save credentials into secure local vault for seamless biometric login
+      // Save email only (never plaintext password) in AsyncStorage
       await AsyncStorage.setItem(
         BIOMETRIC_VAULT_KEY,
-        JSON.stringify({ email: email.trim(), password }),
+        JSON.stringify({ email: email.trim() }),
       );
       setHasSavedCredentials(true);
 
@@ -182,14 +189,14 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
         return;
       }
 
-      let parsed: { email?: string; password?: string } | null = null;
+      let parsed: { email?: string } | null = null;
       try {
-        parsed = JSON.parse(saved) as { email?: string; password?: string };
+        parsed = JSON.parse(saved) as { email?: string };
       } catch {
         parsed = null;
       }
 
-      if (!parsed?.email || !parsed?.password) {
+      if (!parsed?.email) {
         setErrorMessage(
           'Please log in with your email and password first to enable biometric login.',
         );
@@ -202,9 +209,16 @@ export function LoginScreen({ navigation }: Props): React.JSX.Element {
       });
 
       if (result.success) {
-        setSubmitting(true);
-        await signInWithEmailAndPassword(auth, parsed.email, parsed.password);
-        setAwaitingRoleValidation(true);
+        setEmail(parsed.email);
+        if (password) {
+          setSubmitting(true);
+          await signInWithEmailAndPassword(auth, parsed.email, password);
+          setAwaitingRoleValidation(true);
+        } else {
+          setErrorMessage(
+            'Biometric identity verified. Please enter your password to sign in.',
+          );
+        }
       } else if (result.error === 'lockout') {
         setErrorMessage(
           'Too many failed biometric attempts. Please log in with your password.',

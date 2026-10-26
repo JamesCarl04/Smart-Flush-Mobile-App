@@ -398,9 +398,9 @@ export function TaskDetailScreen({
     }
   }, [navigation, task]);
 
-  const handleAcknowledge = async (): Promise<void> => {
+  const handleAcknowledge = async (): Promise<boolean> => {
     if (!task || actionInFlight) {
-      return;
+      return false;
     }
 
     setActionInFlight(true);
@@ -426,6 +426,7 @@ export function TaskDetailScreen({
         await db.collection('tasks').doc(task.id).update(updatePayload);
         await db.collection('users').doc(uid).update({
           isAvailable: false,
+          status: 'on_task',
           currentTaskId: task.id,
         });
       } catch (firestoreError) {
@@ -473,12 +474,14 @@ export function TaskDetailScreen({
       );
       await refreshTasks();
       setSnackbarMessage('Task acknowledged. Proceed to the location.');
+      return true;
     } catch (error) {
       setSnackbarMessage(
         error instanceof Error
           ? error.message
           : 'Failed to acknowledge task. Please try again.',
       );
+      return false;
     } finally {
       setActionInFlight(false);
     }
@@ -686,7 +689,7 @@ export function TaskDetailScreen({
             completedAt,
             completedBy: uid,
             isRecheck: task.status === 'rechecking',
-            recheckCount: (task.recheckCount ?? 0) + (task.status === 'rechecking' ? 1 : 0),
+            recheckCount: task.recheckCount ?? (task.status === 'rechecking' ? 1 : 0),
           });
           isFullyCompleted = outcome?.isFullyCompleted ?? true;
           setSnackbarMessage(
@@ -740,7 +743,7 @@ export function TaskDetailScreen({
         );
       }
 
-      const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === 'done' || v === 'na').length}/10`;
+      const completedScore = `${Object.values(firestoreChecklist).filter((v) => v === true || v === 'N/A' || v === 'done' || v === 'na').length}/10`;
       const elapsedWorkDuration = task.workDuration ?? (task.acknowledgedAt ? Math.max(0, Math.round((completedAt.getTime() - task.acknowledgedAt.getTime()) / 1000)) : 0);
       const totalTime = task.createdAt ? Math.max(0, Math.round((completedAt.getTime() - task.createdAt.getTime()) / 1000)) : null;
 
@@ -763,9 +766,7 @@ export function TaskDetailScreen({
         },
       );
 
-      const nextRecheckCount = task.status === 'rechecking'
-        ? (task.recheckCount ?? 0) + 1
-        : (task.recheckCount ?? 0);
+      const nextRecheckCount = task.recheckCount ?? (task.status === 'rechecking' ? 1 : 0);
 
       const updatedTask: Task = {
         ...task,

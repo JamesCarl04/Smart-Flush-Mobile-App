@@ -59,6 +59,7 @@ import {
 } from '../lib/report-export';
 import { fetchAuditLogs, logTaskAudit, type AuditLogEntry } from '../lib/audit-logger';
 import { auth, db } from '../lib/firebase';
+import { uploadTaskPhoto } from '../lib/task-completion';
 import {
   approveTask,
   fetchMaintenancePersonnel,
@@ -1121,6 +1122,7 @@ export function SupervisorTasksScreen({
 }
 
 export function SupervisorTaskDetailScreen({
+  navigation,
   route,
 }: TaskDetailProps): React.JSX.Element {
   const { user } = useAuth();
@@ -1280,6 +1282,14 @@ export function SupervisorTaskDetailScreen({
                   </Text>
                 </View>
               </View>
+              <KlirButton
+                title="Review Proof & Checklist"
+                variant="primary"
+                onPress={() =>
+                  navigation.navigate('CompletedReviewDetail', { taskId: task.id })
+                }
+                style={{ marginTop: 12 }}
+              />
             </Card.Content>
           </Card>
         ) : isFlagged && !flagOverride ? (
@@ -1775,32 +1785,23 @@ export function CompletedReviewDetailScreen({
     if (!user || !task || reason.trim().length < 5) return;
     setSubmittingFlag(true);
     try {
+      const uploadedFlagPhotoUrls = await Promise.all(
+        flagPhotos.map((uri, idx) =>
+          uploadTaskPhoto(task.id, uri, `flag_${idx}`, new Date()),
+        ),
+      );
       await flagTask({
         taskId: task.id,
         reason: reason.trim(),
         supervisorUid: user.uid,
         supervisorName: user.name,
-        flagPhotoUrls: flagPhotos,
+        flagPhotoUrls: uploadedFlagPhotoUrls,
       });
       const originalTech =
         task.completedBy ||
         (task.submissions && Object.keys(task.submissions)[0]) ||
         (task.completedByMap && Object.keys(task.completedByMap)[0]) ||
         task.assignedTo;
-      if (typeof db?.collection === 'function' && originalTech) {
-        try {
-          await db.collection('tasks').doc(task.id).update({
-            status: 'flagged',
-            inspectionStatus: 'flagged',
-            assignedTo: originalTech,
-            flagReason: reason.trim(),
-            flaggedAt: new Date(),
-            flaggedBy: user.uid,
-          });
-        } catch {
-          // ignore
-        }
-      }
       void logTaskAudit(
         'TASK_FLAGGED',
         task,

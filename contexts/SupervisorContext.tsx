@@ -79,8 +79,11 @@ export function SupervisorProvider({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Instant Cache Hydration on initial mount (0ms)
+  // 1. Instant Cache Hydration on initial mount (0ms) for supervisors only
   useEffect(() => {
+    if (!user || role !== 'supervisor') {
+      return;
+    }
     let isMounted = true;
     void (async () => {
       try {
@@ -113,7 +116,7 @@ export function SupervisorProvider({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [role, user]);
 
   const saveCache = useCallback((nextTasks: Task[], nextPeople: MaintenancePerson[]) => {
     try {

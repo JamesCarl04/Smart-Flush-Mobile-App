@@ -577,9 +577,7 @@ export function TaskExecutionModal({
         }
       }
 
-      const nextRecheckCount = isRecheckMode
-        ? (task.recheckCount ?? 0) + 1
-        : (task.recheckCount ?? 0);
+      const nextRecheckCount = task.recheckCount ?? (isRecheckMode ? 1 : 0);
 
       const workDuration = task.workDuration ?? (task.acknowledgedAt ? secondsBetween(task.acknowledgedAt, completedAt) : null);
       const totalTime = task.totalTime ?? (task.createdAt ? secondsBetween(task.createdAt, completedAt) : null);

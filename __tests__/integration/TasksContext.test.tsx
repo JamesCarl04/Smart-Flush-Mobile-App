@@ -30,6 +30,7 @@ function TestTasksConsumer(): React.JSX.Element {
     errorMessage,
     refreshTasks,
     updateLocalTask,
+    incrementHistoryBadge,
     clearHistoryBadge,
     clearError,
   } = useTasks();
@@ -82,6 +83,7 @@ function TestTasksConsumer(): React.JSX.Element {
               completedBy: 'user-tech-1',
               offlineSynced: false,
             });
+            incrementHistoryBadge();
           }
         }}
       />
@@ -283,7 +285,7 @@ describe('TasksContext Integration', () => {
     expect(screen.getByTestId('inbox-task-2')).toBeTruthy();
   });
 
-  it('keeps supervisor-only unassigned automation tasks in a supervisor inbox', async () => {
+  it('does not fetch or hydrate technician TasksContext when logged in as a supervisor (handled by SupervisorContext)', async () => {
     (useAuthHook.useAuth as jest.Mock).mockReturnValue({
       user: {
         uid: 'user-supervisor-1',
@@ -316,7 +318,8 @@ describe('TasksContext Integration', () => {
     );
 
     await waitFor(() => expect(screen.getByTestId('loading').props.children).toBe('IDLE'));
-    expect(screen.getByTestId('inbox-task-supervisor-only')).toBeTruthy();
+    expect(taskApi.fetchTasks).not.toHaveBeenCalled();
+    expect(screen.getByTestId('inbox-count').props.children).toBe(0);
   });
 
   it('subscribes technicians only through assignment and explicit-broadcast queries', async () => {

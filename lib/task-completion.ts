@@ -139,7 +139,10 @@ export async function uploadTaskPhoto(
       capturedAt instanceof Date && !isNaN(capturedAt.getTime())
         ? capturedAt.getTime()
         : Date.now();
-    const safeKind = (kind || 'photo').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const rawKind = (kind || 'proof').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeKind = /^(before|after|flag|extra|proof)(_|$)/.test(rawKind)
+      ? rawKind
+      : `extra_${rawKind}`;
     const photoRef = storage.ref(`tasks/${taskId.trim()}/${safeKind}_${timestamp}.jpg`);
     await photoRef.putFile(cleanUri, { contentType: 'image/jpeg' });
     return await photoRef.getDownloadURL();
@@ -193,9 +196,7 @@ export async function completeTaskOnline(
   ]);
   const workDuration = secondsBetween(input.acknowledgedAt, input.completedAt);
   const totalTime = secondsBetween(input.createdAt, input.completedAt);
-  const nextRecheckCount = input.isRecheck
-    ? (input.recheckCount ?? 0) + 1
-    : (input.recheckCount ?? 0);
+  const nextRecheckCount = input.recheckCount ?? (input.isRecheck ? 1 : 0);
 
   const submissionPayload = {
     technicianUid: input.completedBy,
@@ -262,6 +263,7 @@ export async function completeTaskOnline(
       additionalPhotos: additionalUploadedPhotos,
       biometricVerified: input.biometricVerified,
       offlineSynced: false,
+      isBroadcast: false,
       status: isFullyCompleted ? 'completed' : 'acknowledged',
       ...(isFullyCompleted
         ? {
@@ -301,6 +303,7 @@ export async function completeTaskOnline(
     await db.collection('users').doc(input.completedBy).set(
       {
         isAvailable: true,
+        status: 'available',
         currentTaskId: null,
         lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
       },
@@ -444,6 +447,7 @@ export async function syncOfflineCompletions(
         biometricVerified: item.biometricVerified,
       };
 
+      const isTeam = assignedToIds.length > 1;
       await taskDocRef.update({
         checklist: item.checklist,
         remarks: item.remarks,
@@ -454,15 +458,18 @@ export async function syncOfflineCompletions(
         additionalPhotos: additionalUploadedPhotos,
         biometricVerified: item.biometricVerified,
         offlineSynced: true,
+        isBroadcast: false,
         status: isFullyCompleted ? 'completed' : 'acknowledged',
         ...(isFullyCompleted
           ? {
               inspectionStatus: 'pending_review',
               completedAt: firestore.Timestamp.fromDate(completedAt),
-              completedBy: item.completedBy,
+              ...(!isTeam ? { completedBy: item.completedBy } : {}),
             }
           : {}),
-        [`completedBy.${item.completedBy}`]: firestore.Timestamp.fromDate(completedAt),
+        ...(isTeam || !isFullyCompleted
+          ? { [`completedBy.${item.completedBy}`]: firestore.Timestamp.fromDate(completedAt) }
+          : {}),
         [`submissions.${item.completedBy}`]: submissionPayload,
         ...(assignedToIds.length <= 1 || isFullyCompleted ? { assignedTo: item.completedBy } : {}),
         workDuration: secondsBetween(acknowledgedAt, completedAt),
@@ -472,6 +479,7 @@ export async function syncOfflineCompletions(
       await db.collection('users').doc(item.completedBy).set(
         {
           isAvailable: true,
+          status: 'available',
           currentTaskId: null,
           lastTaskCompletedAt: firestore.FieldValue.serverTimestamp(),
         },
@@ -496,33 +504,4 @@ export function currentUserId(): string {
   }
 
   return uid;
-}
-
-export async function clearAllTasksInFirestore(): Promise<number> {
-  const snapshot = await db.collection('tasks').get();
-  let count = 0;
-  if (snapshot && !snapshot.empty) {
-    const batch = db.batch();
-    for (const doc of snapshot.docs) {
-      batch.delete(doc.ref);
-      count += 1;
-    }
-    await batch.commit();
-  }
-
-  try {
-    const userSnap = await db.collection('users').get();
-    if (userSnap && !userSnap.empty) {
-      for (const doc of userSnap.docs) {
-        await doc.ref.update({
-          isAvailable: true,
-          currentTaskId: null,
-        });
-      }
-    }
-  } catch (err) {
-    console.warn('[clearAllTasksInFirestore] Failed to reset user availability:', err);
-  }
-
-  return count;
 }

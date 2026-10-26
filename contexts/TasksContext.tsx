@@ -199,7 +199,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   // 1. Instant 0ms cache hydration on initial mount
   useEffect(() => {
     let isMounted = true;
-    if (!user) return () => { isMounted = false; };
+    if (!user || role === 'supervisor') return () => { isMounted = false; };
     const cacheKey = `${TASKS_CACHE_KEY_PREFIX}:${role ?? 'unknown'}:${user.uid}`;
     void (async () => {
       try {
@@ -252,7 +252,6 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   }, [role, user]);
 
   const updateLocalTask = useCallback((updatedTask: Task) => {
-    setHistoryBadgeCount((prev) => Math.max(1, prev + 1));
     setTasks((prevTasks) => {
       const exists = prevTasks.some((t) => t.id === updatedTask.id);
       const nextTasks = exists
@@ -266,7 +265,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
   }, [saveCache]);
 
   const refreshTasks = useCallback(async (): Promise<void> => {
-    if (!user) {
+    if (!user || role === 'supervisor') {
       setTasks([]);
       setLoading(false);
       setErrorMessage(null);
@@ -298,11 +297,11 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
     } finally {
       setLoading(false);
     }
-  }, [saveCache, user]);
+  }, [role, saveCache, user]);
 
   useEffect(() => {
     let isMounted = true;
-    if (!user) {
+    if (!user || role === 'supervisor') {
       setTasks([]);
       setLoading(false);
       setErrorMessage(null);
@@ -328,9 +327,7 @@ export function TasksProvider({ children }: PropsWithChildren): React.JSX.Elemen
           key: string;
           query: FirebaseFirestoreTypes.Query;
         }> = [];
-        if (role === 'supervisor') {
-          queryEntries.push({ key: 'supervisor-all', query: collection });
-        } else if (typeof collection?.where === 'function') {
+        if (typeof collection?.where === 'function') {
           queryEntries.push(
             { key: 'assigned-ids', query: collection.where('assignedToIds', 'array-contains', user.uid) },
             { key: 'assigned-uid', query: collection.where('assignedTo', '==', user.uid) },
